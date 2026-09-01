@@ -185,6 +185,8 @@ export interface Order {
   resellerCommissionRate?: number;
   resellerCommissionAmount?: number;
   warrantyCode?: string;
+  externalReference?: string;
+  metadata?: Record<string, any>;
   idempotencyKey?: string;
   createdBy?: string;
   operatorName?: string;
@@ -229,6 +231,8 @@ export interface CreateOrderDTO {
   payments?: CreateOrderPaymentDTO[];
   resellerId?: string;
   resellerCommissionRate?: number;
+  externalReference?: string;
+  metadata?: Record<string, any>;
   notes?: string;
   createdBy?: string;
   operatorName?: string;

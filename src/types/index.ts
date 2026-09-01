@@ -59,6 +59,11 @@ export interface StoreBrandingConfig {
   customDomainForceHttps?: boolean;
   customDomainHstsEnabled?: boolean;
   customDomainLastChecked?: string;
+  // Public Catalog Stock Display Policy
+  outOfStockBehavior?: "SOB_CONSULTA" | "ESGOTADO"; // "SOB_CONSULTA" directs buyer to WhatsApp/enquiry, "ESGOTADO" disables purchases and shows Out of Stock
+  lowStockThreshold?: number; // e.g. 3 pieces
+  outOfStockCustomText?: string; // Custom CTA button label
+  allowBackorders?: boolean;
 }
 
 export interface TenantStore {
@@ -93,26 +98,82 @@ export interface TenantStore {
 
 export type JewelryBath = "OURO_18K" | "RODIO_BRANCO" | "RODIO_NEGRO" | "PRATA_925" | "ROSE_GOLD";
 
+export type PublicationStatus = "DRAFT" | "PUBLISHED" | "HIDDEN" | "ARCHIVED";
+
+export interface ProductVariant {
+  id: string;
+  sku: string;
+  name: string; // Ex: Aro 16, Aro 18, 45cm, 50cm
+  type: "SIZE" | "LENGTH" | "BATH" | "COLOR";
+  value: string;
+  stockPhysical: number;
+  stockReserved?: number;
+  priceModifier?: number;
+}
+
+export interface ProductMedia {
+  id: string;
+  organization_id: string;
+  product_id: string;
+  storage_key: string; // Caminho/Key único no Object Storage (S3, GCS, Cloudflare R2, Supabase Storage)
+  url: string; // URL pública/CDN para entrega de alta performance
+  type: "IMAGE" | "VIDEO";
+  is_primary: boolean;
+  sort_order: number;
+  alt_text?: string;
+  created_at: string;
+  
+  // Metadados técnicos do arquivo para governança de storage
+  file_size_bytes?: number;
+  mime_type?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface ProductItem {
   id: string;
   sku: string;
   name: string;
+  brand?: string;
   category: "COLARES" | "BRINCOS" | "ANEIS" | "PULSEIRAS" | "CONJUNTOS" | "PERSONALIZADOS";
   collection: string;
+  
+  // Características
   material: string;
   bath: JewelryBath;
   stones: string[];
+  stoneColor?: string;
+  weightGrams?: number;
+  dimensions?: string;
+  variants?: ProductVariant[];
+
+  // Informações Comerciais
   price: number;
   costPrice: number;
   promoPrice?: number;
-  stockPhysical: number; // No estoque da empresa
+  marginPercent?: number;
+
+  // Estoque (Double-Ledger & Readiness)
+  stockPhysical: number; // Em estoque físico da empresa
+  stockReserved?: number; // Reservado em pedidos abertos / pagamentos pendentes
   stockConsigned: number; // Em maletas com revendedoras
-  stockAvailable: number; // Disponível para venda direta / envio
+  stockAvailable: number; // Disponível para venda direta (Físico - Reservado)
+  stockLocation?: string; // Localização (ex: Gaveteiro A3, Prateleira 2)
+  minStockAlert?: number; // Alerta de estoque mínimo
+
+  // Mídia & Galeria Estruturada
+  imageUrl: string; // Imagem principal (retrocompatível e de acesso rápido)
+  galleryUrls?: string[]; // Galeria de fotos adicionais
+  media?: ProductMedia[]; // Estrutura relacional profissional para ordenação e atributos
+  videoUrl?: string; // Vídeo demonstrativo da peça
+
+  // Publicação vs Estoque
+  publicationStatus: PublicationStatus; // DRAFT (Rascunho) | PUBLISHED (Ativo) | HIDDEN (Oculto) | ARCHIVED
+  status: "ATIVO" | "PAUSADO" | "ESGOTADO"; // Legado / Status Operacional
+  
   warrantyMonths: number;
   isCustomizable: boolean;
-  imageUrl: string;
   description: string;
-  status: "ATIVO" | "PAUSADO" | "ESGOTADO";
 }
 
 export interface InventoryLedgerEntry {
@@ -387,3 +448,51 @@ export interface WebhookDeliveryLog {
   attempt: number;
   signatureHeader: string;
 }
+
+export interface InstallmentTierRule {
+  installments: number; // 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+  interestRatePercent: number; // 0 = sem juros, > 0 = taxa de juros percentual (ex: 2.0%)
+}
+
+export interface OrganizationPaymentSettings {
+  id?: string;
+  organizationId: string;
+
+  // Configuração PIX
+  pixEnabled: boolean;
+  pixDiscountPercent: number; // Desconto em % no PIX (ex: 5, 3, 7, 10)
+  pixKeyType?: "CNPJ" | "EMAIL" | "PHONE" | "RANDOM";
+  pixKey?: string;
+  pixExpirationMinutes?: number;
+
+  // Configuração Cartão de Crédito
+  creditCardEnabled: boolean;
+  maxInstallments: number; // Máximo de parcelas permitidas (ex: 6, 10, 12)
+  freeInstallmentsCount: number; // Quantidade de parcelas sem acréscimo (ex: 6, ou 3, etc.)
+  minInstallmentAmount: number; // Valor mínimo por parcela em R$ (ex: 25.00)
+  
+  // Tabela customizada de juros por parcela
+  installmentRules: InstallmentTierRule[];
+
+  // Boleto Bancário & Outros
+  boletoEnabled?: boolean;
+  boletoDiscountPercent?: number;
+
+  // Atendimento & Fechamento via WhatsApp
+  whatsappCheckoutEnabled: boolean;
+
+  // Políticas Comerciais
+  freeShippingMinimumAmount: number; // ex: 250.00
+  defaultStandardShippingCost: number; // ex: 18.90
+  
+  updatedAt?: string;
+}
+
+export interface CalculatedInstallmentOption {
+  installments: number;
+  installmentValue: number;
+  totalAmount: number;
+  interestRatePercent: number;
+  isInterestFree: boolean;
+}
+

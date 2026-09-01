@@ -30,19 +30,24 @@ import {
   Radio,
   Copy,
   Shield,
+  CreditCard,
 } from "lucide-react";
-import { StoreBrandingConfig, TenantStore } from "../types";
-import { DEFAULT_BRANDING_CONFIG } from "../data/mockData";
+import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings } from "../types";
+import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS } from "../data/mockData";
 import { SocialQRCodeCollageManager } from "./SocialQRCodeCollageManager";
 import { CustomDomainSSLManager } from "./CustomDomainSSLManager";
+import { PaymentPricingSettingsManager } from "./PaymentPricingSettingsManager";
 import confetti from "canvas-confetti";
 
 interface StoreSettingsPanelProps {
   tenant: TenantStore;
   branding: StoreBrandingConfig;
+  paymentSettings?: OrganizationPaymentSettings;
   onUpdateBranding: (newBranding: StoreBrandingConfig) => void;
+  onUpdatePaymentSettings?: (newSettings: OrganizationPaymentSettings) => void;
   onNavigateTab: (tab: string) => void;
 }
+
 
 export const BRANDING_PALETTES = [
   {
@@ -149,15 +154,18 @@ export const SAMPLE_LOGO_PRESETS = [
 export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
   tenant,
   branding,
+  paymentSettings = DEFAULT_PAYMENT_SETTINGS,
   onUpdateBranding,
+  onUpdatePaymentSettings,
   onNavigateTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "domain" | "social_qr" | "poster" | "branding" | "welcome" | "contact" | "preview"
-  >("domain");
+    "payment_settings" | "domain" | "social_qr" | "poster" | "branding" | "welcome" | "contact" | "preview"
+  >("payment_settings");
   const [formConfig, setFormConfig] = useState<StoreBrandingConfig>({ ...branding });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isAutoValidatingDNS, setIsAutoValidatingDNS] = useState<boolean>(false);
+
   const [dnsAutoValidationResult, setDnsAutoValidationResult] = useState<{
     valid: boolean;
     domain: string;
@@ -353,6 +361,18 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
       {/* Sub-Navigation Tabs */}
       <div className="flex space-x-2 border-b border-stone-200 pb-2 overflow-x-auto">
         <button
+          onClick={() => setActiveSubTab("payment_settings")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeSubTab === "payment_settings"
+              ? "bg-amber-400 text-stone-950 shadow-md"
+              : "bg-white text-stone-700 hover:bg-stone-100 border border-stone-200"
+          }`}
+        >
+          <CreditCard className="w-3.5 h-3.5" />
+          <span>💳 Preços, PIX & Parcelamento</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab("domain")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeSubTab === "domain"
@@ -361,7 +381,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Globe className="w-3.5 h-3.5 text-amber-400" />
-          <span>🌐 Domínio & Configuração Avançada de DNS</span>
+          <span>🌐 Domínio & SSL</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
         </button>
 
@@ -374,7 +394,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>📱 Redes Sociais, QR Codes & Cartões</span>
+          <span>📱 Redes Sociais & QR Codes</span>
         </button>
 
         <button
@@ -386,7 +406,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>✨ Cartaz Expo de Promoções</span>
+          <span>✨ Cartaz Expo</span>
         </button>
 
         <button
@@ -422,7 +442,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-          <span>3. Contatos & Redes Sociais</span>
+          <span>3. Contatos</span>
         </button>
 
         <button
@@ -434,9 +454,22 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" />
-          <span>4. Pré-visualização Interativa</span>
+          <span>4. Pré-visualização</span>
         </button>
       </div>
+
+      {/* TAB CONDIÇÕES DE PAGAMENTO & PRECIFICAÇÃO (NOVO MÓDULO ORGANIZACIONAL) */}
+      {activeSubTab === "payment_settings" && (
+        <PaymentPricingSettingsManager
+          tenant={tenant}
+          settings={paymentSettings}
+          onUpdateSettings={(newSettings) => {
+            if (onUpdatePaymentSettings) {
+              onUpdatePaymentSettings(newSettings);
+            }
+          }}
+        />
+      )}
 
       {/* TAB DOMÍNIO CUSTOMIZADO & SSL GERENCIADO (SOLICITADO PELO USUÁRIO) */}
       {activeSubTab === "domain" && (

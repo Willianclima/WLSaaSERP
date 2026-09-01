@@ -13,6 +13,8 @@ import productRoutes from "./server/modules/products/product.routes";
 import inventoryRoutes from "./server/modules/inventory/inventory.routes";
 import customerRoutes from "./server/modules/customers/customer.routes";
 import orderRoutes from "./server/modules/orders/order.routes";
+import storageRoutes from "./server/modules/storage/storage.routes";
+import onboardingRoutes from "./server/routes/onboardingRoutes";
 import { reservationExpiryWorker } from "./server/modules/inventory/reservationExpiryWorker";
 import { dbStore } from "./server/db/store";
 
@@ -21,7 +23,8 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // 1. Health check & Platform SaaS Diagnostics
 app.get("/api/health", (_req, res) => {
@@ -57,6 +60,8 @@ app.use("/api/products", productRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/storage", storageRoutes);
+app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/diagnostics", diagnosticRoutes);
 

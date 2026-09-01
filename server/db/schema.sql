@@ -146,6 +146,29 @@ CREATE INDEX IF NOT EXISTS idx_products_org_category ON products(organization_id
 CREATE INDEX IF NOT EXISTS idx_products_org_sku ON products(organization_id, sku);
 CREATE INDEX IF NOT EXISTS idx_products_org_status ON products(organization_id, status);
 
+-- 8.1 PRODUCT MEDIA (OBJECT STORAGE PERSISTENCE - S3 / R2)
+CREATE TABLE IF NOT EXISTS product_media (
+    id VARCHAR(64) PRIMARY KEY,
+    organization_id VARCHAR(64) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    product_id VARCHAR(64) NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    storage_key VARCHAR(512) NOT NULL,
+    url TEXT NOT NULL,
+    cdn_url TEXT,
+    media_type VARCHAR(20) NOT NULL DEFAULT 'IMAGE', -- IMAGE, VIDEO
+    mime_type VARCHAR(100) NOT NULL DEFAULT 'image/webp',
+    file_size_bytes BIGINT NOT NULL DEFAULT 0,
+    etag VARCHAR(128),
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INT NOT NULL DEFAULT 0,
+    title VARCHAR(255),
+    alt_text VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_media_prod ON product_media(organization_id, product_id, sort_order ASC);
+CREATE INDEX IF NOT EXISTS idx_product_media_storage_key ON product_media(storage_key);
+
 -- 9. INVENTORY MOVEMENTS (IMMUTABLE STOCK LEDGER)
 CREATE TABLE IF NOT EXISTS inventory_movements (
     id VARCHAR(64) PRIMARY KEY,

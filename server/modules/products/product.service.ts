@@ -173,4 +173,47 @@ export class ProductService {
   static async deleteProduct(orgId: string, id: string): Promise<boolean> {
     return await productRepo.delete(orgId, id);
   }
+
+  // --- Product Media Operations ---
+
+  static async addProductMedia(
+    orgId: string,
+    productId: string,
+    dto: {
+      storageKey: string;
+      url: string;
+      cdnUrl?: string;
+      mediaType?: "IMAGE" | "VIDEO";
+      mimeType?: string;
+      fileSizeBytes?: number;
+      etag?: string;
+      isPrimary?: boolean;
+      sortOrder?: number;
+      title?: string;
+      altText?: string;
+    }
+  ) {
+    const product = await productRepo.findById(orgId, productId);
+    if (!product) {
+      throw new Error(`Produto ${productId} não encontrado na organização.`);
+    }
+
+    return await productRepo.addMedia(orgId, productId, dto);
+  }
+
+  static async listProductMedia(orgId: string, productId: string) {
+    return await productRepo.listMediaByProduct(orgId, productId);
+  }
+
+  static async deleteProductMedia(orgId: string, productId: string, mediaId: string) {
+    return await productRepo.deleteMedia(orgId, productId, mediaId);
+  }
+
+  static async setPrimaryProductMedia(orgId: string, productId: string, mediaId: string) {
+    return await productRepo.setPrimaryMedia(orgId, productId, mediaId);
+  }
+
+  static async reorderProductMedia(orgId: string, productId: string, orderedMediaIds: string[]) {
+    return await productRepo.reorderMedia(orgId, productId, orderedMediaIds);
+  }
 }

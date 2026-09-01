@@ -2,7 +2,8 @@
  * Domain types and interfaces for SPRINT 4 — ORDERS & SALES ENGINE
  * Omnichannel Sales Engine, Immutable Product Snapshots on Order Items,
  * Multi-Payment methods, Finite State Machine (FSM) Transition Auditing,
- * and Concurrency-Safe Inventory Ledger Integration.
+ * Concurrency-Safe Inventory Ledger Integration, and Strict Separation of
+ * Physical Return vs. Financial Refund.
  */
 
 import { ProductCategory, ProductBath } from "../products/product.types";
@@ -16,6 +17,10 @@ export type OrderChannel =
   | "CUSTOM_STUDIO"
   | "MARKETPLACE";
 
+/**
+ * Order Fulfillment / Operational Status
+ * Strictly decoupled from financial payment/refund state.
+ */
 export type OrderStatus =
   | "DRAFT"                 // Rascunho / Carrinho em montagem
   | "PENDING_CONFIRMATION" // Aguardando confirmação do comprador/atendente
@@ -25,9 +30,11 @@ export type OrderStatus =
   | "PAID"                 // Pagamento liquidado & Baixa definitiva no Ledger de Estoque
   | "FULFILLMENT_PENDING"  // Em separação / Cravação de joia / Embalagem / Expedição
   | "FULFILLED"            // Entregue / Retirado no balcão / Concluído com Garantia Digital
-  | "CANCELED"             // Cancelado (reserva de estoque liberada atomicamente)
+  | "PARTIALLY_RETURNED"   // Devolução parcial física de mercadorias
+  | "RETURNED"             // Devolução total física de mercadorias ao estoque
+  | "CANCELED"             // Cancelado antes do fulfillment (reserva liberada atomicamente)
   | "EXPIRED"              // TTL de reserva de estoque expirado
-  | "REFUNDED";            // Estornado pós-pagamento (devolução ao estoque via Ledger)
+  | "REFUNDED";            // Retrocompatibilidade / Estorno completo
 
 export type OrderEvent =
   | "SUBMIT_ORDER"          // DRAFT -> PENDING_CONFIRMATION / INVENTORY_RESERVED
@@ -37,9 +44,11 @@ export type OrderEvent =
   | "CONFIRM_PAYMENT"       // AWAITING_PAYMENT / PAYMENT_PROCESSING -> PAID
   | "START_FULFILLMENT"     // PAID -> FULFILLMENT_PENDING
   | "COMPLETE_FULFILLMENT"  // FULFILLMENT_PENDING -> FULFILLED
+  | "RETURN_ITEMS_PARTIAL"  // (PAID / FULFILLED) -> PARTIALLY_RETURNED
+  | "RETURN_ITEMS_TOTAL"    // (PAID / FULFILLED / PARTIALLY_RETURNED) -> RETURNED
   | "CANCEL_ORDER"          // (ANY NÃO-FINAL) -> CANCELED
   | "EXPIRE_ORDER"          // (INVENTORY_RESERVED / AWAITING_PAYMENT) -> EXPIRED
-  | "REFUND_ORDER"          // (PAID / FULFILLED) -> REFUNDED
+  | "REFUND_ORDER"          // (PAID / FULFILLED / RETURNED) -> REFUNDED
   | "REOPEN_DRAFT";         // CANCELED / EXPIRED -> DRAFT
 
 export type PaymentMethod =
@@ -59,11 +68,16 @@ export type PaymentGateway =
   | "POS_REDE"
   | "POS_CIELO";
 
+/**
+ * Dedicated Payment / Financial Status
+ * Tracks monetary settlement independently from physical logistics.
+ */
 export type PaymentStatus =
   | "PENDING"
   | "AUTHORIZED"
   | "PAID"
   | "FAILED"
+  | "PARTIALLY_REFUNDED"
   | "REFUNDED";
 
 /**
@@ -111,6 +125,7 @@ export interface OrderItemEntity {
   productSnapshot: ProductSnapshot;
 
   quantity: number;
+  returnedQuantity?: number; // Quantidade devolvida fisicamente pelo cliente
   unitPrice: number;
   costPriceSnapshot: number;
   discountAmount: number;
@@ -153,6 +168,7 @@ export interface OrderPaymentEntity {
   gatewayTransactionId?: string;
   status: PaymentStatus;
   amount: number;
+  refundedAmount?: number;
   installments: number;
 
   // Detalhes de Cobrança Instantânea (PIX / Boleto)
@@ -164,6 +180,7 @@ export interface OrderPaymentEntity {
   boletoUrl?: string;
 
   paidAt?: string;
+  refundedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -191,6 +208,7 @@ export interface OrderEntity {
 
   channel: OrderChannel;
   status: OrderStatus;
+  paymentStatus?: PaymentStatus; // Status financeiro agregado
 
   shippingAddress: OrderShippingAddress;
 
@@ -199,6 +217,7 @@ export interface OrderEntity {
   discountAmount: number;
   shippingAmount: number;
   totalAmount: number;
+  refundedTotalAmount?: number;
 
   // Vínculos Comerciais / Revendedora (Consignado/Comissão)
   resellerId?: string;
@@ -208,6 +227,8 @@ export interface OrderEntity {
 
   // Garantia Digital & Rastreabilidade
   warrantyCode?: string;
+  externalReference?: string;
+  metadata?: Record<string, any>;
 
   // Idempotência e Auditoria
   idempotencyKey?: string;
@@ -250,33 +271,53 @@ export interface CreateOrderDTO {
   customerId: string;
   channel: OrderChannel;
   items: CreateOrderItemDTO[];
-  shippingAddress?: Partial<OrderShippingAddress>;
-  shippingAmount?: number;
-  discountAmount?: number;
   payments?: CreateOrderPaymentDTO[];
+  shippingAddress?: Partial<OrderShippingAddress>;
+  discountAmount?: number;
+  shippingAmount?: number;
   resellerId?: string;
   resellerCommissionRate?: number;
+  externalReference?: string;
+  metadata?: Record<string, any>;
   notes?: string;
-  createdBy?: string;
-  operatorName?: string;
+  initialStatus?: OrderStatus;
   idempotencyKey?: string;
-  initialStatus?: OrderStatus; // Default: 'DRAFT' ou 'AWAITING_PAYMENT'
+  createdBy?: string;
 }
 
 export interface OrderTransitionDTO {
   event: OrderEvent;
-  operatorName?: string;
   operatorId?: string;
+  operatorName?: string;
   reason?: string;
   metadata?: Record<string, any>;
 }
 
+export interface ReturnOrderItemsDTO {
+  items: Array<{
+    orderItemId: string;
+    quantity: number;
+    locationId?: string; // Localização de destino para estocar a peça devolvida
+    reason?: string;
+  }>;
+  operatorName?: string;
+  reason: string;
+  refundPayment?: boolean; // Se true, dispara também o estorno financeiro proporcional
+}
+
+export interface RefundOrderPaymentDTO {
+  paymentId?: string;
+  amount: number;
+  reason: string;
+  operatorName?: string;
+}
+
 export interface OrderFilterQuery {
-  channel?: OrderChannel;
   status?: OrderStatus;
+  channel?: OrderChannel;
   customerId?: string;
   resellerId?: string;
-  search?: string; // orderNumber, customer name, doc
+  search?: string;
   startDate?: string;
   endDate?: string;
   minAmount?: number;

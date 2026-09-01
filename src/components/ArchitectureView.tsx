@@ -63,12 +63,12 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ onClose }) =
         </div>
       </div>
 
-      {/* The 4 Architectural Refinements */}
+      {/* The 5 Architectural Refinements */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-amber-600" />
           <h3 className="text-base font-serif italic font-bold text-stone-900">
-            Os 4 Refinamentos Críticos para o seu SaaS
+            Os 5 Refinamentos Críticos para o seu SaaS Escalar
           </h3>
         </div>
 
@@ -136,6 +136,68 @@ export const ArchitectureView: React.FC<ArchitectureViewProps> = ({ onClose }) =
               <span className="text-stone-400">// Fluxo de Segurança:</span>
               <br />
               Prompt ➔ AI Intent Proposal ➔ <span className="text-amber-800">Human Approval Click</span> ➔ Database
+            </div>
+          </div>
+        </div>
+
+        {/* Refinement 5 - Critical Image/Media Object Storage Decoupling */}
+        <div className="bg-stone-900 text-white rounded-2xl p-5 sm:p-6 border border-stone-800 space-y-3 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-amber-300 text-sm font-serif font-bold">
+              <Server className="w-4 h-4 text-amber-400" />
+              <span>5. Desacoplamento Crítico de Mídia: Object Storage vs PostgreSQL Metadata</span>
+            </div>
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+              Escala de 10 ➔ 100 ➔ 1.000 ➔ 10.000 Lojistas
+            </span>
+          </div>
+
+          <p className="text-xs text-stone-300 leading-relaxed font-sans">
+            <strong>Nunca transforme o PostgreSQL em depósito de fotos.</strong> Armazenar binários ou Base64 diretamente no banco satura a memória do <em>buffer pool</em>, infla os custos de backup/WAL e torna as consultas lentas. O arquivo físico reside em Object Storage (S3 / Cloudflare R2 / GCS) e o PostgreSQL armazena apenas metadados relacionais e o <code className="text-amber-300 font-mono">storage_key</code>.
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-2">
+            {/* ASCII Pipeline Architecture */}
+            <div className="lg:col-span-5 bg-black/60 rounded-xl p-3.5 border border-white/10 flex flex-col justify-center">
+              <div className="text-[10px] font-mono uppercase text-stone-400 mb-1.5 font-bold">
+                Fluxo de Upload e Persistência Desacoplada:
+              </div>
+              <pre className="text-[10px] text-amber-200 font-mono leading-relaxed overflow-x-auto">
+{`             Upload
+                │
+                ▼
+        Backend / Storage
+                │
+        ┌───────┴────────┐
+        │                │
+        ▼                ▼
+     Arquivo           PostgreSQL
+     físico            metadata
+  (S3 / R2 / GCS)   (product_media)`}
+              </pre>
+            </div>
+
+            {/* PostgreSQL Schema product_media */}
+            <div className="lg:col-span-7 bg-black/60 rounded-xl p-3.5 border border-white/10 space-y-1.5">
+              <div className="text-[10px] font-mono uppercase text-stone-400 font-bold flex items-center justify-between">
+                <span>Schema da Tabela PostgreSQL: `product_media`</span>
+                <span className="text-emerald-400 text-[9px]">Zero Bloat / Ultra Fast</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] font-mono text-stone-300">
+                <div><span className="text-amber-300">id</span>: uuid PK</div>
+                <div><span className="text-amber-300">type</span>: 'IMAGE' | 'VIDEO'</div>
+                <div><span className="text-amber-300">organization_id</span>: uuid</div>
+                <div><span className="text-amber-300">is_primary</span>: boolean</div>
+                <div><span className="text-amber-300">product_id</span>: uuid FK</div>
+                <div><span className="text-amber-300">sort_order</span>: integer</div>
+                <div><span className="text-amber-300 font-bold">storage_key</span>: text</div>
+                <div><span className="text-amber-300">alt_text</span>: text</div>
+                <div><span className="text-amber-300">url</span>: text (CDN)</div>
+                <div><span className="text-amber-300">created_at</span>: timestamptz</div>
+              </div>
+              <div className="pt-1.5 border-t border-white/10 text-[10px] text-stone-400 font-sans">
+                💡 <strong className="text-stone-200">Vantagem Operacional:</strong> Com 10.000 clientes cadastrando 500 semijoias com 5 fotos cada (25 milhões de imagens), o banco PostgreSQL consome apenas ~3.5 GB em índices de metadados, mantendo tempo de resposta abaixo de 5ms.
+              </div>
             </div>
           </div>
         </div>

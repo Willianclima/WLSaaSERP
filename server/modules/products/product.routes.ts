@@ -36,4 +36,27 @@ router.delete(
   ProductController.delete
 );
 
+// --- Media Management Endpoints ---
+router.get("/:id/media", ProductController.listMedia);
+router.post(
+  "/:id/media",
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN", "GERENTE_COMERCIAL"]),
+  ProductController.addMedia
+);
+router.delete(
+  "/:id/media/:mediaId",
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN", "GERENTE_COMERCIAL"]),
+  ProductController.deleteMedia
+);
+router.put(
+  "/:id/media/:mediaId/primary",
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN", "GERENTE_COMERCIAL"]),
+  ProductController.setPrimaryMedia
+);
+router.put(
+  "/:id/media/reorder",
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN", "GERENTE_COMERCIAL"]),
+  ProductController.reorderMedia
+);
+
 export default router;

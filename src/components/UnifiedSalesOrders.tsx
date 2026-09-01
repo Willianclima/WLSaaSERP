@@ -23,6 +23,12 @@ import {
   FileSpreadsheet,
   QrCode,
   DollarSign,
+  MessageCircle,
+  LayoutGrid,
+  List,
+  Sparkles,
+  Phone,
+  ArrowRight,
 } from "lucide-react";
 import {
   Order,
@@ -36,6 +42,7 @@ import {
 } from "../types";
 import { OrderCreationModal } from "./orders/OrderCreationModal";
 import { OrderDetailDrawer } from "./orders/OrderDetailDrawer";
+import { whatsappOrderService } from "../services/whatsappOrderService";
 import confetti from "canvas-confetti";
 
 interface UnifiedSalesOrdersProps {
@@ -48,44 +55,41 @@ interface UnifiedSalesOrdersProps {
 }
 
 const STATUS_FILTERS: Array<{ key: string; label: string; count?: number }> = [
-  { key: "TODOS", label: "Todos os Pedidos" },
-  { key: "DRAFT", label: "Rascunhos" },
-  { key: "INVENTORY_RESERVED", label: "Estoque Reservado" },
+  { key: "TODOS", label: "Todos" },
   { key: "AWAITING_PAYMENT", label: "Aguardando Pgto" },
-  { key: "PAID", label: "Pagos & Faturados" },
-  { key: "FULFILLMENT_PENDING", label: "Em Separação" },
+  { key: "IN_ATTENDANCE", label: "Em Atendimento" },
+  { key: "PAID", label: "Pagos" },
   { key: "FULFILLED", label: "Entregues" },
   { key: "CANCELED", label: "Cancelados" },
-  { key: "REFUNDED", label: "Estornados" },
 ];
 
-const CHANNEL_BADGES: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  ECOMMERCE: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200" },
-  PRESENTIAL_POS: { label: "PDV Showroom", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200" },
-  WHATSAPP: { label: "WhatsApp VIP", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200" },
-  B2B_RESELLER: { label: "B2B Atacado", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200" },
-  CONSIGNMENT: { label: "Consignação", bg: "bg-indigo-50", text: "text-indigo-900", border: "border-indigo-200" },
-  CUSTOM_STUDIO: { label: "Studio Custom", bg: "bg-pink-50", text: "text-pink-900", border: "border-pink-200" },
-  MARKETPLACE: { label: "Marketplace", bg: "bg-stone-100", text: "text-stone-800", border: "border-stone-200" },
-  LOJA_WEB: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200" },
-  REVENDEDORA: { label: "Revendedora", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200" },
+const CHANNEL_BADGES: Record<string, { label: string; bg: string; text: string; border: string; icon: string }> = {
+  ECOMMERCE: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", icon: "🛍️" },
+  PRESENTIAL_POS: { label: "PDV Showroom", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", icon: "🏪" },
+  WHATSAPP: { label: "WhatsApp VIP", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", icon: "💬" },
+  B2B_RESELLER: { label: "Revendedora", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200", icon: "👩‍💼" },
+  CONSIGNMENT: { label: "Consignação", bg: "bg-indigo-50", text: "text-indigo-900", border: "border-indigo-200", icon: "📦" },
+  CUSTOM_STUDIO: { label: "Studio Custom", bg: "bg-pink-50", text: "text-pink-900", border: "border-pink-200", icon: "✨" },
+  MARKETPLACE: { label: "Marketplace", bg: "bg-stone-100", text: "text-stone-800", border: "border-stone-200", icon: "🌐" },
+  LOJA_WEB: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", icon: "🛍️" },
+  REVENDEDORA: { label: "Revendedora", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200", icon: "👩‍💼" },
 };
 
-const STATUS_BADGES: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  DRAFT: { label: "Rascunho", bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-200" },
-  INVENTORY_RESERVED: { label: "Estoque Reservado", bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200" },
-  AWAITING_PAYMENT: { label: "Aguardando Pgto", bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200" },
-  PAYMENT_PROCESSING: { label: "Processando", bg: "bg-blue-50", text: "text-blue-800", border: "border-blue-200" },
-  PAID: { label: "Pago & Faturado", bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-200" },
-  PAGO: { label: "Pago", bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-200" },
-  FULFILLMENT_PENDING: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-800", border: "border-purple-200" },
-  EM_PREPARACAO: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-800", border: "border-purple-200" },
-  FULFILLED: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-800", border: "border-teal-200" },
-  ENTREGUE: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-800", border: "border-teal-200" },
-  CANCELED: { label: "Cancelado", bg: "bg-rose-50", text: "text-rose-800", border: "border-rose-200" },
-  CANCELADO: { label: "Cancelado", bg: "bg-rose-50", text: "text-rose-800", border: "border-rose-200" },
-  REFUNDED: { label: "Estornado", bg: "bg-red-100", text: "text-red-900", border: "border-red-300" },
-  EXPIRED: { label: "TTL Expirado", bg: "bg-stone-200", text: "text-stone-700", border: "border-stone-300" },
+const STATUS_BADGES: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+  DRAFT: { label: "Em Atendimento", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", dot: "bg-amber-500" },
+  INVENTORY_RESERVED: { label: "Aguardando Pgto", bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-200", dot: "bg-rose-500" },
+  AWAITING_PAYMENT: { label: "Aguardando Pgto", bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-200", dot: "bg-rose-500" },
+  PAYMENT_PROCESSING: { label: "Em Processamento", bg: "bg-blue-50", text: "text-blue-900", border: "border-blue-200", dot: "bg-blue-500" },
+  PAID: { label: "Pago & Faturado", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", dot: "bg-emerald-500" },
+  PAGO: { label: "Pago", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", dot: "bg-emerald-500" },
+  FULFILLMENT_PENDING: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", dot: "bg-purple-500" },
+  EM_PREPARACAO: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", dot: "bg-purple-500" },
+  FULFILLED: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-900", border: "border-teal-200", dot: "bg-teal-500" },
+  ENTREGUE: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-900", border: "border-teal-200", dot: "bg-teal-500" },
+  CANCELED: { label: "Cancelado", bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-200", dot: "bg-stone-400" },
+  CANCELADO: { label: "Cancelado", bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-200", dot: "bg-stone-400" },
+  REFUNDED: { label: "Estornado", bg: "bg-red-100", text: "text-red-900", border: "border-red-300", dot: "bg-red-500" },
+  EXPIRED: { label: "Expirado", bg: "bg-stone-200", text: "text-stone-700", border: "border-stone-300", dot: "bg-stone-400" },
 };
 
 export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
@@ -99,9 +103,29 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("TODOS");
   const [channelFilter, setChannelFilter] = useState<string>("TODOS");
+  const [viewMode, setViewMode] = useState<"CARDS" | "TABLE">("CARDS");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Relative Date Helper: "Hoje • 14:32"
+  const formatRelativeOrderTime = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const isYesterday = d.toDateString() === yesterday.toDateString();
+      const timeStr = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+      if (isToday) return `Hoje • ${timeStr}`;
+      if (isYesterday) return `Ontem • ${timeStr}`;
+      return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} • ${timeStr}`;
+    } catch {
+      return dateStr;
+    }
+  };
 
   // Normalize order list structure (supports both new Order and legacy UnifiedOrder)
   const normalizedOrders: Order[] = orders.map((o: any) => {
@@ -142,6 +166,8 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
         resellerName: o.resellerName,
         resellerCommissionAmount: o.resellerCommissionAmount || o.resellerCommission,
         warrantyCode: o.warrantyCode,
+        externalReference: o.externalReference,
+        metadata: o.metadata,
         createdAt: o.createdAt,
         updatedAt: o.updatedAt || o.createdAt,
         items: o.items?.map((item: any, idx: number) => ({
@@ -525,9 +551,23 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                         >
                           {channelInfo.label}
                         </span>
+
+                        {order.externalReference && (
+                          <div className="text-[10px] font-mono font-bold text-emerald-700 mt-1 flex items-center gap-1">
+                            <span>Ref:</span>
+                            <span className="bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">{order.externalReference}</span>
+                          </div>
+                        )}
+
                         {order.resellerName && (
-                          <div className="text-[10px] text-stone-500 mt-1 truncate max-w-[120px]" title={order.resellerName}>
-                            Consultora: {order.resellerName}
+                          <div className="text-[10px] text-stone-500 mt-0.5 truncate max-w-[140px]" title={order.resellerName}>
+                            👩‍💼 {order.resellerName}
+                          </div>
+                        )}
+
+                        {order.items?.[0]?.productSnapshot?.sku && (
+                          <div className="text-[10px] text-stone-400 font-mono mt-0.5">
+                            SKU: {order.items[0].productSnapshot.sku}
                           </div>
                         )}
                       </td>
@@ -580,7 +620,25 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
 
                       {/* Actions */}
                       <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {(order.status === "INVENTORY_RESERVED" || order.status === "AWAITING_PAYMENT" || order.status === "DRAFT") && (
+                            <button
+                              onClick={async () => {
+                                await handleTransitionOrder(order.id, {
+                                  event: "CONFIRM_PAYMENT",
+                                  operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial",
+                                  reason: "Pagamento recebido. Estoque baixado para SALE no ERP e Garantia ativada.",
+                                });
+                                confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs ring-1 ring-emerald-300"
+                              title="Confirmar recebimento do pagamento e baixar estoque para SALE"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Confirmar Pgto</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => setSelectedOrder(order)}
                             className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"

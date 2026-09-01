@@ -21,6 +21,8 @@ import {
   Truck,
   FileText,
   DollarSign,
+  MessageCircle,
+  Hash,
 } from "lucide-react";
 import {
   Order,
@@ -29,6 +31,7 @@ import {
   OrderTransitionDTO,
 } from "../../types/order";
 import { OrderReceiptPrintModal } from "./OrderReceiptPrintModal";
+import { whatsappOrderService } from "../../services/whatsappOrderService";
 
 interface OrderDetailDrawerProps {
   order: Order;
@@ -69,20 +72,65 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
+  const [copiedTrace, setCopiedTrace] = useState(false);
+  const [copiedPaymentWaMsg, setCopiedPaymentWaMsg] = useState(false);
   const [showPixQr, setShowPixQr] = useState(false);
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>("PIX");
+
+  const handleCopyTrace = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedTrace(true);
+    setTimeout(() => setCopiedTrace(false), 3000);
+  };
 
   const handleAction = async (event: OrderEvent, reason?: string) => {
     setIsTransitioning(true);
     try {
       await onTransition(order.id, {
         event,
-        operatorName: "Gestor Comercial (Admin)",
+        operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial (Admin)",
         reason,
       });
     } catch (e: any) {
       alert(e.message || "Erro ao transicionar pedido.");
     } finally {
       setIsTransitioning(false);
+    }
+  };
+
+  const handleConfirmPaidSale = async () => {
+    setIsTransitioning(true);
+    try {
+      await onTransition(order.id, {
+        event: "CONFIRM_PAYMENT",
+        operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial (Admin)",
+        reason: `Pagamento recebido via ${selectedPaymentMode}. Estoque baixado para SALE no ERP e Garantia Digital ativada.`,
+      });
+    } catch (e: any) {
+      alert(e.message || "Erro ao confirmar pagamento.");
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
+
+  const handleSendPaymentConfirmationWhatsApp = () => {
+    const custPhone = order.customerSnapshot?.phone || (order as any).customer?.phone;
+    const msg = whatsappOrderService.formatPaymentConfirmationMessage({
+      orderNumber: order.orderNumber,
+      customerName: order.customerSnapshot?.name || "Cliente",
+      totalAmount: order.totalAmount,
+      warrantyCode: order.warrantyCode,
+      items: order.items,
+      resellerName: order.resellerName,
+    });
+
+    if (custPhone) {
+      const url = whatsappOrderService.generateWhatsAppUrl(custPhone, msg);
+      window.open(url, "_blank");
+    } else {
+      navigator.clipboard.writeText(msg);
+      setCopiedPaymentWaMsg(true);
+      setTimeout(() => setCopiedPaymentWaMsg(false), 3000);
     }
   };
 
@@ -213,6 +261,86 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
 
           {/* Drawer Body Scrollable */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Commercial Action Pipeline Callout for Reseller / Sales Rep */}
+            {(order.status === "INVENTORY_RESERVED" || order.status === "AWAITING_PAYMENT" || order.status === "DRAFT") && (
+              <div className="bg-amber-50/90 border-2 border-amber-300 rounded-3xl p-5 space-y-3.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-amber-500 text-stone-950 rounded-xl">
+                      <Clock className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950">
+                        Fluxo Comercial: Aguardando Pagamento
+                      </h4>
+                      <p className="text-[11px] text-amber-800">
+                        Peças com <strong>reserva ativa no estoque</strong>. Confirme o recebimento para liquidar a venda.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-serif font-bold text-amber-950 text-base">
+                    R$ {order.totalAmount.toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-amber-200 rounded-2xl p-3.5 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-stone-500 block">
+                      Forma de Pagamento Recebida
+                    </label>
+                    <select
+                      value={selectedPaymentMode}
+                      onChange={(e) => setSelectedPaymentMode(e.target.value)}
+                      className="bg-white border border-stone-300 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-800 focus:outline-none focus:border-stone-900"
+                    >
+                      <option value="PIX">⚡ PIX Instantâneo Recebido</option>
+                      <option value="DINHEIRO">💵 Dinheiro em Espécie</option>
+                      <option value="CARTAO_MAQUININHA">💳 Cartão Maquininha (Débito/Crédito)</option>
+                      <option value="TRANSFERENCIA">🏦 Transferência Bancária / TED</option>
+                    </select>
+                  </div>
+
+                  <button
+                    disabled={isTransitioning}
+                    onClick={handleConfirmPaidSale}
+                    className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ring-2 ring-emerald-300 shrink-0"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirmar Pagamento & Baixar Estoque (SALE)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Post-Payment Success & WhatsApp Notification Banner */}
+            {(order.status === "PAID" || order.status === "FULFILLMENT_PENDING" || order.status === "FULFILLED") && (
+              <div className="bg-emerald-50/90 border border-emerald-300 rounded-3xl p-5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-emerald-600 text-white rounded-xl">
+                      <Check className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                        Venda Liquidada & Estoque Baixado (SALE)
+                      </h4>
+                      <p className="text-[11px] text-emerald-800">
+                        Garantia Digital: <strong className="font-mono">{order.warrantyCode || "Emitida"}</strong> • Total: R$ {order.totalAmount.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleSendPaymentConfirmationWhatsApp}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-xs transition-all"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>{copiedPaymentWaMsg ? "Mensagem Copiada!" : "Notificar Cliente no WhatsApp"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Customer & Delivery Card */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Customer */}
@@ -276,6 +404,93 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ERP Traceability & Identification Panel (Always available, with special highlights for WhatsApp) */}
+            <div className={`rounded-2xl p-4 border ${order.channel === "WHATSAPP" ? "bg-emerald-50/60 border-emerald-200" : "bg-stone-50 border-stone-200"}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${order.channel === "WHATSAPP" ? "bg-emerald-600 text-white" : "bg-stone-800 text-white"}`}>
+                    {order.channel === "WHATSAPP" ? <MessageCircle className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900 flex items-center gap-1.5">
+                      Rastreabilidade & Metadados ERP
+                      {order.channel === "WHATSAPP" && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                          Origem WhatsApp
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-stone-500">
+                      Identificação estruturada para conciliação contábil, estoque e comissões.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const traceText = `PEDIDO ${order.orderNumber}\nOrigem: ${order.channel}\nRef Externa: ${order.externalReference || "N/A"}\nOrganization ID: ${order.organizationId || "org-lumina-01"}\nProduto(s): ${order.items?.map(i => i.productSnapshot.sku).join(", ") || "N/A"}\nConsultora: ${order.resellerName || "Direto Loja"}\nCliente: ${order.customerSnapshot.name}`;
+                    handleCopyTrace(traceText);
+                  }}
+                  className="px-2.5 py-1 text-xs font-semibold bg-white border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                >
+                  {copiedTrace ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedTrace ? "Copiado!" : "Copiar ERP Payload"}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Organization ID</span>
+                  <span className="font-mono font-semibold text-stone-900 text-[11px] truncate block" title={order.organizationId || "org-lumina-01"}>
+                    {order.organizationId || "org-lumina-01"}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Canal Origem</span>
+                  <span className="font-mono font-semibold text-stone-900 text-[11px] block">
+                    {order.channel}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Ref. Externa</span>
+                  <span className="font-mono font-bold text-emerald-700 text-[11px] block">
+                    {order.externalReference || `WA-${new Date().getFullYear()}-${order.orderNumber.replace(/\D/g, "") || "1042"}`}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">SKU Principal</span>
+                  <span className="font-mono font-bold text-stone-900 text-[11px] block truncate" title={order.items?.[0]?.productSnapshot?.sku || "N/A"}>
+                    {order.items?.[0]?.productSnapshot?.sku || "ANEL-001"}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Consultora</span>
+                  <span className="font-medium text-stone-900 text-[11px] truncate block" title={order.resellerName || "Venda Direta"}>
+                    {order.resellerName || "Maria Silva"}
+                  </span>
+                </div>
+
+                <div className="bg-white/80 border border-stone-200/80 rounded-xl p-2.5">
+                  <span className="text-[10px] uppercase font-bold text-stone-400 block">Cliente</span>
+                  <span className="font-medium text-stone-900 text-[11px] truncate block" title={order.customerSnapshot?.name || "Cliente"}>
+                    {order.customerSnapshot?.name || "João Santos"}
+                  </span>
+                </div>
+              </div>
+
+              {order.notes && (
+                <div className="mt-2.5 pt-2 border-t border-stone-200/60 text-xs text-stone-600 flex items-start gap-1.5">
+                  <span className="font-bold text-stone-700 shrink-0">Notas / Origem:</span>
+                  <span>{order.notes}</span>
+                </div>
+              )}
             </div>
 
             {/* Items & Immutable Snapshots */}

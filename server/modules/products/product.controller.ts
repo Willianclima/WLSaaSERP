@@ -181,4 +181,165 @@ export class ProductController {
       });
     }
   }
+
+  // --- Product Media Endpoints ---
+
+  /**
+   * POST /api/products/:id/media
+   * Persists uploaded media metadata and URL into the database for this product
+   */
+  static async addMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = req.organizationId!;
+      const { id } = req.params;
+      const { storageKey, url, cdnUrl, mediaType, mimeType, fileSizeBytes, etag, isPrimary, sortOrder, title, altText } = req.body;
+
+      if (!storageKey || !url) {
+        return res.status(400).json({
+          success: false,
+          error: "Payload incompleto: 'storageKey' e 'url' são obrigatórios.",
+        });
+      }
+
+      const media = await ProductService.addProductMedia(orgId, id, {
+        storageKey,
+        url,
+        cdnUrl,
+        mediaType,
+        mimeType,
+        fileSizeBytes,
+        etag,
+        isPrimary,
+        sortOrder,
+        title,
+        altText,
+      });
+
+      // Audit Log
+      await auditService.logAction(
+        orgId,
+        req.user?.id,
+        "PRODUCT_MEDIA_ADD",
+        "PRODUCT",
+        id,
+        (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1",
+        req.headers["user-agent"] || "Aura Web Client",
+        `Mídia adicionada ao produto ${id} com storageKey ${storageKey}`,
+        { mediaId: media.id, url, isPrimary }
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: "Mídia associada ao produto com sucesso.",
+        data: media,
+      });
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        error: error.message || "Erro ao adicionar mídia ao produto.",
+      });
+    }
+  }
+
+  /**
+   * GET /api/products/:id/media
+   */
+  static async listMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = req.organizationId!;
+      const { id } = req.params;
+      const media = await ProductService.listProductMedia(orgId, id);
+
+      return res.json({
+        success: true,
+        data: media,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Erro ao listar mídias do produto.",
+      });
+    }
+  }
+
+  /**
+   * DELETE /api/products/:id/media/:mediaId
+   */
+  static async deleteMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = req.organizationId!;
+      const { id, mediaId } = req.params;
+      const deleted = await ProductService.deleteProductMedia(orgId, id, mediaId);
+
+      if (!deleted) {
+        return res.status(404).json({
+          success: false,
+          error: "Mídia não encontrada.",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Mídia desvinculada e removida com sucesso.",
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Erro ao remover mídia.",
+      });
+    }
+  }
+
+  /**
+   * PUT /api/products/:id/media/:mediaId/primary
+   */
+  static async setPrimaryMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = req.organizationId!;
+      const { id, mediaId } = req.params;
+      const media = await ProductService.setPrimaryProductMedia(orgId, id, mediaId);
+
+      return res.json({
+        success: true,
+        message: "Foto principal atualizada.",
+        data: media,
+      });
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        error: error.message || "Erro ao definir mídia principal.",
+      });
+    }
+  }
+
+  /**
+   * PUT /api/products/:id/media/reorder
+   */
+  static async reorderMedia(req: AuthenticatedRequest, res: Response) {
+    try {
+      const orgId = req.organizationId!;
+      const { id } = req.params;
+      const { orderedMediaIds } = req.body;
+
+      if (!Array.isArray(orderedMediaIds)) {
+        return res.status(400).json({
+          success: false,
+          error: "Array 'orderedMediaIds' é obrigatório.",
+        });
+      }
+
+      const media = await ProductService.reorderProductMedia(orgId, id, orderedMediaIds);
+
+      return res.json({
+        success: true,
+        message: "Ordem da galeria atualizada.",
+        data: media,
+      });
+    } catch (error: any) {
+      return res.status(400).json({
+        success: false,
+        error: error.message || "Erro ao reordenar mídias.",
+      });
+    }
+  }
 }

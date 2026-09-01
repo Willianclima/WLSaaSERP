@@ -15,6 +15,39 @@ export type ProductBath =
 
 export type ProductStatus = "ATIVO" | "PAUSADO" | "ESGOTADO";
 
+export interface ProductMediaEntity {
+  id: string;
+  organizationId: string;
+  productId: string;
+  storageKey: string;
+  url: string;
+  cdnUrl?: string;
+  mediaType: "IMAGE" | "VIDEO";
+  mimeType: string;
+  fileSizeBytes: number;
+  etag?: string;
+  isPrimary: boolean;
+  sortOrder: number;
+  title?: string;
+  altText?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddProductMediaDTO {
+  storageKey: string;
+  url: string;
+  cdnUrl?: string;
+  mediaType?: "IMAGE" | "VIDEO";
+  mimeType?: string;
+  fileSizeBytes?: number;
+  etag?: string;
+  isPrimary?: boolean;
+  sortOrder?: number;
+  title?: string;
+  altText?: string;
+}
+
 export interface ProductEntity {
   id: string;
   organizationId: string;
@@ -31,6 +64,8 @@ export interface ProductEntity {
   warrantyMonths: number;
   isCustomizable: boolean;
   imageUrl: string;
+  galleryUrls?: string[];
+  media?: ProductMediaEntity[];
   description: string;
   status: ProductStatus;
   createdAt: string;

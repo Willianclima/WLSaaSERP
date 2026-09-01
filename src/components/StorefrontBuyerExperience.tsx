@@ -31,7 +31,9 @@ import {
   UserCheck,
   Layers,
   ArrowUpRight,
+  Share2,
 } from "lucide-react";
+import { ShareCatalogModal } from "./ShareCatalogModal";
 import {
   ProductItem,
   Reseller,
@@ -41,12 +43,22 @@ import {
   JewelryBath,
   TenantStore,
   StoreBrandingConfig,
+  OrganizationPaymentSettings,
 } from "../types";
+import {
+  calculatePixPrice,
+  calculateInstallmentOptions,
+  getBestInstallmentHighlight,
+  DEFAULT_ORGANIZATION_PAYMENT_SETTINGS,
+} from "../utils/pricingEngine";
+import { clientInventoryService } from "../services/inventoryService";
+import { whatsappOrderService, TraceableWhatsAppOrderPayload } from "../services/whatsappOrderService";
 import confetti from "canvas-confetti";
 
 interface StorefrontBuyerExperienceProps {
   tenant: TenantStore;
   branding?: StoreBrandingConfig;
+  paymentSettings?: OrganizationPaymentSettings;
   products: ProductItem[];
   resellers: Reseller[];
   warranties: DigitalWarranty[];
@@ -60,6 +72,7 @@ interface StorefrontBuyerExperienceProps {
 export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps> = ({
   tenant,
   branding,
+  paymentSettings,
   products,
   resellers,
   warranties,
@@ -69,9 +82,14 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   onNavigateToERP,
   onNavigateToHome,
 }) => {
+  const currentPaymentSettings = paymentSettings || DEFAULT_ORGANIZATION_PAYMENT_SETTINGS;
+  const [selectedCardInstallment, setSelectedCardInstallment] = useState<number>(1);
+  const [showModalInstallmentTable, setShowModalInstallmentTable] = useState<boolean>(false);
+
   // Storefront navigation & state
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "TODOS");
   const [searchTerm, setSearchTerm] = useState("");
+  const [likedProducts, setLikedProducts] = useState<Record<string, boolean>>({});
   const [selectedResellerId, setSelectedResellerId] = useState<string>(resellers[0]?.id || "");
   const [cartItems, setCartItems] = useState<
     Array<{
@@ -85,6 +103,8 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
+  const [modalActiveImageUrl, setModalActiveImageUrl] = useState<string>("");
+  const [copiedModalUrl, setCopiedModalUrl] = useState(false);
 
   // Customizer modal state for product detail
   const [modalBath, setModalBath] = useState<JewelryBath>("OURO_18K");
@@ -102,7 +122,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   const [customerCpf, setCustomerCpf] = useState("329.841.578-92");
   const [customerCep, setCustomerCep] = useState("01414-001");
   const [customerAddress, setCustomerAddress] = useState("Rua Bela Cintra, 1850, Apto 42 - Jardins, São Paulo - SP");
-  const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CARTAO_CREDITO" | "WHATSAPP">("PIX");
+  const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CARTAO_CREDITO" | "WHATSAPP">("WHATSAPP");
   const [couponCode, setCouponCode] = useState(initialCoupon || "");
   const [couponApplied, setCouponApplied] = useState(Boolean(initialCoupon));
   const [shippingMethod, setShippingMethod] = useState<"EXPRESS" | "STANDARD" | "RESELLER_PICKUP">("STANDARD");
@@ -110,6 +130,8 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   // Success order reference
   const [placedOrder, setPlacedOrder] = useState<UnifiedOrder | null>(null);
   const [copiedPix, setCopiedPix] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [lastWhatsAppUrl, setLastWhatsAppUrl] = useState<string>("");
 
   // Warranty lookup drawer
   const [isWarrantyLookupOpen, setIsWarrantyLookupOpen] = useState(false);
@@ -118,8 +140,12 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
   const selectedReseller = resellers.find((r) => r.id === selectedResellerId);
 
-  // Filtering products
+  // Filtering products - Respect PublicationStatus (ESTOQUE ≠ PUBLICAÇÃO)
   const filteredProducts = products.filter((p) => {
+    // Only show published items to buyer (or legacy ATIVO if publicationStatus is not set)
+    const isPublic = p.publicationStatus ? p.publicationStatus === "PUBLISHED" : p.status !== "PAUSADO";
+    if (!isPublic) return false;
+
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -133,8 +159,64 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   const shippingCost = shippingMethod === "RESELLER_PICKUP" ? 0 : cartSubtotal > 250 ? 0 : 18.9;
   const cartTotal = Math.max(0, cartSubtotal - discountAmount + shippingCost);
 
+  const toggleFavorite = (productId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLikedProducts((prev) => ({ ...prev, [productId]: !prev[productId] }));
+  };
+
+  const handleDirectWhatsAppProduct = (product: ProductItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const storePhone = selectedReseller?.phone?.replace(/\D/g, "") || "5519998765432";
+    const extRef = whatsappOrderService.generateExternalReference();
+
+    const msg = whatsappOrderService.formatDirectProductInquiry({
+      name: product.name,
+      sku: product.sku,
+      price: product.price,
+      bath: product.bath,
+      warrantyMonths: product.warrantyMonths || 12,
+      externalReference: extRef,
+      resellerName: selectedReseller?.name,
+    });
+
+    const waUrl = whatsappOrderService.generateWhatsAppUrl(storePhone, msg);
+
+    // Register background draft order in ERP so it enters the pipeline seamlessly
+    whatsappOrderService
+      .submitOrderToERP({
+        organizationId: tenant.id || "org-lumina-01",
+        organizationName: tenant.name || "Lumina Semijoias Nobres",
+        salesChannel: "WHATSAPP",
+        externalReference: extRef,
+        resellerId: selectedReseller?.id,
+        resellerName: selectedReseller?.name || "Consultora Lumina",
+        customerName: customerName || "Cliente Loja Virtual",
+        customerPhone: customerPhone,
+        items: [
+          {
+            productId: product.id,
+            sku: product.sku,
+            name: product.name,
+            quantity: 1,
+            unitPrice: product.price,
+            totalAmount: product.price,
+            bath: product.bath,
+          },
+        ],
+        subtotal: product.price,
+        totalAmount: product.price,
+        status: "DRAFT",
+        isInquiryOnly: true,
+      })
+      .catch((err) => console.warn("Background WA draft error:", err));
+
+    window.open(waUrl, "_blank");
+  };
+
   const handleOpenProduct = (product: ProductItem) => {
     setSelectedProductForModal(product);
+    const heroImage = product.media?.[0]?.url || product.imageUrl || "";
+    setModalActiveImageUrl(heroImage);
     setModalBath(product.bath);
     setModalGiftBox(false);
     if (product.isCustomizable) {
@@ -196,32 +278,34 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
     const orderNum = `ORD-2026-${Math.floor(1840 + Math.random() * 100)}`;
     const warrantyCode = `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const isWhatsAppOrder = paymentMethod === "WHATSAPP";
+    const externalRef = whatsappOrderService.generateExternalReference(orderNum);
 
     const newOrder: UnifiedOrder = {
       id: `ord-${Date.now()}`,
-      organizationId: "org-lumina-01",
+      organizationId: tenant.id || "org-lumina-01",
       orderNumber: orderNum,
       customerId: `cust-buyer-${Date.now()}`,
       customerSnapshot: {
         id: `cust-buyer-${Date.now()}`,
         personType: "PF",
-        name: customerName,
-        phone: customerPhone,
-        email: customerEmail,
-        document: customerCpf,
+        name: customerName || "Cliente Loja Virtual",
+        phone: customerPhone || "(19) 99876-5432",
+        email: customerEmail || "cliente@lumina.com.br",
+        document: customerCpf || "000.000.000-00",
       },
-      channel: selectedReseller ? "B2B_RESELLER" : "ECOMMERCE",
-      status: "PAID",
+      channel: isWhatsAppOrder ? "WHATSAPP" : selectedReseller ? "B2B_RESELLER" : "ECOMMERCE",
+      status: isWhatsAppOrder ? "INVENTORY_RESERVED" : "PAID",
       shippingAddress: {
-        recipientName: customerName,
-        zipCode: "13480-000",
+        recipientName: customerName || "Cliente",
+        zipCode: customerCep || "13480-000",
         street: customerAddress || "Endereço do Cliente",
         number: "S/N",
         neighborhood: "Centro",
         city: "Limeira",
         state: "SP",
         country: "BRA",
-        phone: customerPhone,
+        phone: customerPhone || "(19) 99876-5432",
       },
       currency: "BRL",
       subtotalAmount: cartSubtotal,
@@ -235,11 +319,23 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
         ? (cartSubtotal * (selectedReseller.commissionDirectRate / 100))
         : 0,
       warrantyCode: warrantyCode,
+      externalReference: isWhatsAppOrder ? externalRef : undefined,
+      notes: isWhatsAppOrder
+        ? `Pedido gerado via WhatsApp com payload rastreável Ref: ${externalRef}. Consultora: ${selectedReseller?.name || "Venda Direta"}.`
+        : undefined,
+      metadata: {
+        organization_id: tenant.id || "org-lumina-01",
+        sales_channel: isWhatsAppOrder ? "WHATSAPP" : (selectedReseller ? "B2B_RESELLER" : "ECOMMERCE"),
+        external_reference: isWhatsAppOrder ? externalRef : undefined,
+        consultant_name: selectedReseller?.name,
+        customer_name: customerName,
+        skus: cartItems.map((i) => i.product.sku),
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       items: cartItems.map((item, idx) => ({
         id: `item-buyer-${Date.now()}-${idx}`,
-        organizationId: "org-lumina-01",
+        organizationId: tenant.id || "org-lumina-01",
         orderId: `ord-${Date.now()}`,
         productId: item.product.id,
         locationId: "loc-lumina-matriz",
@@ -250,7 +346,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
           category: item.product.category,
           collection: item.product.collection,
           material: item.product.material,
-          bath: item.product.bath,
+          bath: item.selectedBath || item.product.bath,
           stones: item.product.stones || [],
           price: item.product.price,
           costPrice: item.product.costPrice,
@@ -270,14 +366,19 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       payments: [
         {
           id: `pay-buyer-${Date.now()}`,
-          organizationId: "org-lumina-01",
+          organizationId: tenant.id || "org-lumina-01",
           orderId: `ord-${Date.now()}`,
-          paymentMethod: paymentMethod === "CARTAO_CREDITO" ? "CREDIT_CARD" : paymentMethod === "BOLETO" ? "BOLETO" : "PIX",
-          gateway: "MERCADOPAGO",
-          status: "PAID",
+          paymentMethod:
+            paymentMethod === "CARTAO_CREDITO"
+              ? "CREDIT_CARD"
+              : paymentMethod === "BOLETO"
+              ? "BOLETO"
+              : "PIX",
+          gateway: isWhatsAppOrder ? "MANUAL" : "MERCADOPAGO",
+          status: isWhatsAppOrder ? "PENDING" : "PAID",
           amount: cartTotal,
           installments: 1,
-          paidAt: new Date().toISOString(),
+          paidAt: isWhatsAppOrder ? undefined : new Date().toISOString(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -288,6 +389,49 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
     setPlacedOrder(newOrder);
     setCheckoutStep("SUCCESS");
     setCartItems([]);
+
+    // Format Traceable WhatsApp message with complete ERP Identification
+    const storePhone = selectedReseller?.phone?.replace(/\D/g, "") || "5519998765432";
+    
+    const waPayload: TraceableWhatsAppOrderPayload = {
+      organizationId: tenant.id || "org-lumina-01",
+      organizationName: tenant.name || "Lumina Semijoias Nobres",
+      salesChannel: "WHATSAPP",
+      externalReference: externalRef,
+      orderNumber: orderNum,
+      resellerId: selectedReseller?.id,
+      resellerName: selectedReseller?.name || "Consultora Lumina",
+      resellerPhone: selectedReseller?.phone,
+      customerName: customerName || "Cliente",
+      customerPhone: customerPhone,
+      customerCity: customerAddress ? customerAddress.split("-")[0] : "Limeira/SP",
+      items: newOrder.items.map((it) => ({
+        productId: it.productId,
+        sku: it.productSnapshot.sku,
+        name: it.productSnapshot.name,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        totalAmount: it.totalAmount,
+        bath: it.productSnapshot.bath,
+        customizationSpec: it.customizationSpec,
+      })),
+      subtotal: cartSubtotal,
+      shippingAmount: shippingCost,
+      discountAmount: discountAmount,
+      totalAmount: cartTotal,
+      status: "INVENTORY_RESERVED",
+      notes: `Garantia 1 ano (${warrantyCode}) já emitida no sistema.`,
+    };
+
+    const waText = whatsappOrderService.formatTraceableMessage(waPayload);
+    const waUrl = whatsappOrderService.generateWhatsAppUrl(storePhone, waText);
+    setLastWhatsAppUrl(waUrl);
+
+    // Register in ERP backend
+    if (isWhatsAppOrder) {
+      whatsappOrderService.submitOrderToERP(waPayload).catch((err) => console.warn(err));
+      window.open(waUrl, "_blank");
+    }
 
     confetti({
       particleCount: 80,
@@ -406,7 +550,16 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
           </div>
 
           {/* Right Actions: Cart & Favorites */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-full shadow-xs cursor-pointer transition-colors"
+              title="Compartilhar catálogo via WhatsApp e Instagram"
+            >
+              <Share2 className="w-3.5 h-3.5 text-emerald-700" />
+              <span className="hidden sm:inline">Compartilhar</span>
+            </button>
+
             <button
               onClick={() => setIsWarrantyLookupOpen(true)}
               className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-stone-700 hover:text-stone-950 border border-stone-200 rounded-full bg-white shadow-xs"
@@ -597,58 +750,89 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
         {/* Product Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product) => {
-            const installmentValue = (product.price / 6).toFixed(2);
-            const pixPrice = (product.price * 0.95).toFixed(2);
+            const pixInfo = calculatePixPrice(product.price, currentPaymentSettings);
+            const installmentHighlight = getBestInstallmentHighlight(product.price, currentPaymentSettings);
+            const availability = clientInventoryService.evaluateProductAvailability(product, branding);
+            const isOutOfStock = availability.status === "OUT_OF_STOCK";
+            const isLiked = Boolean(likedProducts[product.id]);
+
+            const bathLabel =
+              product.bath === "OURO_18K"
+                ? "Ouro 18K"
+                : product.bath === "RODIO_BRANCO"
+                ? "Ródio Branco"
+                : product.bath === "ROSE_GOLD"
+                ? "Ouro Rosé"
+                : product.bath || "Banho Nobre";
 
             return (
               <div
                 key={product.id}
-                className="group bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-xs hover:shadow-xl transition-all flex flex-col justify-between"
+                onClick={() => handleOpenProduct(product)}
+                className="group bg-white border border-stone-200/80 rounded-3xl overflow-hidden shadow-xs hover:shadow-xl hover:border-amber-200 transition-all duration-300 flex flex-col justify-between cursor-pointer"
               >
                 {/* Product Image Frame */}
-                <div className="relative aspect-square overflow-hidden bg-stone-100">
+                <div className="relative aspect-4/5 overflow-hidden bg-stone-100/80">
                   <img
                     src={product.imageUrl}
                     alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                   />
 
+                  {/* Favorite Heart Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => toggleFavorite(product.id, e)}
+                    className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-xs cursor-pointer z-10 ${
+                      isLiked
+                        ? "bg-rose-500 text-white scale-105"
+                        : "bg-white/80 hover:bg-white text-stone-600 hover:text-rose-500"
+                    }`}
+                    title={isLiked ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                  >
+                    <Heart className={`w-4 h-4 ${isLiked ? "fill-white" : ""}`} />
+                  </button>
+
                   {/* Badges */}
-                  <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                  <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
+                    <span className="bg-white/95 backdrop-blur-md text-stone-900 text-[10px] font-semibold tracking-wide px-2.5 py-1 rounded-full border border-stone-200/80 shadow-2xs">
+                      {bathLabel}
+                    </span>
+
                     {product.isCustomizable && (
-                      <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border border-amber-700/50 flex items-center gap-1">
-                        <Crown className="w-3 h-3" />
+                      <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full border border-amber-700/50 flex items-center gap-1 shadow-2xs">
+                        <Crown className="w-3 h-3 text-amber-400" />
                         <span>Personalizável</span>
                       </span>
                     )}
-                    <span className="bg-white/90 backdrop-blur-md text-stone-900 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-stone-200">
-                      {product.bath === "OURO_18K"
-                        ? "Banho Ouro 18K"
-                        : product.bath === "RODIO_BRANCO"
-                        ? "Ródio Nobre"
-                        : product.bath}
-                    </span>
+
+                    {isOutOfStock && (
+                      <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full border border-amber-700/50">
+                        {availability.statusBadgeText}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="absolute top-3 right-3">
-                    <span className="bg-emerald-50/90 text-emerald-800 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      <span>12M</span>
+                  {/* Bottom Strip: 1 Year Warranty */}
+                  <div className="absolute bottom-2.5 left-3 pointer-events-none">
+                    <span className="bg-stone-950/70 backdrop-blur-md text-stone-100 text-[9px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      <span>Garantia 12 Meses</span>
                     </span>
                   </div>
                 </div>
 
-                {/* Info and Actions */}
+                {/* Info & Conversion Action */}
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] text-stone-400 font-mono mb-1">
-                      <span>{product.sku}</span>
-                      <span>Coleção {product.collection}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-amber-900/70 font-medium">
+                      <span>{bathLabel}</span>
+                      <span className="text-stone-400">• Antialérgico</span>
                     </div>
-                    <h3 className="text-base font-serif italic font-bold text-stone-900 group-hover:text-stone-700 transition-colors">
+                    <h3 className="text-base font-serif italic font-bold text-stone-900 group-hover:text-amber-950 transition-colors leading-snug">
                       {product.name}
                     </h3>
-                    <p className="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">
                       {product.description}
                     </p>
                   </div>
@@ -657,33 +841,43 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                     <div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-xl font-serif font-bold text-stone-900">
-                          R$ {product.price.toFixed(2)}
+                          R$ {product.price.toFixed(2).replace(".", ",")}
                         </span>
-                        <span className="text-[10px] text-emerald-700 font-bold">
-                          R$ {pixPrice} no PIX (5% OFF)
-                        </span>
+                        {pixInfo.isDiscountActive && (
+                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            R$ {pixInfo.pixPrice.toFixed(2).replace(".", ",")} no PIX
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-stone-500 font-medium">
-                        ou 6x de R$ {installmentValue} sem juros
+                      <p className="text-[11px] text-stone-500 font-medium mt-0.5">
+                        {installmentHighlight}
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => handleOpenProduct(product)}
-                      className="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                    >
-                      {product.isCustomizable ? (
-                        <>
-                          <Crown className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Personalizar Peça</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Ver Detalhes & Comprar</span>
-                        </>
-                      )}
-                    </button>
+                    {/* High-Conversion Actions */}
+                    <div className="space-y-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handleDirectWhatsAppProduct(product, e)}
+                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md"
+                        title="Pedir direto no WhatsApp sem necessidade de cadastro"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-white/20" />
+                        <span>Quero este 💬</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenProduct(product);
+                        }}
+                        className="w-full py-2 px-3 bg-stone-50 hover:bg-stone-100 text-stone-700 rounded-xl text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5 text-stone-500" />
+                        <span>Ver Detalhes / Sacola</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -695,79 +889,270 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       {/* Product Detail & Live Customizer Modal */}
       {selectedProductForModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:p-8 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-200">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-                  {selectedProductForModal.sku} • Coleção {selectedProductForModal.collection}
-                </span>
+          <div className="bg-white border border-stone-200 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:p-8 space-y-5">
+            {/* Modal Top Bar & Clean Public URL Simulator */}
+            <div className="space-y-3 pb-3 border-b border-stone-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+                    {selectedProductForModal.sku} • Coleção {selectedProductForModal.collection}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProductForModal(null)}
+                  className="p-1.5 rounded-full text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setSelectedProductForModal(null)}
-                className="p-1 rounded-full text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Public Product Direct URL Bar */}
+              <div className="flex items-center justify-between gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs text-stone-600">
+                <div className="flex items-center gap-2 truncate font-mono text-[11px]">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="text-stone-400">URL Pública:</span>
+                  <span className="text-stone-900 truncate font-semibold">
+                    app.lumina.com/loja/lumina-semijoias/produto/{selectedProductForModal.sku.toLowerCase()}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const prodUrl = `${window.location.origin}/?loja=lumina-semijoias&produto=${encodeURIComponent(
+                      selectedProductForModal.sku
+                    )}#produto`;
+                    navigator.clipboard.writeText(prodUrl);
+                    setCopiedModalUrl(true);
+                    setTimeout(() => setCopiedModalUrl(false), 2500);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-stone-300 hover:border-stone-400 text-[11px] font-bold text-stone-800 shrink-0 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                >
+                  {copiedModalUrl ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-600" />
+                      <span className="text-emerald-700">Link Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3 text-stone-500" />
+                      <span>Copiar Link</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* Product Visual & Live Mockup */}
               <div className="space-y-4">
-                <div className="aspect-square rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 relative">
-                  <img
-                    src={selectedProductForModal.imageUrl}
-                    alt={selectedProductForModal.name}
-                    className="w-full h-full object-cover"
-                  />
+                {(() => {
+                  const mediaGallery = (selectedProductForModal.media && selectedProductForModal.media.length > 0)
+                    ? [...selectedProductForModal.media].sort((a, b) => a.sort_order - b.sort_order).map((m) => m.url)
+                    : (selectedProductForModal.galleryUrls && selectedProductForModal.galleryUrls.length > 0)
+                    ? selectedProductForModal.galleryUrls
+                    : [selectedProductForModal.imageUrl];
 
-                  {/* Live Engraving Overlay if Customizable */}
-                  {selectedProductForModal.isCustomizable && (
-                    <div className="absolute inset-0 bg-black/25 flex flex-col items-center justify-center p-4 text-center">
-                      <div className="bg-amber-100/90 border border-amber-300 text-stone-900 px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm">
-                        <span className="text-[9px] uppercase tracking-widest text-stone-600 block mb-1 font-bold">
-                          Prévia da Gravação a Laser:
-                        </span>
-                        <span
-                          className={`text-xl font-bold tracking-wider ${
-                            modalFont === "CURSIVA"
-                              ? "font-serif italic"
-                              : modalFont === "CLASSICA"
-                              ? "font-serif"
-                              : "font-mono uppercase"
-                          }`}
-                        >
-                          {modalEngraving || "Seu Nome"}
-                        </span>
+                  const currentImg = modalActiveImageUrl || mediaGallery[0] || selectedProductForModal.imageUrl;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="aspect-square rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 relative group">
+                        <img
+                          src={currentImg}
+                          alt={selectedProductForModal.name}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+
+                        {/* Live Engraving Overlay if Customizable */}
+                        {selectedProductForModal.isCustomizable && (
+                          <div className="absolute inset-0 bg-black/25 flex flex-col items-center justify-center p-4 text-center">
+                            <div className="bg-amber-100/90 border border-amber-300 text-stone-900 px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm">
+                              <span className="text-[9px] uppercase tracking-widest text-stone-600 block mb-1 font-bold">
+                                Prévia da Gravação a Laser:
+                              </span>
+                              <span
+                                className={`text-xl font-bold tracking-wider ${
+                                  modalFont === "CURSIVA"
+                                    ? "font-serif italic"
+                                    : modalFont === "CLASSICA"
+                                    ? "font-serif"
+                                    : "font-mono uppercase"
+                                }`}
+                              >
+                                {modalEngraving || "Seu Nome"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
 
-                <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs space-y-1.5">
-                  <div className="flex items-center gap-2 font-bold text-stone-800">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Certificado de Garantia Incluso</span>
+                      {/* Horizontal Thumbnail Gallery */}
+                      {mediaGallery.length > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                          {mediaGallery.map((imgUrl, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setModalActiveImageUrl(imgUrl)}
+                              className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                                currentImg === imgUrl
+                                  ? "border-amber-500 ring-2 ring-amber-300 scale-105"
+                                  : "border-stone-200 opacity-70 hover:opacity-100"
+                              }`}
+                            >
+                              <img src={imgUrl} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Technical Specifications Card */}
+                <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl text-xs space-y-2">
+                  <div className="flex items-center justify-between font-bold text-stone-800 pb-1.5 border-b border-stone-200">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Garantia &amp; Especificações</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                      {selectedProductForModal.warrantyMonths || 12} Meses
+                    </span>
                   </div>
-                  <p className="text-[11px] text-stone-500 leading-relaxed">
-                    Acompanha QR Code único para ativação de garantia de 1 ano para o banho metálico e cravamento.
-                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-stone-600">
+                    <div>
+                      <span className="text-stone-400 block text-[10px]">Material / Banho</span>
+                      <strong className="text-stone-800">
+                        {selectedProductForModal.bath?.replace("_", " ")}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-400 block text-[10px]">Pedras Cravadas</span>
+                      <strong className="text-stone-800">
+                        {selectedProductForModal.stones?.join(", ") || "Zircônia 5A"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-400 block text-[10px]">Proteção Antialérgica</span>
+                      <strong className="text-stone-800">Verniz Hipoalergênico</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-400 block text-[10px]">Disponibilidade</span>
+                      {(() => {
+                        const modalAvail = clientInventoryService.evaluateProductAvailability(selectedProductForModal, branding);
+                        return (
+                          <div>
+                            <strong className={modalAvail.isPurchasable ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
+                              {modalAvail.statusBadgeText}
+                            </strong>
+                            <div className="text-[9px] text-stone-500 font-mono mt-0.5">
+                              Disponível: {modalAvail.availableQuantity} un (Físico: {modalAvail.onHandQuantity} | Reservado: {modalAvail.reservedQuantity})
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Options and Purchase Form */}
               <div className="space-y-5">
                 <div>
+                  {(() => {
+                    const modalAvail = clientInventoryService.evaluateProductAvailability(selectedProductForModal, branding);
+                    return (
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                            modalAvail.isPurchasable
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              : modalAvail.actionType === "SOB_CONSULTA"
+                              ? "bg-amber-50 text-amber-800 border border-amber-200"
+                              : "bg-rose-50 text-rose-800 border border-rose-200"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              modalAvail.isPurchasable ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                            }`}
+                          />
+                          {modalAvail.isPurchasable
+                            ? `${modalAvail.availableQuantity} un em estoque para pronta entrega`
+                            : `Status de Estoque: ${modalAvail.statusBadgeText}`}
+                        </span>
+                        <span className="text-[11px] text-stone-400">
+                          Ref: {selectedProductForModal.sku}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
                   <h3 className="text-2xl font-serif italic font-bold text-stone-900">
                     {selectedProductForModal.name}
                   </h3>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-2xl font-serif font-bold text-stone-900">
-                      R$ {selectedProductForModal.price.toFixed(2)}
-                    </span>
-                    <span className="text-xs text-emerald-700 font-bold">
-                      R$ {(selectedProductForModal.price * 0.95).toFixed(2)} no PIX
-                    </span>
-                  </div>
+                  {(() => {
+                    const modalPixInfo = calculatePixPrice(selectedProductForModal.price, currentPaymentSettings);
+                    const modalInstallmentHighlight = getBestInstallmentHighlight(selectedProductForModal.price, currentPaymentSettings);
+                    const modalInstallmentOptions = calculateInstallmentOptions(selectedProductForModal.price, currentPaymentSettings);
+
+                    return (
+                      <div className="space-y-1.5 mt-2">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-serif font-bold text-stone-900">
+                            R$ {selectedProductForModal.price.toFixed(2)}
+                          </span>
+                          {modalPixInfo.isDiscountActive && (
+                            <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                              R$ {modalPixInfo.pixPrice.toFixed(2)} no PIX ({modalPixInfo.discountPercent}% OFF)
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-1 pt-0.5">
+                          <p className="text-xs text-stone-600 font-medium">
+                            {modalInstallmentHighlight}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowModalInstallmentTable(!showModalInstallmentTable)}
+                            className="text-[11px] text-amber-800 hover:text-amber-900 font-bold underline cursor-pointer"
+                          >
+                            {showModalInstallmentTable ? "Ocultar parcelas" : "Ver tabela de parcelamento"}
+                          </button>
+                        </div>
+
+                        {/* Expandable installment table */}
+                        {showModalInstallmentTable && (
+                          <div className="p-3 bg-stone-50 border border-stone-200 rounded-2xl space-y-1 max-h-36 overflow-y-auto mt-2 text-xs animate-in fade-in">
+                            {modalInstallmentOptions.map((opt) => (
+                              <div
+                                key={opt.installments}
+                                className="flex items-center justify-between text-[11px] font-mono text-stone-700 py-1 border-b border-stone-200/60 last:border-0"
+                              >
+                                <span className="font-bold">
+                                  {opt.installments}x de R$ {opt.installmentValue.toFixed(2)}
+                                </span>
+                                <span
+                                  className={
+                                    opt.isInterestFree
+                                      ? "text-emerald-700 font-sans font-bold text-[10px]"
+                                      : "text-stone-500 font-sans text-[10px]"
+                                  }
+                                >
+                                  {opt.isInterestFree
+                                    ? "sem acréscimo"
+                                    : `total R$ ${opt.totalAmount.toFixed(2)} (+${opt.interestRatePercent}%)`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Bath Selection */}
@@ -851,15 +1236,94 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                 </label>
 
                 {/* Action Buttons */}
-                <div className="pt-2">
-                  <button
-                    onClick={handleAddToCartFromModal}
-                    className="w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingBag className="w-4 h-4 text-amber-400" />
-                    <span>Adicionar à Sacola • R$ {(selectedProductForModal.price + (modalGiftBox ? 25 : 0)).toFixed(2)}</span>
-                  </button>
-                </div>
+                {(() => {
+                  const modalAvail = clientInventoryService.evaluateProductAvailability(selectedProductForModal, branding);
+                  const isOutOfStock = !modalAvail.isPurchasable;
+
+                  return (
+                    <div className="pt-2 space-y-2">
+                      {isOutOfStock ? (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-1">
+                          <p className="text-xs font-bold text-rose-800">
+                            Indisponível para Compra Direta ({modalAvail.statusBadgeText})
+                          </p>
+                          <p className="text-[11px] text-rose-600">
+                            Esta peça tem {modalAvail.reservedQuantity} un reservada(s) em pedidos e estoque disponível zerado.
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleAddToCartFromModal}
+                          className="w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <ShoppingBag className="w-4 h-4 text-amber-400" />
+                          <span>Adicionar à Sacola • R$ {(selectedProductForModal.price + (modalGiftBox ? 25 : 0)).toFixed(2)}</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          const storePhone = selectedReseller?.phone?.replace(/\D/g, "") || "5519998765432";
+                          const extRef = whatsappOrderService.generateExternalReference();
+                          
+                          const directPayload: TraceableWhatsAppOrderPayload = {
+                            organizationId: tenant.id || "org-lumina-01",
+                            organizationName: tenant.name || "Lumina Semijoias Nobres",
+                            salesChannel: "WHATSAPP",
+                            externalReference: extRef,
+                            resellerId: selectedReseller?.id,
+                            resellerName: selectedReseller?.name || "Maria Silva (Consultora Lumina)",
+                            resellerPhone: selectedReseller?.phone,
+                            customerName: customerName || "Cliente Loja Virtual",
+                            customerPhone: customerPhone,
+                            customerCity: customerAddress ? customerAddress.split("-")[0] : "Limeira/SP",
+                            items: [
+                              {
+                                productId: selectedProductForModal.id,
+                                sku: selectedProductForModal.sku,
+                                name: selectedProductForModal.name,
+                                quantity: 1,
+                                unitPrice: selectedProductForModal.price,
+                                totalAmount: selectedProductForModal.price,
+                                bath: modalBath,
+                                customizationSpec: selectedProductForModal.isCustomizable
+                                  ? { engravingName: modalEngraving, fontStyle: modalFont }
+                                  : undefined,
+                              },
+                            ],
+                            subtotal: selectedProductForModal.price,
+                            totalAmount: selectedProductForModal.price + (modalGiftBox ? 25 : 0),
+                            status: isOutOfStock ? "DRAFT" : "INVENTORY_RESERVED",
+                            isInquiryOnly: isOutOfStock,
+                            notes: isOutOfStock
+                              ? `Consulta de disponibilidade sob demanda para ${selectedProductForModal.sku}`
+                              : `Pedido direto do catálogo via WhatsApp. SKU: ${selectedProductForModal.sku}.`,
+                          };
+
+                          const msg = whatsappOrderService.formatTraceableMessage(directPayload);
+                          const waUrl = whatsappOrderService.generateWhatsAppUrl(storePhone, msg);
+                          
+                          // Register in ERP in background
+                          whatsappOrderService.submitOrderToERP(directPayload).catch((e) => console.warn(e));
+
+                          window.open(waUrl, "_blank");
+                        }}
+                        className={`w-full py-3 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
+                          isOutOfStock
+                            ? "bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>
+                          {isOutOfStock
+                            ? `${modalAvail.actionLabel} no WhatsApp`
+                            : "Pedir Imediatamente no WhatsApp (Rastreável)"}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1155,79 +1619,196 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                 )}
 
                 {/* Payment Selection Tabs */}
-                <div className="space-y-2">
-                  <label className="text-stone-600 font-semibold block">Escolha a Forma de Pagamento</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: "PIX", label: "⚡ PIX Instantâneo", desc: "5% de Desconto" },
-                      { id: "CARTAO_CREDITO", label: "💳 Cartão de Crédito", desc: "Até 6x sem juros" },
-                      { id: "WHATSAPP", label: "💬 Fechar no WhatsApp", desc: "Com a Consultora" },
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(p.id as any)}
-                        className={`p-3 rounded-2xl border text-center transition-all ${
-                          paymentMethod === p.id
-                            ? "bg-stone-900 text-white border-stone-900 shadow-xs"
-                            : "bg-stone-50 text-stone-800 border-stone-200 hover:bg-stone-100"
-                        }`}
-                      >
-                        <p className="font-bold">{p.label}</p>
-                        <p className="text-[10px] opacity-80 mt-0.5">{p.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {(() => {
+                  const checkoutPixInfo = calculatePixPrice(cartTotal, currentPaymentSettings);
+                  const checkoutInstallmentOptions = calculateInstallmentOptions(cartTotal, currentPaymentSettings);
+                  const chosenCardOption =
+                    checkoutInstallmentOptions.find((o) => o.installments === selectedCardInstallment) ||
+                    checkoutInstallmentOptions[0];
+                  const finalPayableTotal =
+                    paymentMethod === "PIX" && checkoutPixInfo.isDiscountActive
+                      ? checkoutPixInfo.pixPrice
+                      : paymentMethod === "CARTAO_CREDITO"
+                      ? chosenCardOption.totalAmount
+                      : cartTotal;
 
-                {/* Payment Box */}
-                {paymentMethod === "PIX" && (
-                  <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-3 text-center">
-                    <div className="w-36 h-36 bg-white border border-emerald-300 rounded-2xl mx-auto flex items-center justify-center shadow-xs">
-                      <QrCode className="w-28 h-28 text-emerald-950" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-emerald-950">Chave PIX Dinâmica Gerada</p>
-                      <p className="text-[11px] text-emerald-800">
-                        O pagamento é confirmado em menos de 10 segundos pelo banco.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText("00020126580014br.gov.bcb.pix0136lumina-semijoias-pix-checkout");
-                        setCopiedPix(true);
-                        setTimeout(() => setCopiedPix(false), 2000);
-                      }}
-                      className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl font-bold text-[11px] inline-flex items-center gap-1.5"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedPix ? "Código Copiado!" : "Copiar Chave PIX Copia e Cola"}</span>
-                    </button>
-                  </div>
-                )}
+                  return (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-stone-600 font-semibold block text-xs">
+                          Escolha a Forma de Pagamento
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            {
+                              id: "PIX",
+                              label: "⚡ PIX Instantâneo",
+                              desc: currentPaymentSettings.pixDiscountPercent > 0
+                                ? `${currentPaymentSettings.pixDiscountPercent}% de Desconto`
+                                : "Aprovação Imediata",
+                            },
+                            {
+                              id: "CARTAO_CREDITO",
+                              label: "💳 Cartão de Crédito",
+                              desc: `Até ${currentPaymentSettings.maxInstallments}x (${currentPaymentSettings.interestFreeInstallments}x sem juros)`,
+                            },
+                            {
+                              id: "WHATSAPP",
+                              label: "💬 Fechar no WhatsApp",
+                              desc: "Com a Consultora",
+                            },
+                          ].map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setPaymentMethod(p.id as any)}
+                              className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                                paymentMethod === p.id
+                                  ? "bg-stone-900 text-white border-stone-900 shadow-xs"
+                                  : "bg-stone-50 text-stone-800 border-stone-200 hover:bg-stone-100"
+                              }`}
+                            >
+                              <p className="font-bold text-xs">{p.label}</p>
+                              <p className="text-[10px] opacity-80 mt-0.5">{p.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-                {/* Order Summary Breakdown */}
-                <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2 text-xs">
-                  <div className="flex justify-between text-stone-600">
-                    <span>Subtotal das Peças</span>
-                    <span className="font-mono">R$ {cartSubtotal.toFixed(2)}</span>
-                  </div>
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-emerald-700 font-semibold">
-                      <span>Desconto Especial</span>
-                      <span>- R$ {discountAmount.toFixed(2)}</span>
+                      {/* Payment Box */}
+                      {paymentMethod === "WHATSAPP" && (
+                        <div className="p-4 bg-emerald-50/80 border border-emerald-300 rounded-2xl space-y-2.5 text-left">
+                          <div className="flex items-center gap-2 text-emerald-950 font-bold">
+                            <MessageCircle className="w-5 h-5 text-emerald-700" />
+                            <span>Atendimento VIP via WhatsApp & Reserva Imediata</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-900 leading-relaxed">
+                            Ao clicar em confirmar, suas semijoias serão{" "}
+                            <strong>automaticamente reservadas no estoque</strong> do sistema e você será
+                            direcionada para conversar com nossa consultora para alinhar detalhes de envio, brindes
+                            e forma de pagamento favorita ({currentPaymentSettings.pixDiscountPercent > 0 ? `PIX com ${currentPaymentSettings.pixDiscountPercent}% OFF` : "PIX"} ou Cartão em até {currentPaymentSettings.maxInstallments}x).
+                          </p>
+                          <div className="pt-1 flex items-center gap-2 text-[10px] text-emerald-800 font-semibold">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Garantia de 1 ano já gerada e vinculada ao seu número.</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {paymentMethod === "PIX" && (
+                        <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-3 text-center">
+                          <div className="w-36 h-36 bg-white border border-emerald-300 rounded-2xl mx-auto flex items-center justify-center shadow-xs">
+                            <QrCode className="w-28 h-28 text-emerald-950" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-emerald-950">Chave PIX Dinâmica Gerada</p>
+                            <p className="text-[11px] text-emerald-800">
+                              {currentPaymentSettings.pixDiscountPercent > 0
+                                ? `Economize R$ ${checkoutPixInfo.discountAmount.toFixed(2)} pagando no PIX!`
+                                : "O pagamento é confirmado em menos de 10 segundos pelo banco."}
+                            </p>
+                            {currentPaymentSettings.pixKey && (
+                              <p className="text-[10px] font-mono text-emerald-900 mt-1">
+                                Chave: {currentPaymentSettings.pixKey} ({currentPaymentSettings.pixKeyType})
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                currentPaymentSettings.pixKey || "00020126580014br.gov.bcb.pix0136lumina-semijoias-pix-checkout"
+                              );
+                              setCopiedPix(true);
+                              setTimeout(() => setCopiedPix(false), 2000);
+                            }}
+                            className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl font-bold text-[11px] inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>{copiedPix ? "Código Copiado!" : "Copiar Chave PIX Copia e Cola"}</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {paymentMethod === "CARTAO_CREDITO" && (
+                        <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-3 text-left">
+                          <div className="flex items-center justify-between font-bold text-stone-900">
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="w-4 h-4 text-stone-700" />
+                              <span>Cartão de Crédito</span>
+                            </div>
+                            <span className="text-xs text-stone-500 font-normal">
+                              {currentPaymentSettings.interestFreeInstallments}x sem acréscimo
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold text-stone-600">Número de Parcelas</label>
+                            <select
+                              value={selectedCardInstallment}
+                              onChange={(e) => setSelectedCardInstallment(Number(e.target.value))}
+                              className="w-full bg-white border border-stone-300 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 focus:outline-none focus:border-stone-900"
+                            >
+                              {checkoutInstallmentOptions.map((opt) => (
+                                <option key={opt.installments} value={opt.installments}>
+                                  {opt.installments}x de R$ {opt.installmentValue.toFixed(2)}{" "}
+                                  {opt.isInterestFree
+                                    ? "(sem acréscimo)"
+                                    : `(total R$ ${opt.totalAmount.toFixed(2)} / +${opt.interestRatePercent}%)`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <p className="text-[11px] text-stone-500">
+                            Transação segura processada com criptografia de ponta a ponta e emissão instantânea de certificado de garantia.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Order Summary Breakdown */}
+                      <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2 text-xs">
+                        <div className="flex justify-between text-stone-600">
+                          <span>Subtotal das Peças</span>
+                          <span className="font-mono">R$ {cartSubtotal.toFixed(2)}</span>
+                        </div>
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between text-emerald-700 font-semibold">
+                            <span>Cupom de Desconto</span>
+                            <span>- R$ {discountAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {paymentMethod === "PIX" && checkoutPixInfo.isDiscountActive && (
+                          <div className="flex justify-between text-emerald-700 font-semibold">
+                            <span>Desconto PIX ({currentPaymentSettings.pixDiscountPercent}%)</span>
+                            <span>- R$ {checkoutPixInfo.discountAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {paymentMethod === "CARTAO_CREDITO" && !chosenCardOption.isInterestFree && (
+                          <div className="flex justify-between text-stone-600 font-semibold">
+                            <span>Taxa de Parcelamento ({chosenCardOption.interestRatePercent}%)</span>
+                            <span>+ R$ {(chosenCardOption.totalAmount - cartTotal).toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-stone-600">
+                          <span>Frete / Entrega</span>
+                          <span>{shippingCost === 0 ? "Grátis" : `R$ ${shippingCost.toFixed(2)}`}</span>
+                        </div>
+                        <div className="flex justify-between items-baseline text-stone-900 font-bold text-base pt-2 border-t border-stone-200">
+                          <span>Total Final</span>
+                          <div className="text-right">
+                            <span className="font-serif">R$ {finalPayableTotal.toFixed(2)}</span>
+                            {paymentMethod === "CARTAO_CREDITO" && (
+                              <p className="text-[11px] text-stone-500 font-normal">
+                                {chosenCardOption.installments}x de R$ {chosenCardOption.installmentValue.toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex justify-between text-stone-600">
-                    <span>Frete / Entrega</span>
-                    <span>{shippingCost === 0 ? "Grátis" : `R$ ${shippingCost.toFixed(2)}`}</span>
-                  </div>
-                  <div className="flex justify-between text-stone-900 font-bold text-base pt-2 border-t border-stone-200">
-                    <span>Total a Pagar</span>
-                    <span className="font-serif">R$ {cartTotal.toFixed(2)}</span>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div className="flex items-center justify-between pt-2">
                   <button
@@ -1239,10 +1820,23 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
                   <button
                     onClick={handleCompleteOrder}
-                    className="px-8 py-3.5 bg-stone-900 hover:bg-stone-800 text-white rounded-full font-bold uppercase tracking-wider text-xs transition-all shadow-lg flex items-center gap-2 cursor-pointer"
+                    className={`px-8 py-3.5 text-white rounded-full font-bold uppercase tracking-wider text-xs transition-all shadow-lg flex items-center gap-2 cursor-pointer ${
+                      paymentMethod === "WHATSAPP"
+                        ? "bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-300"
+                        : "bg-stone-900 hover:bg-stone-800"
+                    }`}
                   >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Confirmar Pagamento & Emitir Garantia</span>
+                    {paymentMethod === "WHATSAPP" ? (
+                      <>
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Reservar Estoque & Enviar Pedido via WhatsApp</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Confirmar Pagamento & Emitir Garantia</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1256,13 +1850,35 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                 </div>
 
                 <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-bold mb-2">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Estoque Reservado no Sistema</span>
+                  </div>
                   <h3 className="text-3xl font-serif italic font-bold text-stone-900">
-                    Parabéns pela sua Escolha!
+                    Parabéns pelo seu Pedido!
                   </h3>
                   <p className="text-xs text-stone-600 mt-1 max-w-md mx-auto">
-                    Seu pedido <strong className="font-mono text-stone-900">{placedOrder.orderNumber}</strong> foi aprovado e integrado instantaneamente à produção do ERP.
+                    Seu pedido <strong className="font-mono text-stone-900">{placedOrder.orderNumber}</strong> foi registrado e o estoque já está assegurado para você.
                   </p>
                 </div>
+
+                {/* Direct WhatsApp Callout Button */}
+                {lastWhatsAppUrl && (
+                  <div className="max-w-md mx-auto p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-center space-y-2">
+                    <p className="text-xs font-semibold text-emerald-950">
+                      Precisa abrir novamente a conversa ou o navegador bloqueou o pop-up?
+                    </p>
+                    <a
+                      href={lastWhatsAppUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all inline-flex"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Abrir Conversa no WhatsApp com a Consultora</span>
+                    </a>
+                  </div>
+                )}
 
                 {/* Digital Warranty Pass Ticket */}
                 <div className="bg-stone-900 text-white rounded-3xl p-6 border border-stone-800 max-w-md mx-auto shadow-xl text-left space-y-4 relative overflow-hidden">
@@ -1282,11 +1898,11 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                     <div className="col-span-2 space-y-1.5 text-xs text-stone-300">
                       <p>
                         <span className="text-[10px] text-stone-400 uppercase block">Titular:</span>
-                        <strong className="text-white">{placedOrder.customer.name}</strong>
+                        <strong className="text-white">{placedOrder.customerSnapshot?.name || placedOrder.customer?.name}</strong>
                       </p>
                       <p>
                         <span className="text-[10px] text-stone-400 uppercase block">Peça:</span>
-                        <span className="text-stone-200">{placedOrder.items[0]?.productName}</span>
+                        <span className="text-stone-200">{placedOrder.items[0]?.productSnapshot?.name || placedOrder.items[0]?.productName}</span>
                       </p>
                       <p>
                         <span className="text-[10px] text-stone-400 uppercase block">Validade:</span>
@@ -1435,6 +2051,14 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
           </div>
         </div>
       </footer>
+
+      {/* Share Catalog Modal */}
+      <ShareCatalogModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        tenant={tenant}
+        totalProducts={products.length}
+      />
     </div>
   );
 };

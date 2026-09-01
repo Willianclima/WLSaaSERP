@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
   OrganizationEntity,
   UserEntity,
@@ -7,7 +9,7 @@ import {
   OrganizationModuleEntity,
   SystemModuleKey,
 } from "../types/saas";
-import { ProductEntity } from "../modules/products/product.types";
+import { ProductEntity, ProductMediaEntity } from "../modules/products/product.types";
 import {
   InventoryMovementEntity,
   InventoryLocationEntity,
@@ -154,6 +156,7 @@ class DatabaseStore {
   public organizationModules: Map<string, OrganizationModuleEntity[]> = new Map();
   public plans: Map<string, PlanDefinition> = new Map();
   public products: Map<string, ProductEntity> = new Map();
+  public productMedia: Map<string, ProductMediaEntity> = new Map();
   public inventoryMovements: Map<string, InventoryMovementEntity> = new Map();
   public inventoryLocations: Map<string, InventoryLocationEntity> = new Map();
   public inventoryBalances: Map<string, InventoryBalanceEntity> = new Map();
@@ -167,8 +170,88 @@ class DatabaseStore {
   public orderPayments: Map<string, OrderPaymentEntity> = new Map();
   public orderStateTransitions: Map<string, OrderStateTransitionEntity> = new Map();
 
+  private dbFilePath = path.join(process.cwd(), "storage", "database_state.json");
+  private saveTimeout: NodeJS.Timeout | null = null;
+
   constructor() {
     this.seedInitialData();
+    this.loadFromDisk();
+  }
+
+  public scheduleSave() {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    this.saveTimeout = setTimeout(() => {
+      this.saveToDisk();
+    }, 500);
+  }
+
+  public saveToDisk() {
+    try {
+      const storageDir = path.join(process.cwd(), "storage");
+      if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true });
+      }
+
+      const snapshot = {
+        version: "1.0",
+        savedAt: new Date().toISOString(),
+        organizations: Array.from(this.organizations.entries()),
+        users: Array.from(this.users.entries()),
+        members: Array.from(this.members.entries()),
+        subscriptions: Array.from(this.subscriptions.entries()),
+        organizationModules: Array.from(this.organizationModules.entries()),
+        products: Array.from(this.products.entries()),
+        productMedia: Array.from(this.productMedia.entries()),
+        inventoryMovements: Array.from(this.inventoryMovements.entries()),
+        inventoryLocations: Array.from(this.inventoryLocations.entries()),
+        inventoryBalances: Array.from(this.inventoryBalances.entries()),
+        inventoryReservations: Array.from(this.inventoryReservations.entries()),
+        customers: Array.from(this.customers.entries()),
+        customerAddresses: Array.from(this.customerAddresses.entries()),
+        customerContacts: Array.from(this.customerContacts.entries()),
+        orders: Array.from(this.orders.entries()),
+        orderItems: Array.from(this.orderItems.entries()),
+        orderPayments: Array.from(this.orderPayments.entries()),
+        orderStateTransitions: Array.from(this.orderStateTransitions.entries()),
+      };
+
+      fs.writeFileSync(this.dbFilePath, JSON.stringify(snapshot, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[DatabaseStore] Failed to save snapshot to disk:", err);
+    }
+  }
+
+  public loadFromDisk() {
+    try {
+      if (fs.existsSync(this.dbFilePath)) {
+        const raw = fs.readFileSync(this.dbFilePath, "utf-8");
+        const data = JSON.parse(raw);
+        if (data && data.organizations) {
+          data.organizations.forEach(([k, v]: [string, any]) => this.organizations.set(k, v));
+          data.users?.forEach(([k, v]: [string, any]) => this.users.set(k, v));
+          data.members?.forEach(([k, v]: [string, any]) => this.members.set(k, v));
+          data.subscriptions?.forEach(([k, v]: [string, any]) => this.subscriptions.set(k, v));
+          data.organizationModules?.forEach(([k, v]: [string, any]) => this.organizationModules.set(k, v));
+          data.products?.forEach(([k, v]: [string, any]) => this.products.set(k, v));
+          data.productMedia?.forEach(([k, v]: [string, any]) => this.productMedia.set(k, v));
+          data.inventoryMovements?.forEach(([k, v]: [string, any]) => this.inventoryMovements.set(k, v));
+          data.inventoryLocations?.forEach(([k, v]: [string, any]) => this.inventoryLocations.set(k, v));
+          data.inventoryBalances?.forEach(([k, v]: [string, any]) => this.inventoryBalances.set(k, v));
+          data.inventoryReservations?.forEach(([k, v]: [string, any]) => this.inventoryReservations.set(k, v));
+          data.customers?.forEach(([k, v]: [string, any]) => this.customers.set(k, v));
+          data.customerAddresses?.forEach(([k, v]: [string, any]) => this.customerAddresses.set(k, v));
+          data.customerContacts?.forEach(([k, v]: [string, any]) => this.customerContacts.set(k, v));
+          data.orders?.forEach(([k, v]: [string, any]) => this.orders.set(k, v));
+          data.orderItems?.forEach(([k, v]: [string, any]) => this.orderItems.set(k, v));
+          data.orderPayments?.forEach(([k, v]: [string, any]) => this.orderPayments.set(k, v));
+          data.orderStateTransitions?.forEach(([k, v]: [string, any]) => this.orderStateTransitions.set(k, v));
+        }
+      }
+    } catch (err) {
+      console.warn("[DatabaseStore] Snapshot load warning:", err);
+    }
   }
 
   private seedInitialData() {
@@ -445,16 +528,78 @@ class DatabaseStore {
         initialPhysical: 8,
         initialConsigned: 10,
       },
+      {
+        entity: {
+          id: "prod-lumina-07",
+          organizationId: orgLumina.id,
+          sku: "ANEL-001",
+          name: "Anel Solitário Imperial Ouro 18K - ANEL-001",
+          category: "ANEIS",
+          collection: "Amor Eterno & Noivas",
+          material: "Ouro 18K com banho reforçado",
+          bath: "OURO_18K",
+          stones: ["Zircônia Lapidação Brilhante 6mm"],
+          price: 299.0,
+          costPrice: 65.0,
+          warrantyMonths: 12,
+          isCustomizable: false,
+          imageUrl: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
+          galleryUrls: [
+            "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=800&auto=format&fit=crop&q=80",
+            "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=800&auto=format&fit=crop&q=80",
+          ],
+          description: "Anel solitário de luxo com aro anatômico. Peça com on_hand=1 e reserved=1 (available=0) para validação estrita de estoque no catálogo público.",
+          status: "ATIVO",
+          createdAt: "2026-08-11 11:00",
+          updatedAt: "2026-08-20 18:00",
+        },
+        initialPhysical: 1,
+        initialConsigned: 0,
+      },
     ];
 
     initialProducts.forEach(({ entity, initialPhysical, initialConsigned }) => {
       this.products.set(entity.id, entity);
 
-      // Distribute Physical Stock between Matriz (60%) and Depósito (40%)
-      const matrizOnHand = Math.ceil(initialPhysical * 0.6);
-      const depositoOnHand = initialPhysical - matrizOnHand;
-      // Reserved quantity (simulated active orders)
-      const matrizReserved = matrizOnHand > 5 ? 2 : 0;
+      // Seed Product Media attached to Object Storage (S3 / R2)
+      const mediaId = `media-${entity.id}-01`;
+      const storageKey = `${orgLumina.id}/products/${entity.sku.toLowerCase()}/${Date.now()}_main.webp`;
+      const primaryMedia: ProductMediaEntity = {
+        id: mediaId,
+        organizationId: orgLumina.id,
+        productId: entity.id,
+        storageKey,
+        url: entity.imageUrl,
+        cdnUrl: entity.imageUrl,
+        mediaType: "IMAGE",
+        mimeType: "image/webp",
+        fileSizeBytes: 245000,
+        etag: `etag-${entity.id}-01`,
+        isPrimary: true,
+        sortOrder: 0,
+        title: entity.name,
+        altText: `Foto principal de ${entity.name}`,
+        createdAt: entity.createdAt,
+        updatedAt: entity.updatedAt,
+      };
+      this.productMedia.set(mediaId, primaryMedia);
+      entity.media = [primaryMedia];
+
+      // Distribute Physical Stock between Matriz and Depósito
+      let matrizOnHand: number;
+      let depositoOnHand: number;
+      let matrizReserved: number;
+
+      if (entity.sku === "ANEL-001") {
+        // EXACT CASE SPECIFIED BY USER: on_hand = 1, reserved = 1 => available = 0
+        matrizOnHand = 1;
+        depositoOnHand = 0;
+        matrizReserved = 1;
+      } else {
+        matrizOnHand = Math.ceil(initialPhysical * 0.6);
+        depositoOnHand = initialPhysical - matrizOnHand;
+        matrizReserved = matrizOnHand > 5 ? 2 : 0;
+      }
 
       // Balance for Matriz
       const balMatriz: InventoryBalanceEntity = {
@@ -1068,6 +1213,124 @@ class DatabaseStore {
     this.orderPayments.set(orderPayment03.id, orderPayment03);
     this.orderStateTransitions.set(trans03_1.id, trans03_1);
     this.orderStateTransitions.set(trans03_2.id, trans03_2);
+
+    // Order 4: Traceable WhatsApp Order (Order #1042) - WHATSAPP
+    const custJoao: CustomerEntity = {
+      id: "cust-joao-santos",
+      organizationId: orgLumina.id,
+      personType: "PF",
+      fullName: "João Santos",
+      cpf: "389.102.441-90",
+      primaryEmail: "joao.santos@email.com",
+      primaryPhone: "(19) 99844-3322",
+      whatsapp: "(19) 99844-3322",
+      status: "ACTIVE",
+      customerTier: "VIP",
+      notes: "Cliente originado via WhatsApp pela Consultora Maria.",
+      createdAt: "2026-08-25 14:00",
+      updatedAt: "2026-08-25 14:00",
+    };
+    this.customers.set(custJoao.id, custJoao);
+
+    const order04: OrderEntity = {
+      id: "ord-lumina-1042",
+      organizationId: orgLumina.id,
+      orderNumber: "ORD-2026-1042",
+      customerId: custJoao.id,
+      customerSnapshot: {
+        id: custJoao.id,
+        personType: "PF",
+        name: custJoao.fullName,
+        document: custJoao.cpf!,
+        email: custJoao.primaryEmail,
+        phone: custJoao.primaryPhone,
+      },
+      channel: "WHATSAPP",
+      status: "INVENTORY_RESERVED",
+      shippingAddress: {
+        recipientName: custJoao.fullName,
+        zipCode: "13484-000",
+        street: "Av. Campinas",
+        number: "450",
+        complement: "Apto 32",
+        neighborhood: "Vila Cidade Jardim",
+        city: "Limeira",
+        state: "SP",
+        country: "BRA",
+        phone: custJoao.primaryPhone,
+      },
+      currency: "BRL",
+      subtotalAmount: 159.0,
+      discountAmount: 0.0,
+      shippingAmount: 0.0,
+      totalAmount: 159.0,
+      resellerId: "res-02",
+      resellerName: "Maria Silva",
+      resellerCommissionRate: 25,
+      resellerCommissionAmount: 39.75,
+      externalReference: "WA-2026-1042",
+      notes: "Pedido recebido via WhatsApp rastreável. SKU: ANEL-001. Consultora: Maria Silva.",
+      metadata: {
+        organization_id: orgLumina.id,
+        sales_channel: "WHATSAPP",
+        external_reference: "WA-2026-1042",
+        product_id: "prod-lumina-03",
+        sku: "ANEL-001",
+        quantity: 1,
+        consultant_name: "Maria Silva",
+        customer_name: "João Santos",
+      },
+      operatorName: "WhatsApp Bot / Maria Silva",
+      createdAt: "2026-08-25 14:00",
+      updatedAt: "2026-08-25 14:05",
+    };
+
+    const orderItem05: OrderItemEntity = {
+      id: "item-ord4-01",
+      organizationId: orgLumina.id,
+      orderId: order04.id,
+      productId: "prod-lumina-03",
+      locationId: "loc-lumina-matriz",
+      productSnapshot: {
+        productId: "prod-lumina-03",
+        sku: "ANEL-001",
+        name: "Anel Solitário Coroa Imperial 6mm",
+        category: "ANEIS",
+        collection: "Imperial 2026",
+        material: "Liga Antialérgica",
+        bath: "OURO_18K",
+        stones: ["Zircônia Cristal 6mm"],
+        price: 159.0,
+        costPrice: 32.0,
+        warrantyMonths: 12,
+        isCustomizable: false,
+        imageUrl: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
+        snapshotTimestamp: "2026-08-25 14:00",
+      },
+      quantity: 1,
+      unitPrice: 159.0,
+      costPriceSnapshot: 32.0,
+      discountAmount: 0.0,
+      totalAmount: 159.0,
+      createdAt: "2026-08-25 14:00",
+    };
+
+    const trans04_1: OrderStateTransitionEntity = {
+      id: "trans-ord4-01",
+      organizationId: orgLumina.id,
+      orderId: order04.id,
+      fromStatus: "DRAFT",
+      toStatus: "INVENTORY_RESERVED",
+      event: "SUBMIT_ORDER",
+      operatorName: "WhatsApp Storefront Connector",
+      reason: "Pedido originado via WhatsApp com payload rastreável #WA-2026-1042.",
+      metadata: { external_reference: "WA-2026-1042", sku: "ANEL-001", consultant: "Maria Silva", client: "João Santos" },
+      createdAt: "2026-08-25 14:00",
+    };
+
+    this.orders.set(order04.id, order04);
+    this.orderItems.set(orderItem05.id, orderItem05);
+    this.orderStateTransitions.set(trans04_1.id, trans04_1);
   }
 }
 

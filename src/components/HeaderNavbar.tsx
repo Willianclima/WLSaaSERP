@@ -1,22 +1,24 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Home,
-  Sparkles,
+  ShoppingBag,
+  Package,
+  Users,
   Layers,
-  Crown,
-  Store,
   ShieldCheck,
+  Sliders,
+  Share2,
+  ExternalLink,
+  ChevronDown,
+  Sparkles,
+  RefreshCw,
   Zap,
   Bot,
-  RefreshCw,
-  BookOpen,
-  Users,
   Lock,
-  ShoppingBag,
-  Sliders,
-  Palette,
+  BookOpen,
+  Crown,
   Building2,
-  UserCheck,
+  Store,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig } from "../types";
 
@@ -30,7 +32,8 @@ interface HeaderNavbarProps {
   onTenantChange?: (tenant: TenantStore) => void;
   onSelectTenant?: (tenant: TenantStore) => void;
   tenants?: TenantStore[];
-  onOpenArchitectureModal?: () => void;
+  onOpenShareModal?: () => void;
+  onOpenNewSale?: () => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -40,13 +43,11 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   selectedTenant,
   currentTenant,
   branding,
-  onTenantChange,
-  onSelectTenant,
-  tenants = [],
-  onOpenArchitectureModal,
+  onOpenShareModal,
+  onOpenNewSale,
 }) => {
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const handleTabChange = onTabChange || onSelectTab || (() => {});
-  const handleTenantChange = onTenantChange || onSelectTenant || (() => {});
   const tenant = selectedTenant || currentTenant || {
     id: "tenant-lumina",
     name: "Lumina Semijoias",
@@ -55,113 +56,167 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
     tier: "PREMIUM",
   };
 
-  const navTabs = [
-    { id: "home", label: "Tela Inicial & Promos", icon: Home, isHome: true },
-    { id: "dashboard", label: "Dashboard", icon: Layers },
-    { id: "saasBilling", label: "SaaS Core & Trial 30d", icon: Building2, badge: "Multi-tenant" },
-    { id: "storeSettings", label: "Configurações da Loja", icon: Sliders, badge: "Branding" },
-    { id: "storefront", label: "✨ Loja do Comprador (B2C)", icon: ShoppingBag, isStore: true },
-    { id: "catalog", label: "Catálogo & Ledger", icon: Sparkles },
-    { id: "consignments", label: "Consignações", icon: RefreshCw, badge: "Maletas" },
-    { id: "commissions", label: "Comissões & Metas", icon: Zap },
-    { id: "orders", label: "Vendas Omnichannel", icon: Store },
-    { id: "customers", label: "Clientes (PF/PJ)", icon: UserCheck, badge: "Sprint 3" },
-    { id: "warranties", label: "Garantia Digital QR", icon: ShieldCheck },
-    { id: "customJewelry", label: "Personalizados", icon: Crown },
-    { id: "resellers", label: "Revendedoras", icon: Users },
-    { id: "aiGateway", label: "AI Gateway MCP", icon: Bot, isMcp: true },
-    { id: "security", label: "Segurança & LGPD", icon: Lock },
-    { id: "architecture", label: "Arquitetura SaaS", icon: BookOpen },
+  const storeName = branding?.logoText || tenant.name || "Lumina Semijoias";
+
+  // The 7-8 primary core commercial tabs
+  const mainNavTabs = [
+    { id: "ownerHome", label: "Início", icon: Home, badge: null },
+    { id: "orders", label: "Vendas & Pedidos", icon: ShoppingBag, badge: null },
+    { id: "catalog", label: "Produtos", icon: Sparkles, badge: null },
+    { id: "customers", label: "Clientes", icon: Users, badge: null },
+    { id: "inventory", label: "Estoque", icon: Package, badge: null },
+    { id: "storefront", label: "📲 Minha Vitrine", icon: Store, isStore: true },
+    { id: "warranties", label: "Garantias", icon: ShieldCheck, badge: null },
+    { id: "storeSettings", label: "Minha Loja", icon: Sliders, badge: null },
   ];
+
+  // Secondary/Advanced tools in dropdown (hidden from daily clutter)
+  const advancedTabs = [
+    { id: "consignments", label: "Consignações & Maletas", icon: RefreshCw },
+    { id: "commissions", label: "Comissões & Metas", icon: Zap },
+    { id: "customJewelry", label: "Personalizados", icon: Crown },
+    { id: "saasBilling", label: "Gestão SaaS & Trial 30d", icon: Building2 },
+    { id: "aiGateway", label: "AI Copilot MCP", icon: Bot },
+    { id: "security", label: "Segurança & LGPD", icon: Lock },
+    { id: "architecture", label: "Plano de Arquitetura", icon: BookOpen },
+  ];
+
+  const isAdvancedActive = advancedTabs.some((t) => t.id === activeTab);
 
   return (
     <header className="bg-white border-b border-stone-200 text-stone-900 sticky top-0 z-40 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top bar */}
         <div className="flex items-center justify-between h-16">
-          {/* Brand */}
-          <div className="flex items-center gap-4">
+          {/* Brand & Store Identity */}
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => handleTabChange("dashboard")}
-              className="text-left flex items-baseline gap-2.5 group cursor-pointer"
+              onClick={() => handleTabChange("ownerHome")}
+              className="text-left flex items-center gap-2.5 group cursor-pointer"
             >
-              <h1 className="text-2xl sm:text-3xl tracking-wide font-serif italic font-bold text-stone-900 group-hover:text-stone-700 transition-colors">
-                Lumina
-              </h1>
-              <span className="font-sans not-italic text-[10px] font-bold tracking-[0.25em] uppercase text-stone-400">
-                ERP &amp; SaaS
-              </span>
+              <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                💎
+              </div>
+              <div>
+                <h1 className="text-lg sm:text-xl font-serif font-bold text-stone-900 group-hover:text-amber-800 transition-colors leading-tight">
+                  {storeName}
+                </h1>
+                <span className="text-[10px] font-medium text-emerald-800 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Loja Online Ativa
+                </span>
+              </div>
             </button>
           </div>
 
-          {/* Right utility items */}
-          <div className="flex items-center gap-3">
-            {/* Storefront pill button */}
+          {/* Right Utility & Quick Actions */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Quick New Sale button */}
+            {onOpenNewSale && (
+              <button
+                onClick={onOpenNewSale}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <span>➕ Nova Venda</span>
+              </button>
+            )}
+
+            {/* Share Catalog button */}
+            {onOpenShareModal && (
+              <button
+                onClick={onOpenShareModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-amber-950 text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer"
+                title="Compartilhar catálogo via WhatsApp e Instagram"
+              >
+                <Share2 className="w-3.5 h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">Enviar Link</span>
+              </button>
+            )}
+
+            {/* Storefront button */}
             <button
               onClick={() => handleTabChange("storefront")}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-amber-300 text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer"
             >
-              <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-              <span>Ver Loja do Comprador</span>
+              <Store className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Ver Vitrine</span>
+              <ExternalLink className="w-3 h-3 text-stone-400" />
             </button>
-
-            {/* Architecture pill */}
-            <button
-              onClick={() => handleTabChange("architecture")}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200/80 border border-stone-200 text-stone-700 text-xs font-semibold tracking-wide transition-all"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-stone-600" />
-              <span>Plano de Arquitetura</span>
-            </button>
-
-            {/* Multi-tenant indicator */}
-            <div className="hidden sm:flex items-center gap-2 bg-stone-100 px-3.5 py-1.5 rounded-full border border-stone-200">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-600">
-                Tenant: {tenant.name}
-              </span>
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 font-bold uppercase">
-                {tenant.planTier || "PREMIUM"}
-              </span>
-            </div>
-
-            {/* User Avatar */}
-            <div className="w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center font-serif italic font-bold text-xs shadow-xs">
-              LM
-            </div>
           </div>
         </div>
 
-        {/* Editorial Navigation Tabs */}
-        <div className="flex space-x-1 overflow-x-auto py-1 scrollbar-none border-t border-stone-100">
-          {navTabs.map((tab: any) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wide whitespace-nowrap transition-all border-b-2 ${
-                  isActive
-                    ? "border-stone-900 text-stone-900 font-bold"
-                    : "border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300"
-                } ${tab.isStore ? "text-amber-900 bg-amber-50/50 rounded-t-lg" : ""}`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-stone-900" : tab.isStore ? "text-amber-700" : "text-stone-400"}`} />
-                <span>{tab.label}</span>
-                {tab.badge && (
-                  <span className="text-[9px] bg-stone-100 border border-stone-200 text-stone-600 px-1.5 py-0.2 rounded-full font-medium">
-                    {tab.badge}
-                  </span>
-                )}
-                {tab.isMcp && (
-                  <span className="text-[9px] bg-amber-100 border border-amber-200 text-amber-800 px-1.5 py-0.2 rounded-full font-bold uppercase">
-                    AI
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        {/* Clean, Humanized Main Navigation Tabs */}
+        <div className="flex items-center justify-between border-t border-stone-100 overflow-x-auto py-1 scrollbar-none">
+          <div className="flex space-x-1 sm:space-x-2">
+            {mainNavTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id || (tab.id === "catalog" && activeTab === "inventory");
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold tracking-wide whitespace-nowrap transition-all rounded-lg cursor-pointer ${
+                    isActive
+                      ? "bg-stone-900 text-white font-bold shadow-xs"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  } ${tab.isStore ? "text-amber-900 font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200/60" : ""}`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-amber-300" : tab.isStore ? "text-amber-800" : "text-stone-500"}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Secondary / Advanced Dropdown Menu */}
+          <div className="relative shrink-0 pl-2">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                isAdvancedActive
+                  ? "bg-stone-200 text-stone-900 font-bold"
+                  : "text-stone-500 hover:text-stone-800 hover:bg-stone-100"
+              }`}
+            >
+              <span>Mais</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${showMoreMenu ? "rotate-180" : ""}`} />
+            </button>
+
+            {showMoreMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setShowMoreMenu(false)}
+                />
+                <div className="absolute right-0 mt-1 w-56 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-40 space-y-0.5 animate-fadeIn">
+                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400 border-b border-stone-100 mb-1">
+                    Ferramentas Avançadas
+                  </div>
+                  {advancedTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          handleTabChange(tab.id);
+                          setShowMoreMenu(false);
+                        }}
+                        className={`w-full text-left flex items-center gap-2.5 px-3 py-2 text-xs transition-colors cursor-pointer ${
+                          isActive
+                            ? "bg-amber-50 text-amber-950 font-bold"
+                            : "text-stone-700 hover:bg-stone-100"
+                        }`}
+                      >
+                        <Icon className={`w-4 h-4 ${isActive ? "text-amber-700" : "text-stone-500"}`} />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </header>

@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { HeaderNavbar } from "./components/HeaderNavbar";
+import { OwnerStoreHome } from "./components/OwnerStoreHome";
+import { QuickNewSaleModal } from "./components/QuickNewSaleModal";
+import { QuickNewProductModal } from "./components/QuickNewProductModal";
 import { DashboardOverview } from "./components/DashboardOverview";
 import { ArchitectureView } from "./components/ArchitectureView";
 import { CatalogInventoryLedger } from "./components/CatalogInventoryLedger";
@@ -16,6 +19,9 @@ import { LandingHomeExperience } from "./components/LandingHomeExperience";
 import { StoreSettingsPanel } from "./components/StoreSettingsPanel";
 import { SaaSControlPanel } from "./components/SaaSControlPanel";
 import { CustomerManager } from "./components/CustomerManager";
+import { ShareCatalogModal } from "./components/ShareCatalogModal";
+import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
+import { TrialStatusBanner } from "./components/TrialStatusBanner";
 
 import {
   mockTenants,
@@ -31,6 +37,7 @@ import {
   mockCurrentUser,
   mockCustomers,
   DEFAULT_BRANDING_CONFIG,
+  DEFAULT_PAYMENT_SETTINGS,
 } from "./data/mockData";
 
 import {
@@ -49,16 +56,18 @@ import {
   Customer,
   CreateCustomerDTO,
   UpdateCustomerDTO,
+  OrganizationPaymentSettings,
 } from "./types";
 import confetti from "canvas-confetti";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>("home");
+  const [activeTab, setActiveTab] = useState<string>("ownerHome");
   const [storefrontCategory, setStorefrontCategory] = useState<string>("TODOS");
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
   const [selectedTenant, setSelectedTenant] = useState<TenantStore>(mockTenants[0]);
   const [currentUser] = useState<RBACUser>(mockCurrentUser);
   const [brandingConfig, setBrandingConfig] = useState<StoreBrandingConfig>(DEFAULT_BRANDING_CONFIG);
+  const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
 
   // Dynamic state
   const [products, setProducts] = useState<ProductItem[]>(mockProducts);
@@ -71,6 +80,13 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(mockAuditLogs);
   const [mcpActions, setMcpActions] = useState<MCPProposedAction[]>(mockMCPActions);
   const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
+  const [showQuickSaleModal, setShowQuickSaleModal] = useState<boolean>(false);
+  const [showQuickProductModal, setShowQuickProductModal] = useState<boolean>(false);
+  const [trialRemainingDays, setTrialRemainingDays] = useState<number>(27);
+  const [trialEndsAt, setTrialEndsAt] = useState<string>("2026-09-28");
+  const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean>(true);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
@@ -78,6 +94,67 @@ export default function App() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Check onboarding status and trial info
+  const checkOnboardingStatus = async () => {
+    try {
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const res = await fetch("/api/onboarding/status", { headers: { "x-tenant-id": tenantId } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          if (data.data.trialRemainingDays !== undefined) {
+            setTrialRemainingDays(data.data.trialRemainingDays);
+          }
+          if (data.data.subscription?.trialEndsAt) {
+            setTrialEndsAt(data.data.subscription.trialEndsAt.substring(0, 10));
+          }
+          setIsOnboardingComplete(Boolean(data.data.isOnboardingComplete));
+        }
+      }
+    } catch (e) {
+      console.warn("Could not check onboarding status:", e);
+    }
+  };
+
+  const handleCompleteOnboarding = async (payload: any) => {
+    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+    const res = await fetch("/api/onboarding/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tenant-id": tenantId,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Erro ao salvar dados no servidor.");
+    }
+
+    // Update branding and tenant in UI
+    if (payload.storeIdentity?.name) {
+      setSelectedTenant((prev) => ({
+        ...prev,
+        name: payload.storeIdentity.name,
+      }));
+    }
+    if (payload.catalogSettings) {
+      setBrandingConfig((prev) => ({
+        ...prev,
+        logoText: payload.catalogSettings.storefrontName || prev.logoText,
+        logoUrl: payload.catalogSettings.logoUrl || prev.logoUrl,
+        primaryColor: payload.catalogSettings.primaryColor || prev.primaryColor,
+        secondaryColor: payload.catalogSettings.secondaryColor || prev.secondaryColor,
+        tagline: payload.catalogSettings.bio || prev.tagline,
+      }));
+    }
+
+    setIsOnboardingComplete(true);
+    await refreshBackendData();
+    showToast("🎉 Loja configurada e persistida no servidor com sucesso!");
   };
 
   // Sync Products, Ledger, Customers and Orders from Real ERP API
@@ -159,6 +236,7 @@ export default function App() {
 
   React.useEffect(() => {
     refreshBackendData();
+    checkOnboardingStatus();
   }, [selectedTenant.id]);
 
   const handleUpdateBranding = (newBranding: StoreBrandingConfig) => {
@@ -227,6 +305,33 @@ export default function App() {
     };
     setLedger((prev) => [ledgerEntry, ...prev]);
     showToast(`SKU ${newProd.sku} cadastrado no Ledger de Estoque!`);
+  };
+
+  // Update existing product details (Photos, Prices, Bath, Status)
+  const handleUpdateProduct = async (updatedProd: ProductItem) => {
+    try {
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const res = await fetch(`/api/products/${updatedProd.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify(updatedProd),
+      });
+
+      if (res.ok) {
+        await refreshBackendData();
+        showToast(`Produto "${updatedProd.name}" atualizado com sucesso!`);
+        return;
+      }
+    } catch (e) {
+      console.error("API error updating product:", e);
+    }
+
+    // Local fallback
+    setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
+    showToast(`Produto "${updatedProd.name}" atualizado no catálogo!`);
   };
 
   // Update Stock manual (Persisted to Backend API)
@@ -824,18 +929,35 @@ export default function App() {
     };
     setWarranties((prev) => [newWarranty, ...prev]);
 
-    // 2. Decrement physical inventory
+    // 2. Adjust inventory according to Order Status (Reserva de Estoque vs Baixa Física)
+    const isReservation =
+      newOrder.status === "INVENTORY_RESERVED" ||
+      newOrder.status === "PENDING_CONFIRMATION" ||
+      newOrder.status === "AWAITING_PAYMENT" ||
+      newOrder.status === "DRAFT";
     setProducts((prev) =>
       prev.map((p) => {
         const orderItem = newOrder.items?.find((it: any) => it.productId === p.id);
         if (orderItem) {
-          const newPhysical = Math.max(0, p.stockPhysical - orderItem.quantity);
-          const newAvailable = Math.max(0, p.stockAvailable - orderItem.quantity);
-          return {
-            ...p,
-            stockPhysical: newPhysical,
-            stockAvailable: newAvailable,
-          };
+          if (isReservation) {
+            // Reserva de Estoque: aumenta reservado, diminui disponível, mantém físico
+            const newReserved = (p.stockReserved || 0) + orderItem.quantity;
+            const newAvailable = Math.max(0, p.stockPhysical - newReserved);
+            return {
+              ...p,
+              stockReserved: newReserved,
+              stockAvailable: newAvailable,
+            };
+          } else {
+            // Baixa Imediata Física
+            const newPhysical = Math.max(0, p.stockPhysical - orderItem.quantity);
+            const newAvailable = Math.max(0, p.stockAvailable - orderItem.quantity);
+            return {
+              ...p,
+              stockPhysical: newPhysical,
+              stockAvailable: newAvailable,
+            };
+          }
         }
         return p;
       })
@@ -859,7 +981,9 @@ export default function App() {
         resellerName: newOrder.resellerName,
         orderNumber: newOrder.orderNumber,
         operator: "Checkout do Comprador (E-commerce)",
-        reason: `Venda B2C via ${newOrder.channel} - Pedido ${newOrder.orderNumber}`,
+        reason: isReservation
+          ? `Reserva de estoque no storefront para WhatsApp - Pedido ${newOrder.orderNumber}`
+          : `Venda B2C via ${newOrder.channel} - Pedido ${newOrder.orderNumber}`,
       };
       setLedger((prev) => [ledgerEntry, ...prev]);
     });
@@ -909,6 +1033,207 @@ export default function App() {
     showToast(`Pedido ${newOrder.orderNumber} realizado com sucesso! Garantia ${warrantyCode} emitida.`);
   };
 
+  // Quick New Sale Handler for Store Owner (Instant Sale + Stock Decrement + Digital Warranty)
+  const handleQuickNewSale = async (saleData: {
+    customerName: string;
+    customerPhone: string;
+    items: { productId: string; name: string; quantity: number; unitPrice: number }[];
+    totalAmount: number;
+    paymentMethod: "PIX" | "CREDIT_CARD" | "DEBIT_CARD" | "CASH";
+    notes?: string;
+  }) => {
+    try {
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify({
+          channel: "DIRECT_SALE",
+          customer: {
+            name: saleData.customerName,
+            phone: saleData.customerPhone,
+          },
+          items: saleData.items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+          })),
+          paymentMethod: saleData.paymentMethod,
+          status: "PAID",
+          notes: saleData.notes,
+        }),
+      });
+
+      if (res.ok) {
+        await refreshBackendData();
+      }
+    } catch (e) {
+      console.warn("Backend order creation error, applying local state update:", e);
+    }
+
+    const orderNumber = `LUM-${Math.floor(1000 + Math.random() * 9000)}`;
+    const warrantyCode = `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const today = new Date().toISOString().split("T")[0];
+    const expDate = new Date();
+    expDate.setFullYear(expDate.getFullYear() + 1);
+
+    const newOrderId = `ord-${Date.now()}`;
+    const orderItems: any[] = saleData.items.map((i, idx) => {
+      const prod = products.find((p) => p.id === i.productId);
+      return {
+        id: `item-${Date.now()}-${idx}`,
+        organizationId: "org-lumina-01",
+        orderId: newOrderId,
+        productId: i.productId,
+        locationId: "loc-matriz-01",
+        productSnapshot: {
+          productId: i.productId,
+          sku: prod?.sku || "SKU",
+          name: i.name,
+          category: prod?.category || "ANEIS",
+          material: prod?.material || "Liga Nobre",
+          bath: prod?.bath || "OURO_18K",
+          stones: prod?.stones || ["Zircônia Cristal"],
+          price: i.unitPrice,
+          costPrice: prod?.costPrice || i.unitPrice * 0.35,
+          warrantyMonths: prod?.warrantyMonths || 12,
+          isCustomizable: false,
+          imageUrl: prod?.imageUrl || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
+          snapshotTimestamp: new Date().toISOString(),
+        },
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        costPriceSnapshot: prod?.costPrice || i.unitPrice * 0.35,
+        discountAmount: 0,
+        totalAmount: i.quantity * i.unitPrice,
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    const newOrder: UnifiedOrder = {
+      id: newOrderId,
+      organizationId: "org-lumina-01",
+      orderNumber,
+      customerId: `cust-${Date.now()}`,
+      customerSnapshot: {
+        id: `cust-${Date.now()}`,
+        personType: "PF",
+        name: saleData.customerName,
+        phone: saleData.customerPhone,
+        document: "",
+        email: "",
+      },
+      channel: "PRESENTIAL_POS",
+      status: "PAID",
+      shippingAddress: {
+        recipientName: saleData.customerName,
+        zipCode: "01001-000",
+        street: "Balcão Presencial",
+        number: "S/N",
+        neighborhood: "Centro",
+        city: "São Paulo",
+        state: "SP",
+        country: "BR",
+      },
+      currency: "BRL",
+      subtotalAmount: saleData.totalAmount,
+      discountAmount: 0,
+      shippingAmount: 0,
+      totalAmount: saleData.totalAmount,
+      items: orderItems,
+      warrantyCode,
+      notes: saleData.notes,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setOrders((prev) => [newOrder, ...prev]);
+
+    // Deduct stock
+    saleData.items.forEach((item) => {
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === item.productId
+            ? {
+                ...p,
+                stockPhysical: Math.max(0, p.stockPhysical - item.quantity),
+                stockAvailable: Math.max(0, p.stockAvailable - item.quantity),
+                availableStock: Math.max(0, (p.availableStock ?? p.currentStock ?? 1) - item.quantity),
+              }
+            : p
+        )
+      );
+    });
+
+    // Create digital warranty
+    const newWarranty: DigitalWarranty = {
+      id: `warr-${Date.now()}`,
+      code: warrantyCode,
+      customerName: saleData.customerName,
+      customerPhone: saleData.customerPhone,
+      customerDocument: "",
+      customerEmail: "",
+      orderNumber,
+      sku: saleData.items[0]?.name || "Semijoia",
+      productName: saleData.items.map((i) => i.name).join(", "),
+      bathType: "Ouro 18K",
+      issueDate: today,
+      expirationDate: expDate.toISOString().split("T")[0],
+      status: "VALIDA",
+      channel: "DIRECT_SALE",
+      terms: "Garantia oficial de 12 meses cobrindo integridade do banho e cravação de zircônias.",
+      claimsCount: 0,
+    };
+    setWarranties((prev) => [newWarranty, ...prev]);
+
+    confetti({
+      particleCount: 70,
+      spread: 60,
+      origin: { y: 0.6 },
+    });
+
+    showToast(`Venda de R$ ${saleData.totalAmount.toFixed(2)} concluída! Estoque baixado e garantia emitida.`);
+  };
+
+  // Direct Payment Confirmation Handler
+  const handleConfirmOrderPayment = async (orderId: string) => {
+    try {
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const res = await fetch(`/api/orders/${orderId}/transition`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify({
+          targetStatus: "PAID",
+          operator: "Dona da Loja",
+          reason: "Confirmação manual de recebimento PIX / Dinheiro",
+        }),
+      });
+
+      if (res.ok) {
+        await refreshBackendData();
+      }
+    } catch (e) {
+      console.warn("Transition API fallback:", e);
+    }
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "PAID", updatedAt: new Date().toISOString() } : o))
+    );
+
+    confetti({
+      particleCount: 50,
+      spread: 50,
+      origin: { y: 0.6 },
+    });
+    showToast("Pagamento confirmado com sucesso! Pedido liberado.");
+  };
+
   // Open consumer storefront with category & optional coupon from landing page
   const handleOpenStorefrontFromHome = (category?: string, coupon?: string) => {
     setStorefrontCategory(category || "TODOS");
@@ -936,6 +1261,7 @@ export default function App() {
       <StorefrontBuyerExperience
         tenant={selectedTenant}
         branding={brandingConfig}
+        paymentSettings={paymentSettings}
         products={products}
         resellers={resellers}
         warranties={warranties}
@@ -958,6 +1284,17 @@ export default function App() {
         </div>
       )}
 
+      {/* Trial Status Banner (Pilot Client 01) */}
+      <TrialStatusBanner
+        remainingDays={trialRemainingDays}
+        trialEndsAt={trialEndsAt}
+        storeName={selectedTenant.name}
+        onOpenOnboarding={() => setShowOnboardingModal(true)}
+        onOpenStorefront={() => setActiveTab("storefront")}
+        onOpenShareModal={() => setShowShareModal(true)}
+        onOpenSettings={() => setActiveTab("storeSettings")}
+      />
+
       {/* Main App Navigation */}
       <HeaderNavbar
         activeTab={activeTab}
@@ -965,19 +1302,25 @@ export default function App() {
         selectedTenant={selectedTenant}
         branding={brandingConfig}
         onTenantChange={setSelectedTenant}
+        onOpenShareModal={() => setShowShareModal(true)}
+        onOpenNewSale={() => setShowQuickSaleModal(true)}
       />
 
       {/* Active Tab View Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {activeTab === "dashboard" && (
-          <DashboardOverview
+        {(activeTab === "ownerHome" || activeTab === "dashboard" || activeTab === "home") && (
+          <OwnerStoreHome
             tenant={selectedTenant}
+            branding={brandingConfig}
             products={products}
-            resellers={resellers}
-            consignments={consignments}
             orders={orders}
+            customers={customers}
             warranties={warranties}
             onNavigateTab={setActiveTab}
+            onOpenNewSale={() => setShowQuickSaleModal(true)}
+            onOpenNewProduct={() => setShowQuickProductModal(true)}
+            onOpenShareModal={() => setShowShareModal(true)}
+            onConfirmOrderPayment={handleConfirmOrderPayment}
           />
         )}
 
@@ -989,22 +1332,30 @@ export default function App() {
           <StoreSettingsPanel
             tenant={selectedTenant}
             branding={brandingConfig}
+            paymentSettings={paymentSettings}
             onUpdateBranding={handleUpdateBranding}
+            onUpdatePaymentSettings={(newSettings) => {
+              setPaymentSettings(newSettings);
+              showToast("Políticas de PIX, juros e parcelamento atualizadas com sucesso!");
+            }}
             onNavigateTab={setActiveTab}
           />
         )}
 
         {activeTab === "architecture" && (
-          <ArchitectureView onClose={() => setActiveTab("dashboard")} />
+          <ArchitectureView onClose={() => setActiveTab("ownerHome")} />
         )}
 
-        {activeTab === "catalog" && (
+        {(activeTab === "catalog" || activeTab === "inventory") && (
           <CatalogInventoryLedger
             products={products}
             ledger={ledger}
             onAddProduct={handleAddProduct}
+            onUpdateProduct={handleUpdateProduct}
             onUpdateStock={handleUpdateStock}
             onReverseMovement={handleReverseMovement}
+            onOpenShareModal={() => setShowShareModal(true)}
+            onOpenStorefront={() => setActiveTab("storefront")}
           />
         )}
 
@@ -1101,6 +1452,47 @@ export default function App() {
           <div>© 2026 Lumina Semijoias SaaS & ERP Ecosystem</div>
         </div>
       </footer>
+      {/* Global Share Catalog Modal */}
+      <ShareCatalogModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        tenant={selectedTenant}
+        totalProducts={products.length}
+      />
+
+      {/* Onboarding Wizard Modal */}
+      <OnboardingWizardModal
+        isOpen={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
+        currentTenant={selectedTenant}
+        currentBranding={brandingConfig}
+        onComplete={handleCompleteOnboarding}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab);
+          setShowOnboardingModal(false);
+        }}
+      />
+
+      {/* Quick New Sale Modal */}
+      <QuickNewSaleModal
+        isOpen={showQuickSaleModal}
+        onClose={() => setShowQuickSaleModal(false)}
+        products={products}
+        customers={customers}
+        onCompleteSale={handleQuickNewSale}
+      />
+
+      {/* Quick New Product Modal */}
+      <QuickNewProductModal
+        isOpen={showQuickProductModal}
+        onClose={() => setShowQuickProductModal(false)}
+        onAddProduct={async (p) => {
+          await handleAddProduct({
+            ...p,
+            id: `prod-${Date.now()}`,
+          } as ProductItem);
+        }}
+      />
     </div>
   );
 }
