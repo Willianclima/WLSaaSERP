@@ -8,6 +8,10 @@ import {
   Search,
   Filter,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  TrendingUp,
+  SlidersHorizontal,
   Check,
   Copy,
   ChevronRight,
@@ -29,6 +33,7 @@ import {
   CheckCircle2,
   Lock,
   UserCheck,
+  Package,
   Layers,
   ArrowUpRight,
   Share2,
@@ -138,10 +143,14 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   const [warrantySearchCode, setWarrantySearchCode] = useState("");
   const [foundWarranty, setFoundWarranty] = useState<DigitalWarranty | null>(null);
 
+  // Sorting & quick price filters
+  const [sortBy, setSortBy] = useState<"RELEVANCE" | "PRICE_ASC" | "PRICE_DESC" | "NEWEST">("RELEVANCE");
+  const [priceFilter, setPriceFilter] = useState<"ALL" | "UNDER_150" | "150_300" | "OVER_300" | "CUSTOMIZABLE">("ALL");
+
   const selectedReseller = resellers.find((r) => r.id === selectedResellerId);
 
   // Filtering products - Respect PublicationStatus (ESTOQUE ≠ PUBLICAÇÃO)
-  const filteredProducts = products.filter((p) => {
+  const baseFilteredProducts = products.filter((p) => {
     // Only show published items to buyer (or legacy ATIVO if publicationStatus is not set)
     const isPublic = p.publicationStatus ? p.publicationStatus === "PUBLISHED" : p.status !== "PAUSADO";
     if (!isPublic) return false;
@@ -151,8 +160,26 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.collection.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "TODOS" || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+
+    if (!matchesSearch || !matchesCategory) return false;
+
+    if (priceFilter === "UNDER_150") return p.price < 150;
+    if (priceFilter === "150_300") return p.price >= 150 && p.price <= 300;
+    if (priceFilter === "OVER_300") return p.price > 300;
+    if (priceFilter === "CUSTOMIZABLE") return Boolean(p.isCustomizable);
+
+    return true;
   });
+
+  const filteredProducts = [...baseFilteredProducts].sort((a, b) => {
+    if (sortBy === "PRICE_ASC") return a.price - b.price;
+    if (sortBy === "PRICE_DESC") return b.price - a.price;
+    if (sortBy === "NEWEST") return (b.createdAt ? new Date(b.createdAt).getTime() : 0) - (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    return 0; // RELEVANCE
+  });
+
+  const inStockProductsCount = filteredProducts.filter((p) => (p.availableStock ?? p.stockAvailable ?? p.stockPhysical ?? 1) > 0).length;
+  const customizableCount = filteredProducts.filter((p) => p.isCustomizable).length;
 
   const cartSubtotal = cartItems.reduce((acc, item) => acc + item.itemTotal, 0);
   const discountAmount = couponApplied ? cartSubtotal * 0.1 : 0;
@@ -725,165 +752,423 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
         </div>
       </section>
 
-      {/* Main Product Showcase Grid */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-4 border-b border-stone-200">
+      {/* Main Product Showcase Section */}
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-8">
+        {/* Editorial Showcase Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-stone-200">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/80">
+                <Sparkles className="w-3 h-3 text-amber-600" />
                 Vitrine Exclusiva Lumina
               </span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-serif italic font-bold tracking-wide text-stone-900 mt-1">
+            <h2 className="text-3xl sm:text-4xl font-serif italic font-bold tracking-tight text-stone-900 mt-2">
               Catálogo de Alta Semijoias
             </h2>
-            <p className="text-xs text-stone-600 mt-1 max-w-2xl font-sans leading-relaxed">
-              Peças fundidas em ligas nobres com acabamento artesanal, cravamento manual de zircônias e banho antialérgico de alta densidade.
+            <p className="text-xs sm:text-sm text-stone-600 mt-1 max-w-2xl font-sans leading-relaxed">
+              Peças fundidas em ligas nobres com acabamento artesanal, cravação manual de microzircônias e banho antialérgico de 10 milésimos de Ouro 18K.
             </p>
           </div>
 
-          <div className="text-xs text-stone-500 font-semibold">
-            Exibindo {filteredProducts.length} peças exclusivas
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 text-stone-700 text-xs font-bold font-sans">
+              <Package className="w-3.5 h-3.5 text-stone-500" />
+              {filteredProducts.length} peças encontradas
+            </span>
           </div>
         </div>
 
-        {/* Product Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => {
-            const pixInfo = calculatePixPrice(product.price, currentPaymentSettings);
-            const installmentHighlight = getBestInstallmentHighlight(product.price, currentPaymentSettings);
-            const availability = clientInventoryService.evaluateProductAvailability(product, branding);
-            const isOutOfStock = availability.status === "OUT_OF_STOCK";
-            const isLiked = Boolean(likedProducts[product.id]);
-
-            const bathLabel =
-              product.bath === "OURO_18K"
-                ? "Ouro 18K"
-                : product.bath === "RODIO_BRANCO"
-                ? "Ródio Branco"
-                : product.bath === "ROSE_GOLD"
-                ? "Ouro Rosé"
-                : product.bath || "Banho Nobre";
-
-            return (
-              <div
-                key={product.id}
-                onClick={() => handleOpenProduct(product)}
-                className="group bg-white border border-stone-200/80 rounded-3xl overflow-hidden shadow-xs hover:shadow-xl hover:border-amber-200 transition-all duration-300 flex flex-col justify-between cursor-pointer"
-              >
-                {/* Product Image Frame */}
-                <div className="relative aspect-4/5 overflow-hidden bg-stone-100/80">
-                  <img
-                    src={product.imageUrl}
-                    alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                  />
-
-                  {/* Favorite Heart Button */}
-                  <button
-                    type="button"
-                    onClick={(e) => toggleFavorite(product.id, e)}
-                    className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-xs cursor-pointer z-10 ${
-                      isLiked
-                        ? "bg-rose-500 text-white scale-105"
-                        : "bg-white/80 hover:bg-white text-stone-600 hover:text-rose-500"
-                    }`}
-                    title={isLiked ? "Remover dos favoritos" : "Salvar nos favoritos"}
-                  >
-                    <Heart className={`w-4 h-4 ${isLiked ? "fill-white" : ""}`} />
-                  </button>
-
-                  {/* Badges */}
-                  <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
-                    <span className="bg-white/95 backdrop-blur-md text-stone-900 text-[10px] font-semibold tracking-wide px-2.5 py-1 rounded-full border border-stone-200/80 shadow-2xs">
-                      {bathLabel}
-                    </span>
-
-                    {product.isCustomizable && (
-                      <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full border border-amber-700/50 flex items-center gap-1 shadow-2xs">
-                        <Crown className="w-3 h-3 text-amber-400" />
-                        <span>Personalizável</span>
-                      </span>
-                    )}
-
-                    {isOutOfStock && (
-                      <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full border border-amber-700/50">
-                        {availability.statusBadgeText}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Bottom Strip: 1 Year Warranty */}
-                  <div className="absolute bottom-2.5 left-3 pointer-events-none">
-                    <span className="bg-stone-950/70 backdrop-blur-md text-stone-100 text-[9px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                      <span>Garantia 12 Meses</span>
-                    </span>
-                  </div>
+        {/* 1. High-Impact Visual Metric Cards (Zero Tables - Executive Quality) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          {/* CARD 1: Curadoria & Acervo */}
+          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between group">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
+                <span className="text-[11px] font-serif font-bold uppercase tracking-wider text-stone-400">
+                  Curadoria & Acervo
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-4 h-4" />
                 </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                    {filteredProducts.length} <span className="text-sm font-sans font-normal text-stone-500">modelos</span>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                    +100% Nobre
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                  Banho <strong className="text-stone-800 font-bold">10 milésimos Ouro 18K</strong> e Ródio
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                Lançamentos da semana
+              </span>
+              <span className="text-stone-400 font-medium">{customizableCount} personalizáveis</span>
+            </div>
+          </div>
 
-                {/* Info & Conversion Action */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[11px] text-amber-900/70 font-medium">
-                      <span>{bathLabel}</span>
-                      <span className="text-stone-400">• Antialérgico</span>
+          {/* CARD 2: Pronta Entrega & Logística */}
+          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between group">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
+                <span className="text-[11px] font-serif font-bold uppercase tracking-wider text-stone-400">
+                  Disponibilidade
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Truck className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                    {inStockProductsCount} <span className="text-sm font-sans font-normal text-stone-500">peças</span>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                    24h
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                  Despacho prioritário com <strong className="text-stone-800 font-bold">rastreio seguro</strong>
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                Frete Grátis &gt; R$ 250
+              </span>
+              <span className="text-stone-400 font-medium">Todo o Brasil</span>
+            </div>
+          </div>
+
+          {/* CARD 3: Garantia & Certificado Digital */}
+          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between group">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
+                <span className="text-[11px] font-serif font-bold uppercase tracking-wider text-stone-400">
+                  Garantia & Autenticidade
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                    12 <span className="text-sm font-sans font-normal text-stone-500">meses</span>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                    QR Digital
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                  Cobertura integral do <strong className="text-stone-800 font-bold">banho e zircônias</strong>
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                Troca Fácil em 7 Dias
+              </span>
+              <span className="text-stone-400 font-medium">1ª troca grátis</span>
+            </div>
+          </div>
+
+          {/* CARD 4: Condições Especiais de Pagamento */}
+          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between group">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100 mb-3">
+                <span className="text-[11px] font-serif font-bold uppercase tracking-wider text-stone-400">
+                  Condições de Compra
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                    5% <span className="text-sm font-sans font-normal text-stone-500">OFF</span>
+                  </div>
+                  <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                    <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                    no PIX
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                  Ou parcelado em <strong className="text-stone-800 font-bold">até 6x sem juros</strong>
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                WhatsApp 1-Click
+              </span>
+              <span className="text-stone-400 font-medium">Sem cadastro</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Quick Filters & Sorting Toolbar */}
+        <div className="bg-white border border-stone-200 rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Category selection chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs font-semibold">
+              {[
+                { id: "TODOS", label: "Todos os Modelos" },
+                { id: "COLARES", label: "Colares & Riviera" },
+                { id: "BRINCOS", label: "Brincos & Argolas" },
+                { id: "ANEIS", label: "Anéis & Solitários" },
+                { id: "PULSEIRAS", label: "Pulseiras" },
+                { id: "PERSONALIZADOS", label: "Personalizados 💎" },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3.5 py-2 rounded-2xl whitespace-nowrap transition-all duration-200 cursor-pointer text-xs ${
+                    selectedCategory === cat.id
+                      ? "bg-stone-900 text-white font-bold shadow-xs scale-102"
+                      : "bg-stone-50 hover:bg-stone-100 text-stone-600 hover:text-stone-900 border border-stone-200"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick Price & Sort Controls */}
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+              {/* Price Filter Chips */}
+              <div className="flex items-center gap-1.5 text-xs">
+                {[
+                  { id: "ALL", label: "Todos os Preços" },
+                  { id: "UNDER_150", label: "Até R$ 150" },
+                  { id: "150_300", label: "R$ 150 - 300" },
+                  { id: "OVER_300", label: "R$ 300+" },
+                ].map((pf) => (
+                  <button
+                    key={pf.id}
+                    onClick={() => setPriceFilter(pf.id as any)}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all cursor-pointer ${
+                      priceFilter === pf.id
+                        ? "bg-amber-100 text-amber-900 border border-amber-300 font-bold"
+                        : "bg-stone-50 hover:bg-stone-100 text-stone-600 border border-stone-200"
+                    }`}
+                  >
+                    {pf.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="appearance-none bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-xl pl-3 pr-8 py-1.5 text-xs font-semibold text-stone-700 focus:outline-none cursor-pointer shadow-2xs"
+                >
+                  <option value="RELEVANCE">Mais Relevantes</option>
+                  <option value="PRICE_ASC">Menor Preço</option>
+                  <option value="PRICE_DESC">Maior Preço</option>
+                  <option value="NEWEST">Novidades</option>
+                </select>
+                <ChevronRight className="w-3 h-3 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Product Cards Grid (Zero Table Clutter - High Luxury Polish) */}
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white border border-stone-200 rounded-3xl p-12 text-center space-y-4 max-w-lg mx-auto shadow-xs">
+            <div className="w-14 h-14 mx-auto rounded-full bg-stone-100 flex items-center justify-center text-stone-400">
+              <Search className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-serif italic font-bold text-stone-900">
+              Nenhuma peça encontrada
+            </h3>
+            <p className="text-xs text-stone-500 leading-relaxed font-sans">
+              Não encontramos semijoias com os filtros selecionados. Tente buscar por outros termos ou limpar os filtros de preço e categoria.
+            </p>
+            <button
+              onClick={() => {
+                setSelectedCategory("TODOS");
+                setPriceFilter("ALL");
+                setSearchTerm("");
+              }}
+              className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Ver Coleção Completa
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {filteredProducts.map((product) => {
+              const pixInfo = calculatePixPrice(product.price, currentPaymentSettings);
+              const installmentHighlight = getBestInstallmentHighlight(product.price, currentPaymentSettings);
+              const availability = clientInventoryService.evaluateProductAvailability(product, branding);
+              const isOutOfStock = availability.status === "OUT_OF_STOCK";
+              const isLiked = Boolean(likedProducts[product.id]);
+              const currentStock = product.availableStock ?? product.stockAvailable ?? product.stockPhysical ?? 1;
+              const isLowStock = currentStock > 0 && currentStock <= 3;
+
+              const bathLabel =
+                product.bath === "OURO_18K"
+                  ? "Ouro 18K"
+                  : product.bath === "RODIO_BRANCO"
+                  ? "Ródio Branco"
+                  : product.bath === "ROSE_GOLD"
+                  ? "Ouro Rosé"
+                  : product.bath || "Banho Nobre";
+
+              return (
+                <div
+                  key={product.id}
+                  onClick={() => handleOpenProduct(product)}
+                  className="product-card-container group bg-white border border-stone-200/90 rounded-3xl overflow-hidden shadow-xs hover:shadow-lg hover:scale-105 hover:border-amber-300 transition-all duration-300 ease-out flex flex-col justify-between cursor-pointer"
+                >
+                  {/* Product Image Frame */}
+                  <div className="relative aspect-4/5 overflow-hidden bg-stone-100/80">
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+
+                    {/* Favorite Heart Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => toggleFavorite(product.id, e)}
+                      className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-xs cursor-pointer z-10 ${
+                        isLiked
+                          ? "bg-rose-500 text-white scale-105"
+                          : "bg-white/80 hover:bg-white text-stone-600 hover:text-rose-500"
+                      }`}
+                      title={isLiked ? "Remover dos favoritos" : "Salvar nos favoritos"}
+                    >
+                      <Heart className={`w-4 h-4 ${isLiked ? "fill-white" : ""}`} />
+                    </button>
+
+                    {/* Top Floating Badges */}
+                    <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
+                      <span className="bg-white/95 backdrop-blur-md text-stone-900 text-[10px] font-semibold tracking-wide px-2.5 py-1 rounded-full border border-stone-200/80 shadow-2xs font-sans">
+                        {bathLabel}
+                      </span>
+
+                      {product.isCustomizable && (
+                        <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full border border-amber-700/50 flex items-center gap-1 shadow-2xs font-sans">
+                          <Crown className="w-3 h-3 text-amber-400" />
+                          <span>Personalizável</span>
+                        </span>
+                      )}
+
+                      {!isOutOfStock && (
+                        <span className="inline-flex items-center gap-0.5 bg-emerald-950/80 backdrop-blur-md text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full border border-emerald-700/50 shadow-2xs font-sans">
+                          <ArrowUp className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>Pronta Entrega</span>
+                        </span>
+                      )}
+
+                      {isLowStock && (
+                        <span className="inline-flex items-center gap-0.5 bg-rose-950/85 backdrop-blur-md text-rose-300 text-[9px] font-bold px-2 py-0.5 rounded-full border border-rose-700/50 shadow-2xs font-sans">
+                          <ArrowDown className="w-2.5 h-2.5 text-rose-400" />
+                          <span>Últimas {currentStock} un</span>
+                        </span>
+                      )}
+
+                      {isOutOfStock && (
+                        <span className="bg-amber-900/90 backdrop-blur-md text-amber-200 text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full border border-amber-700/50 font-sans">
+                          {availability.statusBadgeText}
+                        </span>
+                      )}
                     </div>
-                    <h3 className="text-base font-serif italic font-bold text-stone-900 group-hover:text-amber-950 transition-colors leading-snug">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed">
-                      {product.description}
-                    </p>
+
+                    {/* Bottom Strip: 1 Year Warranty Certificate */}
+                    <div className="absolute bottom-2.5 left-3 pointer-events-none">
+                      <span className="bg-stone-950/75 backdrop-blur-md text-stone-100 text-[9px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 font-sans">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        <span>Garantia 12 Meses QR</span>
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="pt-3 border-t border-stone-100 space-y-3">
-                    <div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-xl font-serif font-bold text-stone-900">
-                          R$ {product.price.toFixed(2).replace(".", ",")}
-                        </span>
-                        {pixInfo.isDiscountActive && (
-                          <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            R$ {pixInfo.pixPrice.toFixed(2).replace(".", ",")} no PIX
-                          </span>
-                        )}
+                  {/* Info & Pricing Action Body */}
+                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-amber-900/80 font-medium font-sans">
+                        <span>{product.collection || "Coleção Alta Joalheria"}</span>
+                        <span className="text-stone-400">• Hipoalergênico</span>
                       </div>
-                      <p className="text-[11px] text-stone-500 font-medium mt-0.5">
-                        {installmentHighlight}
+                      <h3 className="text-lg sm:text-xl font-serif italic font-bold text-stone-900 group-hover:text-amber-950 transition-colors leading-snug line-clamp-1">
+                        {product.name}
+                      </h3>
+                      <p className="text-xs text-stone-500 line-clamp-2 leading-relaxed font-sans">
+                        {product.description || "Semijoia fundida em liga premium com banho de alta durabilidade e acabamento espelhado."}
                       </p>
                     </div>
 
-                    {/* High-Conversion Actions */}
-                    <div className="space-y-1.5 pt-1">
-                      <button
-                        type="button"
-                        onClick={(e) => handleDirectWhatsAppProduct(product, e)}
-                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md"
-                        title="Pedir direto no WhatsApp sem necessidade de cadastro"
-                      >
-                        <MessageCircle className="w-4 h-4 fill-white/20" />
-                        <span>Quero este 💬</span>
-                      </button>
+                    <div className="pt-3 border-t border-stone-100 space-y-3">
+                      <div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span className="text-2xl font-sans font-bold text-stone-900 tracking-tight">
+                            R$ {product.price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          {pixInfo.isDiscountActive && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-sans">
+                              <ArrowUp className="w-2.5 h-2.5 text-emerald-600" />
+                              R$ {pixInfo.pixPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} no PIX
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-stone-500 font-medium mt-0.5 font-sans">
+                          {installmentHighlight}
+                        </p>
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenProduct(product);
-                        }}
-                        className="w-full py-2 px-3 bg-stone-50 hover:bg-stone-100 text-stone-700 rounded-xl text-[11px] font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <ShoppingBag className="w-3.5 h-3.5 text-stone-500" />
-                        <span>Ver Detalhes / Sacola</span>
-                      </button>
+                      {/* Conversion CTA Action Buttons */}
+                      <div className="space-y-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={(e) => handleDirectWhatsAppProduct(product, e)}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md"
+                          title="Pedir direto no WhatsApp sem necessidade de cadastro"
+                        >
+                          <MessageCircle className="w-4 h-4 fill-white/20" />
+                          <span>Pedir no WhatsApp 💬</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenProduct(product);
+                          }}
+                          className="w-full py-2 px-3 bg-stone-50 hover:bg-stone-100 hover:border-stone-300 border border-stone-200 text-stone-700 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5 text-stone-500" />
+                          <span>Ver Detalhes & Comprar</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </main>
 
       {/* Product Detail & Live Customizer Modal */}

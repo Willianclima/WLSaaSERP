@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import {
   TrendingUp,
+  TrendingDown,
+  ArrowUp,
+  ArrowDown,
   Package,
   Users,
   RefreshCw,
@@ -8,6 +11,7 @@ import {
   ShieldCheck,
   Zap,
   ArrowUpRight,
+  ArrowDownRight,
   Sparkles,
   ShoppingBag,
   Send,
@@ -336,35 +340,45 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div
           id="dash-kpi-vendas-totais"
           onClick={() => onNavigateTab("orders")}
-          className="group relative bg-white border border-stone-200 hover:border-amber-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
+          className="group relative bg-white border border-stone-200 hover:border-amber-400 p-6 rounded-2xl shadow-xs hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform duration-300" />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-amber-900 font-sans">
                 <DollarSign className="w-3.5 h-3.5 text-amber-600" />
                 Vendas Totais
               </span>
-              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-amber-600 transition-colors" />
+              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-amber-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
             </div>
 
             <div className="mt-1">
-              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
-                R$ {totalSalesAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                  R$ {totalSalesAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                  <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                  +18.4%
+                </span>
               </div>
-              <div className="text-xs text-stone-500 mt-1.5 flex items-center gap-1.5 font-sans">
+              <div className="text-xs text-stone-500 mt-1.5 flex items-center gap-1.5 flex-wrap font-sans">
                 <span>Ticket Médio:</span>
                 <strong className="text-stone-800 font-bold font-sans">
                   R$ {avgOrderTicket.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </strong>
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-700">
+                  <ArrowUp className="w-2.5 h-2.5 text-emerald-600" />
+                  +5.2%
+                </span>
               </div>
             </div>
           </div>
 
           <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
             <span className="text-emerald-700 font-bold flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" />
-              +18.4% no mês
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+              +18.4% vs mês anterior
             </span>
             <span className="text-stone-400 font-medium">Meta 92%</span>
           </div>
@@ -374,39 +388,54 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div
           id="dash-kpi-total-pedidos"
           onClick={() => onNavigateTab("orders")}
-          className="group relative bg-white border border-stone-200 hover:border-sky-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
+          className="group relative bg-white border border-stone-200 hover:border-sky-400 p-6 rounded-2xl shadow-xs hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform duration-300" />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-sky-900 font-sans">
                 <ShoppingBag className="w-3.5 h-3.5 text-sky-600" />
                 Total de Pedidos
               </span>
-              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-sky-600 transition-colors" />
+              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-sky-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
             </div>
 
             <div className="mt-1">
-              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
-                {totalOrdersCount} <span className="text-sm font-sans font-normal text-stone-500">pedidos</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                  {totalOrdersCount} <span className="text-sm font-sans font-normal text-stone-500">pedidos</span>
+                </div>
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                  <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                  +12.5%
+                </span>
               </div>
-              <div className="text-xs text-stone-500 mt-1.5 font-sans">
-                Conversão omnicanal estimada em <strong className="text-stone-800 font-bold">4.8%</strong>
+              <div className="text-xs text-stone-500 mt-1.5 flex items-center gap-1.5 flex-wrap font-sans">
+                <span>Conversão omnicanal:</span>
+                <strong className="text-stone-800 font-bold">4.8%</strong>
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-700">
+                  <ArrowUp className="w-2.5 h-2.5 text-emerald-600" />
+                  +0.8%
+                </span>
               </div>
             </div>
           </div>
 
           <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
             <span className="text-emerald-700 font-bold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              {paidOrdersCount} pagos
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+              +12.5% vs mês anterior
             </span>
             {pendingOrdersCount > 0 ? (
-              <span className="text-amber-700 font-bold">
+              <span className="text-amber-700 font-bold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                 {pendingOrdersCount} pendentes
               </span>
             ) : (
-              <span className="text-stone-400 font-medium">0 pendentes</span>
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Todos pagos
+              </span>
             )}
           </div>
         </div>
@@ -415,21 +444,27 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div
           id="dash-kpi-vitrine-produtos"
           onClick={() => onNavigateTab("catalog")}
-          className="group relative bg-white border border-stone-200 hover:border-purple-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
+          className="group relative bg-white border border-stone-200 hover:border-purple-400 p-6 rounded-2xl shadow-xs hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform duration-300" />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-purple-900 font-sans">
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
                 Vitrine de Produtos
               </span>
-              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-purple-600 transition-colors" />
+              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-purple-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
             </div>
 
             <div className="mt-1">
-              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
-                {totalProductsCount} <span className="text-sm font-sans font-normal text-stone-500">modelos</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                  {totalProductsCount} <span className="text-sm font-sans font-normal text-stone-500">modelos</span>
+                </div>
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold font-sans">
+                  <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                  +8 novos
+                </span>
               </div>
               <div className="text-xs text-stone-500 mt-1.5 font-sans">
                 {activeShowcaseProducts} disponíveis com foto e especificações
@@ -438,8 +473,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
 
           <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
-            <span className="text-purple-800 font-bold">
-              {totalCategoriesCount} categorias ativas
+            <span className="text-emerald-700 font-bold flex items-center gap-1">
+              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+              +15.0% novos cadastros
             </span>
             <span className="text-stone-400 font-medium">Ver catálogo &rarr;</span>
           </div>
@@ -449,21 +485,27 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div
           id="dash-kpi-status-estoque"
           onClick={() => onNavigateTab("inventory")}
-          className="group relative bg-white border border-stone-200 hover:border-emerald-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
+          className="group relative bg-white border border-stone-200 hover:border-emerald-400 p-6 rounded-2xl shadow-xs hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform duration-300" />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-emerald-900 font-sans">
                 <Boxes className="w-3.5 h-3.5 text-emerald-600" />
                 Status de Estoque
               </span>
-              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-emerald-600 transition-colors" />
+              <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
             </div>
 
             <div className="mt-1">
-              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
-                {totalStockUnits} <span className="text-sm font-sans font-normal text-stone-500">peças</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                  {totalStockUnits} <span className="text-sm font-sans font-normal text-stone-500">peças</span>
+                </div>
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold font-sans">
+                  <ArrowDown className="w-3.5 h-3.5 text-rose-600" />
+                  -3.2% giro
+                </span>
               </div>
               <div className="text-xs text-stone-500 mt-1.5 font-sans">
                 Avaliado em <strong className="text-stone-800 font-bold font-sans">R$ {totalStockInventoryValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
@@ -473,17 +515,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
             {lowStockProducts.length > 0 ? (
-              <span className="text-amber-700 font-bold flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                {lowStockProducts.length} em estoque crítico
+              <span className="text-rose-700 font-bold flex items-center gap-1">
+                <ArrowDown className="w-3.5 h-3.5 text-rose-600" />
+                {lowStockProducts.length} itens em nível crítico
               </span>
             ) : (
               <span className="text-emerald-700 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+                <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
                 Estoque 100% equilibrado
               </span>
             )}
-            <span className="text-stone-400 font-medium">Ver inventário</span>
+            <span className="text-stone-400 font-medium">Ver inventário &rarr;</span>
           </div>
         </div>
       </div>
@@ -616,6 +658,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <div className={`text-base sm:text-lg font-serif font-bold mt-0.5 flex items-center gap-1 ${
               momGrowth >= 0 ? "text-emerald-700" : "text-amber-700"
             }`}>
+              {momGrowth >= 0 ? (
+                <ArrowUp className="w-4 h-4 text-emerald-600 inline" />
+              ) : (
+                <ArrowDown className="w-4 h-4 text-rose-600 inline" />
+              )}
               {momGrowth >= 0 ? `+${momGrowth.toFixed(1)}%` : `${momGrowth.toFixed(1)}%`}
               <span className="text-[10px] font-sans text-stone-500 font-normal">vs Julho</span>
             </div>
@@ -706,7 +753,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* 5. Visual Grid of High-Impact Operational Cards (100% Zero Tables!) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* CARD A: Alertas de Estoque Crítico (Cards Visuais) */}
-        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
               <div className="flex items-center gap-2">
@@ -733,7 +780,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 {lowStockProducts.slice(0, 4).map((p) => (
                   <div
                     key={p.id}
-                    className="p-3 bg-stone-50 hover:bg-stone-100/80 rounded-2xl border border-stone-200 flex items-center justify-between gap-3 transition-colors"
+                    className="p-3 bg-stone-50 hover:bg-stone-100/90 rounded-2xl border border-stone-200 flex items-center justify-between gap-3 transition-all duration-200 hover:scale-[1.01]"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-white border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center text-xs text-stone-400 font-bold">
@@ -788,7 +835,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         {/* CARD B: Canais Omnichannel de Venda (Visual Progress Cards) */}
-        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
               <div className="flex items-center gap-2">
@@ -817,7 +864,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 const Icon = c.icon;
                 const percentage = totalOrdersCount > 0 ? Math.round((c.count / totalOrdersCount) * 100) : 0;
                 return (
-                  <div key={c.name} className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                  <div key={c.name} className="p-3 bg-stone-50 hover:bg-stone-100/90 rounded-2xl border border-stone-200 space-y-2 transition-all duration-200">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 font-bold text-stone-800">
                         <Icon className="w-3.5 h-3.5 text-stone-600" />
@@ -849,7 +896,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         {/* CARD C: Garantias Digitais & Pós-Venda (Visual Cards) */}
-        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs hover:shadow-lg hover:scale-[1.01] transition-all duration-300 ease-out flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
               <div className="flex items-center gap-2">
@@ -876,7 +923,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 {warranties.slice(0, 3).map((warr) => (
                   <div
                     key={warr.id}
-                    className="p-3 bg-stone-50 hover:bg-stone-100/80 rounded-2xl border border-stone-200 flex items-center gap-3 transition-colors"
+                    className="p-3 bg-stone-50 hover:bg-stone-100/90 rounded-2xl border border-stone-200 flex items-center gap-3 transition-all duration-200 hover:scale-[1.01]"
                   >
                     <div className="w-12 h-12 bg-white border border-stone-200 rounded-xl flex items-center justify-center text-stone-700 shrink-0">
                       <QrCode className="w-6 h-6 text-stone-800" />
@@ -920,7 +967,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
       {/* 6. Active Consignments Visual Bento Cards (No Tables) */}
       {consignments && consignments.length > 0 && (
-        <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs hover:shadow-md transition-all duration-300 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-stone-100">
             <div>
               <div className="flex items-center gap-2">
@@ -957,7 +1004,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={maleta.id}
-                  className="p-5 bg-stone-50 hover:bg-stone-100/90 border border-stone-200 rounded-2xl shadow-xs transition-all flex flex-col justify-between space-y-4"
+                  className="p-5 bg-stone-50 hover:bg-stone-100/90 border border-stone-200 hover:border-sky-300 rounded-2xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all duration-300 ease-out flex flex-col justify-between space-y-4"
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
