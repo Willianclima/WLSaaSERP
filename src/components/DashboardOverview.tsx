@@ -6,7 +6,6 @@ import {
   RefreshCw,
   AlertCircle,
   ShieldCheck,
-  ShieldAlert,
   Zap,
   ArrowUpRight,
   Sparkles,
@@ -14,13 +13,21 @@ import {
   Send,
   QrCode,
   DollarSign,
-  Bot,
-  Sliders,
-  Percent,
   Clock,
   BarChart3,
   Calendar,
   Layers,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronRight,
+  Plus,
+  Share2,
+  ArrowRight,
+  Tag,
+  Boxes,
+  Eye,
+  Store,
+  ExternalLink,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -46,7 +53,7 @@ interface DashboardOverviewProps {
   tenant: TenantStore;
   products: ProductItem[];
   resellers: Reseller[];
-  consignments: ConsignmentMaleta[];
+  consignments?: ConsignmentMaleta[];
   orders: UnifiedOrder[] | any[];
   warranties: DigitalWarranty[];
   onNavigateTab: (tab: string) => void;
@@ -54,24 +61,50 @@ interface DashboardOverviewProps {
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   tenant,
-  products,
-  resellers,
-  consignments,
-  orders,
-  warranties,
+  products = [],
+  resellers = [],
+  consignments = [],
+  orders = [],
+  warranties = [],
   onNavigateTab,
 }) => {
-  const [chartViewMode, setChartViewMode] = useState<"consolidated" | "channels" | "target">("channels");
+  const [chartViewMode, setChartViewMode] = useState<"channels" | "consolidated" | "target">("channels");
+  const [periodFilter, setPeriodFilter] = useState<"hoje" | "semana" | "mes" | "ano">("mes");
 
-  // Calculations for Summary KPIs
-  // 1. Total Sales (YTD)
-  const totalSalesYTD = orders.reduce(
+  // 1. High-Impact Metrics Calculations: Vendas Totais, Total de Pedidos, Vitrine de Produtos, Status de Estoque
+  const totalSalesAmount = orders.reduce(
     (acc, o: any) => acc + (Number(o.totalAmount) || 0),
     0
   );
-  const avgOrderTicket = orders.length > 0 ? totalSalesYTD / orders.length : 0;
+  const totalOrdersCount = orders.length;
+  const avgOrderTicket = totalOrdersCount > 0 ? totalSalesAmount / totalOrdersCount : 0;
 
-  // 2. Active Consignments Value
+  // Orders status counts
+  const paidOrdersCount = orders.filter(
+    (o: any) => o.status === "PAGO" || o.paymentStatus === "CONFIRMADO"
+  ).length;
+  const pendingOrdersCount = orders.filter(
+    (o: any) => o.status === "PENDENTE" || o.paymentStatus === "AGUARDANDO_PAGAMENTO"
+  ).length;
+  const deliveredOrdersCount = orders.filter(
+    (o: any) => o.status === "ENTREGUE" || o.fulfillmentStatus === "ENTREGUE"
+  ).length;
+
+  // Products & Showcase Metrics
+  const totalProductsCount = products.length;
+  const activeShowcaseProducts = products.filter((p) => p.stockPhysical > 0).length;
+  const totalCategoriesCount = new Set(products.map((p) => p.category)).size;
+
+  // Inventory & Stock Health
+  const totalStockUnits = products.reduce((acc, p) => acc + (p.stockPhysical || 0), 0);
+  const totalStockInventoryValue = products.reduce(
+    (acc, p) => acc + (p.stockPhysical || 0) * (p.price || 0),
+    0
+  );
+  const lowStockProducts = products.filter((p) => p.stockPhysical > 0 && p.stockPhysical < 5);
+  const outOfStockProducts = products.filter((p) => p.stockPhysical === 0);
+
+  // Active Consignments
   const activeConsignmentsList = consignments.filter(
     (c) => c.status === "EM_ABERTO" || c.status === "PARCIALMENTE_ACERTADA"
   );
@@ -79,75 +112,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     (acc, c) => acc + (Number(c.pendingValue) || Number(c.totalValue) || 0),
     0
   );
-  const expiringConsignmentsCount = activeConsignmentsList.filter(
-    (c) => new Date(c.dueDate) <= new Date("2026-08-30")
-  ).length;
 
-  // 3. Pending Commission
-  const pendingCommissionsValue = consignments.reduce(
-    (acc, c) => (!c.commissionPaid ? acc + (Number(c.commissionCalculated) || 0) : acc),
-    0
-  ) || resellers.reduce((acc, r) => acc + (Number(r.pendingCommissionValue) || 0), 0);
-
-  const pendingResellersCount = resellers.filter(
-    (r) =>
-      (r.pendingCommissionValue || 0) > 0 ||
-      consignments.some((c) => c.resellerId === r.id && !c.commissionPaid)
-  ).length;
-
-  // 4. Recent Warranty Claims Count
-  const recentClaimsCount = warranties.reduce((acc, w) => {
-    const logsCount = w.claimLogs ? w.claimLogs.length : 0;
-    const directCount = w.claimsCount || 0;
-    const isRepairOpen = w.status === "REPARO_SOLICITADO" ? 1 : 0;
-    return acc + Math.max(directCount, logsCount, isRepairOpen);
-  }, 0);
-
-  const openRepairsCount = warranties.filter(
-    (w) => w.status === "REPARO_SOLICITADO"
-  ).length;
-
-  const physicalStockValue = products.reduce(
-    (acc, p) => acc + p.stockPhysical * p.price,
-    0
-  );
-
+  // Omnichannel Breakdown
   const channelCounts = {
+    WHATSAPP: orders.filter((o: any) => o.channel === "WHATSAPP").length,
     LOJA_WEB: orders.filter((o: any) => o.channel === "LOJA_WEB" || o.channel === "ECOMMERCE").length,
     REVENDEDORA: orders.filter((o: any) => o.channel === "REVENDEDORA" || o.channel === "B2B_RESELLER").length,
-    WHATSAPP: orders.filter((o: any) => o.channel === "WHATSAPP").length,
-    PRESENCIAL: orders.filter((o: any) => o.channel === "PRESENCIAL" || o.channel === "PRESENTIAL_POS").length,
-    MARKETPLACE: orders.filter((o: any) => o.channel === "MARKETPLACE").length,
+    PRESENCIAL: orders.filter((o: any) => o.channel === "PRESENCIAL" || o.channel === "PRESENTIAL_POS" || o.channel === "BALCAO").length,
   };
 
-  // Compute 6-Month Sales Series (Mar/2026 to Ago/2026)
-  // Dynamic aggregation with current orders
-  const currentMonthOrdersAmount = orders
-    .filter((o: any) => {
-      if (!o.createdAt) return true;
-      const d = new Date(o.createdAt);
-      return d.getMonth() === 7; // August (0-indexed 7)
-    })
-    .reduce((acc, o: any) => acc + (Number(o.totalAmount) || 0), 0);
-
-  const currentMonthDirectOrders = orders
-    .filter((o: any) => {
-      const isDirect = o.channel !== "REVENDEDORA" && o.channel !== "B2B_RESELLER";
-      if (!o.createdAt) return isDirect;
-      const d = new Date(o.createdAt);
-      return d.getMonth() === 7 && isDirect;
-    })
-    .reduce((acc, o: any) => acc + (Number(o.totalAmount) || 0), 0);
-
-  const currentMonthResellerOrders = orders
-    .filter((o: any) => {
-      const isReseller = o.channel === "REVENDEDORA" || o.channel === "B2B_RESELLER";
-      if (!o.createdAt) return isReseller;
-      const d = new Date(o.createdAt);
-      return d.getMonth() === 7 && isReseller;
-    })
-    .reduce((acc, o: any) => acc + (Number(o.totalAmount) || 0), 0);
-
+  // 6-Month Evolution Data for Recharts
   const monthlySalesData = [
     {
       monthKey: "2026-03",
@@ -203,38 +177,42 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       monthKey: "2026-08",
       month: "Ago/26",
       fullMonth: "Agosto 2026 (Atual)",
-      directSales: Math.max(14800, currentMonthDirectOrders + 12000),
-      resellerSales: Math.max(9800, currentMonthResellerOrders + 8200),
-      totalSales: Math.max(24600, currentMonthOrdersAmount + 20200),
+      directSales: Math.max(15400, totalSalesAmount * 0.6),
+      resellerSales: Math.max(9200, totalSalesAmount * 0.4),
+      totalSales: Math.max(24600, totalSalesAmount),
       target: 26000,
-      ordersCount: Math.max(52, orders.length + 42),
+      ordersCount: Math.max(52, totalOrdersCount),
     },
   ];
 
   const totalSemesterSales = monthlySalesData.reduce((acc, m) => acc + m.totalSales, 0);
   const avgMonthlySales = totalSemesterSales / monthlySalesData.length;
-  const bestMonth = monthlySalesData.reduce((prev, curr) => (curr.totalSales > prev.totalSales ? curr : prev), monthlySalesData[0]);
+  const bestMonth = monthlySalesData.reduce(
+    (prev, curr) => (curr.totalSales > prev.totalSales ? curr : prev),
+    monthlySalesData[0]
+  );
   const currentMonthData = monthlySalesData[monthlySalesData.length - 1];
   const prevMonthData = monthlySalesData[monthlySalesData.length - 2];
-  const momGrowth = ((currentMonthData.totalSales - prevMonthData.totalSales) / prevMonthData.totalSales) * 100;
+  const momGrowth =
+    ((currentMonthData.totalSales - prevMonthData.totalSales) / prevMonthData.totalSales) * 100;
 
   // Custom Chart Tooltip
   const CustomBarTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const dataItem = payload[0]?.payload;
       return (
-        <div className="bg-stone-900/95 backdrop-blur-md text-white border border-stone-700 p-3.5 rounded-xl shadow-xl text-xs space-y-2 min-w-[200px]">
+        <div className="bg-stone-900/95 backdrop-blur-md text-white border border-stone-700 p-3.5 rounded-2xl shadow-xl text-xs space-y-2 min-w-[210px]">
           <div className="flex items-center justify-between border-b border-stone-800 pb-1.5">
             <span className="font-serif font-bold text-amber-400">{dataItem?.fullMonth || label}</span>
             <span className="text-[10px] text-stone-400 font-mono">{dataItem?.ordersCount} pedidos</span>
           </div>
-          <div className="space-y-1 text-[11px]">
+          <div className="space-y-1.5 text-[11px]">
             {chartViewMode === "channels" ? (
               <>
                 <div className="flex justify-between items-center text-amber-200">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                    Venda Direta / Web:
+                    Venda Direta / E-commerce:
                   </span>
                   <span className="font-semibold font-mono">
                     R$ {Number(dataItem?.directSales || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -243,7 +221,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <div className="flex justify-between items-center text-sky-200">
                   <span className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
-                    Revendedoras:
+                    Revendedoras / Maletas:
                   </span>
                   <span className="font-semibold font-mono">
                     R$ {Number(dataItem?.resellerSales || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
@@ -286,214 +264,233 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   };
 
   return (
-    <div className="space-y-8 text-stone-900">
-      {/* Editorial Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-4 border-b border-stone-200">
+    <div className="space-y-8 text-stone-900 pb-16">
+      {/* 1. Header & Quick Context Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-              Painel Executivo • Multi-tenant Ativo
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-100/80 border border-amber-300 text-[10px] font-bold uppercase tracking-wider text-amber-900">
+              Painel de Indicadores • {tenant.name}
             </span>
+            <span className="text-xs text-stone-400 font-medium">Tempo Real</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-serif italic font-bold tracking-wide text-stone-900 mt-1">
-            {tenant.name}
-          </h2>
-          <p className="text-xs text-stone-600 mt-1 max-w-2xl font-sans leading-relaxed">
-            Sincronização omnichannel contínua entre e-commerce, maletas em consignação física, regras de comissão escalonada e certificados digitais com QR Code.
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-stone-900 tracking-tight mt-1">
+            Visão Geral de Desempenho
+          </h1>
+          <p className="text-xs text-stone-500 mt-0.5">
+            Acompanhe métricas essenciais de faturamento, pedidos, catálogo e nível de estoque.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Quick Actions & Period Filter */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200 text-xs font-semibold">
+            <button
+              onClick={() => setPeriodFilter("hoje")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                periodFilter === "hoje" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500 hover:text-stone-800"
+              }`}
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => setPeriodFilter("semana")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                periodFilter === "semana" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500 hover:text-stone-800"
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              onClick={() => setPeriodFilter("mes")}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                periodFilter === "mes" ? "bg-white text-stone-900 shadow-xs" : "text-stone-500 hover:text-stone-800"
+              }`}
+            >
+              Este Mês
+            </button>
+          </div>
+
           <button
-            id="btn-dash-settings"
-            onClick={() => onNavigateTab("storeSettings")}
-            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-stone-300 hover:bg-stone-50 text-stone-800 rounded-full text-xs font-bold transition-all shadow-xs cursor-pointer"
-            title="Personalizar Logotipo, Paleta e Textos da Loja"
+            id="btn-dash-quick-sale"
+            onClick={() => onNavigateTab("orders")}
+            className="flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
-            <Sliders className="w-3.5 h-3.5 text-amber-600" />
-            <span>Configurações da Loja</span>
+            <Plus className="w-3.5 h-3.5 text-amber-400" />
+            <span>Nova Venda</span>
           </button>
           <button
-            id="btn-dash-home"
-            onClick={() => onNavigateTab("home")}
-            className="flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-stone-100 rounded-full text-xs font-bold transition-all shadow-xs cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Tela Inicial &amp; Promos</span>
-          </button>
-          <button
-            id="btn-dash-storefront"
+            id="btn-dash-open-storefront"
             onClick={() => onNavigateTab("storefront")}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-100 hover:bg-amber-200/80 border border-amber-300 text-stone-900 rounded-full text-xs font-bold transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-stone-50 border border-stone-300 text-stone-800 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
-            <ShoppingBag className="w-3.5 h-3.5 text-amber-700" />
-            <span>Loja do Comprador</span>
-          </button>
-          <button
-            id="btn-dash-consignments"
-            onClick={() => onNavigateTab("consignments")}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-300 rounded-full text-stone-800 text-xs font-semibold hover:bg-stone-50 transition-all shadow-xs cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-stone-600" />
-            <span>Gerenciar Maletas</span>
-          </button>
-          <button
-            id="btn-dash-aicopilot"
-            onClick={() => onNavigateTab("aiGateway")}
-            className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-full text-xs font-bold uppercase tracking-wider hover:bg-stone-700 transition-all shadow-xs cursor-pointer"
-          >
-            <Bot className="w-3.5 h-3.5 text-amber-400" />
-            <span>AI Copilot</span>
+            <Store className="w-3.5 h-3.5 text-amber-600" />
+            <span>Ver Vitrine</span>
           </button>
         </div>
       </div>
 
-      {/* Summary KPI Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* KPI 1: Total Sales (YTD) */}
+      {/* 2. Primary High-Impact Metric Cards Grid (Vendas Totais, Total de Pedidos, Vitrine de Produtos, Status de Estoque) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+        {/* CARD 1: VENDAS TOTAIS */}
         <div
-          id="kpi-card-total-sales-ytd"
+          id="dash-kpi-vendas-totais"
           onClick={() => onNavigateTab("orders")}
-          className="p-6 bg-white border border-stone-200 hover:border-amber-400 hover:shadow-md transition-all rounded-2xl flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+          className="group relative bg-white border border-stone-200 hover:border-amber-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform" />
-          <div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-full text-[10px] font-bold uppercase tracking-wider text-amber-900">
-                <DollarSign className="w-3 h-3 text-amber-600" />
-                Total Sales (YTD)
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-amber-900 font-sans">
+                <DollarSign className="w-3.5 h-3.5 text-amber-600" />
+                Vendas Totais
               </span>
               <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-amber-600 transition-colors" />
             </div>
-            <h3 className="text-3xl font-serif font-bold tracking-tight text-stone-900 mt-1">
-              R$ {totalSalesYTD.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </h3>
-            <p className="text-xs text-stone-500 font-sans mt-1.5">
-              Ticket Médio: <strong className="text-stone-700 font-semibold">R$ {avgOrderTicket.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-            </p>
+
+            <div className="mt-1">
+              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                R$ {totalSalesAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-xs text-stone-500 mt-1.5 flex items-center gap-1.5 font-sans">
+                <span>Ticket Médio:</span>
+                <strong className="text-stone-800 font-bold font-sans">
+                  R$ {avgOrderTicket.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+            </div>
           </div>
-          <div className="pt-4 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px]">
-            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+
+          <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+            <span className="text-emerald-700 font-bold flex items-center gap-1">
               <TrendingUp className="w-3.5 h-3.5" />
-              ↑ 18.4% YTD
+              +18.4% no mês
             </span>
-            <span className="text-stone-400 font-medium">{orders.length} pedidos</span>
+            <span className="text-stone-400 font-medium">Meta 92%</span>
           </div>
         </div>
 
-        {/* KPI 2: Active Consignments Value */}
+        {/* CARD 2: TOTAL DE PEDIDOS */}
         <div
-          id="kpi-card-active-consignments-value"
-          onClick={() => onNavigateTab("consignments")}
-          className="p-6 bg-white border border-stone-200 hover:border-sky-400 hover:shadow-md transition-all rounded-2xl flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+          id="dash-kpi-total-pedidos"
+          onClick={() => onNavigateTab("orders")}
+          className="group relative bg-white border border-stone-200 hover:border-sky-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-16 h-16 bg-sky-50 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform" />
-          <div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200/80 rounded-full text-[10px] font-bold uppercase tracking-wider text-sky-900">
-                <RefreshCw className="w-3 h-3 text-sky-600" />
-                Active Consignments
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 border border-sky-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-sky-900 font-sans">
+                <ShoppingBag className="w-3.5 h-3.5 text-sky-600" />
+                Total de Pedidos
               </span>
               <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-sky-600 transition-colors" />
             </div>
-            <h3 className="text-3xl font-serif font-bold tracking-tight text-stone-900 mt-1">
-              R$ {activeConsignmentsValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </h3>
-            <p className="text-xs text-stone-500 font-sans mt-1.5">
-              Valor em circulação com revendedoras
-            </p>
+
+            <div className="mt-1">
+              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                {totalOrdersCount} <span className="text-sm font-sans font-normal text-stone-500">pedidos</span>
+              </div>
+              <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                Conversão omnicanal estimada em <strong className="text-stone-800 font-bold">4.8%</strong>
+              </div>
+            </div>
           </div>
-          <div className="pt-4 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px]">
-            <span className="text-sky-800 font-semibold">
-              {activeConsignmentsList.length} maletas ativas
+
+          <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+            <span className="text-emerald-700 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {paidOrdersCount} pagos
             </span>
-            {expiringConsignmentsCount > 0 ? (
-              <span className="text-amber-700 font-semibold">
-                {expiringConsignmentsCount} a vencer
+            {pendingOrdersCount > 0 ? (
+              <span className="text-amber-700 font-bold">
+                {pendingOrdersCount} pendentes
               </span>
             ) : (
-              <span className="text-stone-400 font-medium">100% no prazo</span>
+              <span className="text-stone-400 font-medium">0 pendentes</span>
             )}
           </div>
         </div>
 
-        {/* KPI 3: Pending Commission */}
+        {/* CARD 3: VITRINE DE PRODUTOS */}
         <div
-          id="kpi-card-pending-commission"
-          onClick={() => onNavigateTab("resellers")}
-          className="p-6 bg-white border border-stone-200 hover:border-purple-400 hover:shadow-md transition-all rounded-2xl flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+          id="dash-kpi-vitrine-produtos"
+          onClick={() => onNavigateTab("catalog")}
+          className="group relative bg-white border border-stone-200 hover:border-purple-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-16 h-16 bg-purple-50 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform" />
-          <div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200/80 rounded-full text-[10px] font-bold uppercase tracking-wider text-purple-900">
-                <Percent className="w-3 h-3 text-purple-600" />
-                Pending Commission
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-purple-900 font-sans">
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                Vitrine de Produtos
               </span>
               <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-purple-600 transition-colors" />
             </div>
-            <h3 className="text-3xl font-serif font-bold tracking-tight text-stone-900 mt-1">
-              R$ {pendingCommissionsValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </h3>
-            <p className="text-xs text-stone-500 font-sans mt-1.5">
-              Comissões calculadas a repassar
-            </p>
+
+            <div className="mt-1">
+              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                {totalProductsCount} <span className="text-sm font-sans font-normal text-stone-500">modelos</span>
+              </div>
+              <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                {activeShowcaseProducts} disponíveis com foto e especificações
+              </div>
+            </div>
           </div>
-          <div className="pt-4 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px]">
-            <span className="text-purple-800 font-semibold">
-              {pendingResellersCount} revendedoras
+
+          <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+            <span className="text-purple-800 font-bold">
+              {totalCategoriesCount} categorias ativas
             </span>
-            <span className="text-stone-400 font-medium">Ciclo mensal</span>
+            <span className="text-stone-400 font-medium">Ver catálogo &rarr;</span>
           </div>
         </div>
 
-        {/* KPI 4: Recent Warranty Claims Count */}
+        {/* CARD 4: STATUS DE ESTOQUE */}
         <div
-          id="kpi-card-recent-warranty-claims"
-          onClick={() => onNavigateTab("warranties")}
-          className="p-6 bg-white border border-stone-200 hover:border-emerald-400 hover:shadow-md transition-all rounded-2xl flex flex-col justify-between cursor-pointer group relative overflow-hidden"
+          id="dash-kpi-status-estoque"
+          onClick={() => onNavigateTab("inventory")}
+          className="group relative bg-white border border-stone-200 hover:border-emerald-400 p-6 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform" />
-          <div>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full -z-0 group-hover:scale-110 transition-transform" />
+          <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200/80 rounded-full text-[10px] font-bold uppercase tracking-wider text-emerald-900">
-                <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                Warranty Claims
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-[10px] font-bold uppercase tracking-wider text-emerald-900 font-sans">
+                <Boxes className="w-3.5 h-3.5 text-emerald-600" />
+                Status de Estoque
               </span>
               <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-emerald-600 transition-colors" />
             </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <h3 className="text-3xl font-serif font-bold tracking-tight text-stone-900">
-                {recentClaimsCount}
-              </h3>
-              <span className="text-xs font-semibold text-stone-500">
-                {recentClaimsCount === 1 ? "chamado" : "chamados"}
-              </span>
+
+            <div className="mt-1">
+              <div className="text-3xl font-sans font-bold text-stone-900 tracking-tight">
+                {totalStockUnits} <span className="text-sm font-sans font-normal text-stone-500">peças</span>
+              </div>
+              <div className="text-xs text-stone-500 mt-1.5 font-sans">
+                Avaliado em <strong className="text-stone-800 font-bold font-sans">R$ {totalStockInventoryValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
             </div>
-            <p className="text-xs text-stone-500 font-sans mt-1.5">
-              Acionamentos e histórico de reparo
-            </p>
           </div>
-          <div className="pt-4 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px]">
-            {openRepairsCount > 0 ? (
-              <span className="text-amber-700 font-semibold flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {openRepairsCount} aguardando banho
+
+          <div className="relative z-10 pt-4 mt-4 border-t border-stone-100 flex items-center justify-between text-xs font-sans">
+            {lowStockProducts.length > 0 ? (
+              <span className="text-amber-700 font-bold flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {lowStockProducts.length} em estoque crítico
               </span>
             ) : (
-              <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" />
-                SLA 100% em dia
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Estoque 100% equilibrado
               </span>
             )}
-            <span className="text-stone-400 font-medium">{warranties.length} certificados</span>
+            <span className="text-stone-400 font-medium">Ver inventário</span>
           </div>
         </div>
       </div>
 
-      {/* AI Copilot Proactive Insight Banner */}
+      {/* 3. AI Predictive Insight Banner */}
       <div
-        id="dash-ai-prediction-banner"
+        id="dash-ai-prediction-card"
         className="p-5 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 border border-stone-800 rounded-2xl text-white shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div className="flex items-start sm:items-center gap-3.5">
@@ -503,12 +500,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                AI Predictive Intelligence
+                AI Copilot • Insights Preditivos de Giro
               </span>
-              <span className="text-[10px] text-stone-400">• Confiança 94%</span>
+              <span className="text-[10px] text-stone-400">• Alta Relevância</span>
             </div>
-            <p className="text-sm font-serif italic text-stone-100 mt-0.5">
-              "Próxima coleção Riviera tem projeção de demanda de R$ 18.500 no canal Revendedoras. 12 peças sugeridas para recall de giro."
+            <p className="text-xs sm:text-sm font-serif italic text-stone-100 mt-0.5 leading-relaxed">
+              "Colares banhados a ouro 18k com zircônias apresentaram alta velocidade de venda (giro 3.8x). Recomendamos reforçar o estoque antes da campanha de fim de mês."
             </p>
           </div>
         </div>
@@ -516,12 +513,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           onClick={() => onNavigateTab("aiGateway")}
           className="self-start sm:self-center px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-100 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer flex items-center gap-1.5"
         >
-          <span>Explorar no Copilot</span>
+          <span>Abrir Copilot</span>
           <ArrowUpRight className="w-3.5 h-3.5 text-amber-400" />
         </button>
       </div>
 
-      {/* Recharts Monthly Sales Bar Chart Section (Últimos 6 Meses) */}
+      {/* 4. Visual Recharts Chart Card (Evolução de Vendas e Canais) */}
       <div
         id="section-monthly-sales-chart"
         className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6"
@@ -533,12 +530,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="p-1.5 rounded-lg bg-amber-100 text-amber-800">
                 <BarChart3 className="w-4 h-4" />
               </span>
-              <h3 className="text-xl font-serif font-bold text-stone-900">
-                Comparativo de Vendas Mensais (Últimos 6 Meses)
-              </h3>
+              <h2 className="text-xl font-serif font-bold text-stone-900">
+                Evolução Mensal de Vendas (Últimos 6 Meses)
+              </h2>
             </div>
             <p className="text-xs text-stone-500">
-              Evolução histórica de faturamento omnichannel, metas de venda e desempenho por canal comercial.
+              Desempenho consolidado comparando canais comerciais diretos e maletas de revendedoras.
             </p>
           </div>
 
@@ -581,7 +578,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               }`}
             >
               <Calendar className="w-3.5 h-3.5 text-sky-600" />
-              <span>Meta vs Realizado</span>
+              <span>Meta vs Real</span>
             </button>
           </div>
         </div>
@@ -590,7 +587,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-stone-50/80 p-4 rounded-2xl border border-stone-100">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Total Acumulado (6 Meses)
+              Acumulado Semestre
             </span>
             <div className="text-base sm:text-lg font-serif font-bold text-stone-900 mt-0.5">
               R$ {totalSemesterSales.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -606,7 +603,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Melhor Desempenho
+              Melhor Mês
             </span>
             <div className="text-base sm:text-lg font-serif font-bold text-amber-900 mt-0.5">
               {bestMonth.month} • R$ {(bestMonth.totalSales / 1000).toFixed(1)}k
@@ -614,7 +611,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Variação MoM (Mês Atual)
+              Variação MoM
             </span>
             <div className={`text-base sm:text-lg font-serif font-bold mt-0.5 flex items-center gap-1 ${
               momGrowth >= 0 ? "text-emerald-700" : "text-amber-700"
@@ -626,7 +623,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
 
         {/* Recharts Bar Chart */}
-        <div className="w-full h-[320px] pt-2">
+        <div className="w-full h-[300px] pt-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={monthlySalesData}
@@ -662,7 +659,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   />
                   <Bar
                     dataKey="resellerSales"
-                    name="Revendedoras / Consignação"
+                    name="Revendedoras / Maletas"
                     fill="#0284c7"
                     radius={[6, 6, 0, 0]}
                     maxBarSize={44}
@@ -706,183 +703,325 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
-      {/* Main Content Layout (Monitor de Consignação + Right AI & Warranty Column) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left 2 Cols: Monitor de Consignação Table */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-stone-200 rounded-3xl p-8 flex flex-col overflow-hidden shadow-xs">
-            <div className="flex items-center justify-between pb-6 mb-2 border-b border-stone-100">
-              <div>
-                <h3 className="text-xl font-serif italic text-stone-900 font-bold">
-                  Monitor de Consignações Ativas
-                </h3>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  Acompanhamento de saldo e vencimento de maletas com acerto direto
-                </p>
+      {/* 5. Visual Grid of High-Impact Operational Cards (100% Zero Tables!) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* CARD A: Alertas de Estoque Crítico (Cards Visuais) */}
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-rose-50 text-rose-700">
+                  <AlertCircle className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-stone-900">
+                    Estoque Crítico
+                  </h3>
+                  <p className="text-[11px] text-stone-500">Peças com menos de 5 unidades</p>
+                </div>
               </div>
               <button
-                onClick={() => onNavigateTab("consignments")}
-                className="text-xs font-bold uppercase tracking-wider border-b border-stone-400 text-stone-800 hover:text-stone-950 pb-0.5"
+                onClick={() => onNavigateTab("inventory")}
+                className="text-xs font-bold text-amber-700 hover:text-amber-900 cursor-pointer"
               >
-                Ver Todas ({consignments.length})
+                Gerenciar
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-100">
-                  <tr>
-                    <th className="pb-3 font-bold">Revendedora</th>
-                    <th className="pb-3 font-bold text-center">Código</th>
-                    <th className="pb-3 font-bold">Status / Prazo</th>
-                    <th className="pb-3 font-bold text-right">Vendido / Total</th>
-                    <th className="pb-3 font-bold text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {consignments.map((maleta) => {
-                    const isExpiring =
-                      maleta.status === "EM_ABERTO" &&
-                      new Date(maleta.dueDate) <= new Date("2026-08-30");
+            {lowStockProducts.length > 0 ? (
+              <div className="space-y-3">
+                {lowStockProducts.slice(0, 4).map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-3 bg-stone-50 hover:bg-stone-100/80 rounded-2xl border border-stone-200 flex items-center justify-between gap-3 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center text-xs text-stone-400 font-bold">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <Package className="w-5 h-5 text-stone-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-stone-900 truncate">
+                          {p.name}
+                        </div>
+                        <div className="text-[10px] text-stone-500 font-mono">
+                          SKU: {p.sku} • R$ {p.price.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
 
-                    return (
-                      <tr key={maleta.id} className="hover:bg-stone-50/70 transition-colors">
-                        <td className="py-4 font-medium text-stone-900">
-                          <div>{maleta.resellerName}</div>
-                          <div className="text-[11px] text-stone-400">{maleta.resellerPhone}</div>
-                        </td>
-                        <td className="py-4 text-center font-mono text-xs text-stone-600">
-                          {maleta.code}
-                        </td>
-                        <td className="py-4">
-                          {isExpiring ? (
-                            <span className="bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] border border-amber-200 font-medium">
-                              Vence em {new Date(maleta.dueDate).toLocaleDateString("pt-BR")}
-                            </span>
-                          ) : maleta.status === "FINALIZADA" ? (
-                            <span className="bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full text-[10px] border border-emerald-200 font-medium">
-                              Finalizada
-                            </span>
-                          ) : (
-                            <span className="bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full text-[10px] border border-stone-200 font-medium">
-                              Ativa
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 text-right font-serif text-stone-900">
-                          <span className="font-semibold text-emerald-700">
-                            R$ {maleta.soldValue.toFixed(2)}
-                          </span>{" "}
-                          <span className="text-stone-400 text-xs font-sans">
-                            / R$ {maleta.totalValue.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="py-4 text-right">
-                          <button
-                            onClick={() => onNavigateTab("consignments")}
-                            className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-medium transition-colors"
-                          >
-                            Acertar
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    <div className="text-right shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        p.stockPhysical === 0
+                          ? "bg-rose-100 text-rose-800 border border-rose-200"
+                          : "bg-amber-100 text-amber-800 border border-amber-200"
+                      }`}>
+                        {p.stockPhysical} un.
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-stone-500 bg-stone-50 rounded-2xl border border-stone-200">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <p className="text-xs font-medium">Todas as peças com estoque adequado!</p>
+              </div>
+            )}
           </div>
 
-          {/* Vendas por Canal Omnichannel */}
-          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs">
+          <button
+            onClick={() => onNavigateTab("inventory")}
+            className="w-full mt-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>Ver Inventário Completo</span>
+            <ChevronRight className="w-3.5 h-3.5 text-stone-500" />
+          </button>
+        </div>
+
+        {/* CARD B: Canais Omnichannel de Venda (Visual Progress Cards) */}
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+          <div>
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
-              <h3 className="text-base font-serif italic font-bold text-stone-900">
-                Distribuição Omnichannel de Pedidos
-              </h3>
-              <span className="text-xs text-stone-500 font-medium">
-                {orders.length} pedidos unificados
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-50 text-amber-700">
+                  <ShoppingBag className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-stone-900">
+                    Canais de Venda
+                  </h3>
+                  <p className="text-[11px] text-stone-500">Distribuição dos pedidos unificados</p>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold text-stone-700">
+                {totalOrdersCount} pedidos
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="space-y-3">
               {[
-                { name: "Loja Virtual", count: channelCounts.LOJA_WEB, icon: ShoppingBag, color: "text-amber-700 bg-amber-50 border-amber-200" },
-                { name: "Revendedora", count: channelCounts.REVENDEDORA, icon: Users, color: "text-sky-700 bg-sky-50 border-sky-200" },
-                { name: "WhatsApp", count: channelCounts.WHATSAPP, icon: Send, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
-                { name: "Showroom", count: channelCounts.PRESENCIAL, icon: Package, color: "text-stone-700 bg-stone-100 border-stone-200" },
-                { name: "Marketplace", count: channelCounts.MARKETPLACE, icon: RefreshCw, color: "text-purple-700 bg-purple-50 border-purple-200" },
+                { name: "WhatsApp & Pedidos Diretos", count: channelCounts.WHATSAPP + channelCounts.PRESENCIAL, icon: Send, barColor: "bg-emerald-500" },
+                { name: "Loja Virtual / E-commerce", count: channelCounts.LOJA_WEB, icon: ShoppingBag, barColor: "bg-amber-500" },
+                { name: "Revendedoras & Maletas", count: channelCounts.REVENDEDORA, icon: Users, barColor: "bg-sky-500" },
+                { name: "Showroom & Presencial", count: channelCounts.PRESENCIAL, icon: Package, barColor: "bg-stone-500" },
               ].map((c) => {
                 const Icon = c.icon;
+                const percentage = totalOrdersCount > 0 ? Math.round((c.count / totalOrdersCount) * 100) : 0;
                 return (
-                  <div
-                    key={c.name}
-                    className={`p-3.5 rounded-2xl border ${c.color} text-center space-y-1`}
-                  >
-                    <Icon className="w-4 h-4 mx-auto opacity-80" />
-                    <div className="text-[11px] font-semibold text-stone-600">{c.name}</div>
-                    <div className="text-xl font-serif font-bold text-stone-900">{c.count}</div>
+                  <div key={c.name} className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 font-bold text-stone-800">
+                        <Icon className="w-3.5 h-3.5 text-stone-600" />
+                        <span>{c.name}</span>
+                      </div>
+                      <div className="font-mono font-bold text-stone-900">
+                        {c.count} <span className="text-stone-400 font-normal font-sans">({percentage}%)</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${c.barColor} rounded-full transition-all duration-500`}
+                        style={{ width: `${Math.max(percentage, 8)}%` }}
+                      />
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
+
+          <button
+            onClick={() => onNavigateTab("orders")}
+            className="w-full mt-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>Ver Todos os Pedidos</span>
+            <ChevronRight className="w-3.5 h-3.5 text-stone-500" />
+          </button>
         </div>
 
-        {/* Right 1 Col: AI Layer & Digital Warranty */}
-        <div className="space-y-6">
-          {/* Layer de Agentes AI MCP Card */}
-          <div className="bg-stone-100 rounded-3xl p-6 border border-stone-200 flex flex-col gap-4 shadow-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-stone-900 rounded-full flex items-center justify-center text-[10px] text-white font-bold">
-                AI
+        {/* CARD C: Garantias Digitais & Pós-Venda (Visual Cards) */}
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-4 border-b border-stone-100 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+                  <ShieldCheck className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-stone-900">
+                    Garantia Digital
+                  </h3>
+                  <p className="text-[11px] text-stone-500">QR Codes e certificados de autenticidade</p>
+                </div>
               </div>
-              <p className="text-xs font-bold uppercase tracking-wider text-stone-800">
-                Layer de Agentes & MCP
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-xl border border-stone-200 text-xs italic leading-relaxed text-stone-700">
-              "Notei que 12 peças da coleção 'Riviera' estão paradas há 45 dias com a revendedora Ana Silva. Sugiro solicitar o recall para abastecer pedidos da Loja Virtual."
-            </div>
-            <button
-              onClick={() => onNavigateTab("aiGateway")}
-              className="w-full py-2.5 bg-stone-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-stone-800 transition-colors shadow-xs"
-            >
-              Consultar AI Copilot
-            </button>
-          </div>
-
-          {/* Digital Warranty Widget */}
-          <div className="bg-white border border-stone-200 rounded-3xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
-                Garantia Digital QR
-              </p>
               <button
                 onClick={() => onNavigateTab("warranties")}
-                className="text-xs text-stone-700 hover:text-stone-950 font-semibold"
+                className="text-xs font-bold text-amber-700 hover:text-amber-900 cursor-pointer"
               >
                 Ver Todas
               </button>
             </div>
 
-            {warranties.slice(0, 2).map((warr) => (
-              <div
-                key={warr.id}
-                className="flex items-center gap-4 p-3 rounded-2xl bg-stone-50 border border-stone-200"
-              >
-                <div className="w-14 h-14 bg-white border border-stone-200 rounded-xl flex items-center justify-center text-stone-400 shrink-0 font-bold text-xs">
-                  <QrCode className="w-7 h-7 text-stone-800" />
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-xs font-bold text-stone-900 font-mono">{warr.code}</p>
-                  <p className="text-[11px] text-stone-600 truncate">{warr.productName}</p>
-                  <p className="text-[10px] text-stone-400 mt-0.5">Cliente: {warr.customerName}</p>
-                </div>
+            {warranties.length > 0 ? (
+              <div className="space-y-3">
+                {warranties.slice(0, 3).map((warr) => (
+                  <div
+                    key={warr.id}
+                    className="p-3 bg-stone-50 hover:bg-stone-100/80 rounded-2xl border border-stone-200 flex items-center gap-3 transition-colors"
+                  >
+                    <div className="w-12 h-12 bg-white border border-stone-200 rounded-xl flex items-center justify-center text-stone-700 shrink-0">
+                      <QrCode className="w-6 h-6 text-stone-800" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-mono font-bold text-stone-900 truncate">
+                          {warr.code}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                          1 Ano
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 truncate mt-0.5">
+                        {warr.productName}
+                      </div>
+                      <div className="text-[10px] text-stone-400">
+                        Cliente: {warr.customerName}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="p-6 text-center text-stone-500 bg-stone-50 rounded-2xl border border-stone-200">
+                <ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                <p className="text-xs">Nenhum certificado emitido recentemente.</p>
+              </div>
+            )}
           </div>
+
+          <button
+            onClick={() => onNavigateTab("warranties")}
+            className="w-full mt-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <span>Emitir Nova Garantia</span>
+            <ChevronRight className="w-3.5 h-3.5 text-stone-500" />
+          </button>
         </div>
       </div>
+
+      {/* 6. Active Consignments Visual Bento Cards (No Tables) */}
+      {consignments && consignments.length > 0 && (
+        <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-stone-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-sky-50 text-sky-700">
+                  <RefreshCw className="w-4 h-4" />
+                </span>
+                <h3 className="text-xl font-serif font-bold text-stone-900">
+                  Maletas & Consignações em Andamento
+                </h3>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Cartões visuais com status de acerto, saldo vendido e prazos de devolução.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigateTab("consignments")}
+              className="text-xs font-bold text-sky-700 hover:text-sky-900 self-start sm:self-auto flex items-center gap-1 cursor-pointer"
+            >
+              <span>Ver Todas as Maletas ({consignments.length})</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {consignments.slice(0, 6).map((maleta) => {
+              const isExpiring =
+                maleta.status === "EM_ABERTO" &&
+                new Date(maleta.dueDate) <= new Date("2026-08-30");
+              const percentageSold = maleta.totalValue > 0
+                ? Math.round((maleta.soldValue / maleta.totalValue) * 100)
+                : 0;
+
+              return (
+                <div
+                  key={maleta.id}
+                  className="p-5 bg-stone-50 hover:bg-stone-100/90 border border-stone-200 rounded-2xl shadow-xs transition-all flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 text-stone-500" />
+                          <span>{maleta.resellerName}</span>
+                        </div>
+                        <div className="text-[11px] text-stone-500 mt-0.5">
+                          {maleta.resellerPhone}
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-stone-200 text-stone-700">
+                        {maleta.code}
+                      </span>
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex justify-between items-baseline text-xs mb-1">
+                        <span className="text-stone-500 font-medium">Vendido / Total:</span>
+                        <span className="font-serif font-bold text-stone-900">
+                          <strong className="text-emerald-700 font-semibold">R$ {maleta.soldValue.toFixed(2)}</strong>
+                          <span className="text-stone-400 text-[10px] font-normal font-sans"> / R$ {maleta.totalValue.toFixed(2)}</span>
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all"
+                          style={{ width: `${Math.min(percentageSold, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-stone-200/80 flex items-center justify-between text-xs">
+                    <div>
+                      {isExpiring ? (
+                        <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full text-[10px] border border-amber-200 font-bold flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Vence em {new Date(maleta.dueDate).toLocaleDateString("pt-BR")}
+                        </span>
+                      ) : maleta.status === "FINALIZADA" ? (
+                        <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                          Finalizada
+                        </span>
+                      ) : (
+                        <span className="bg-stone-200 text-stone-800 px-2 py-0.5 rounded-full text-[10px] font-medium">
+                          Ativa
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => onNavigateTab("consignments")}
+                      className="px-3 py-1 bg-white hover:bg-stone-200 border border-stone-300 text-stone-800 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    >
+                      Acertar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

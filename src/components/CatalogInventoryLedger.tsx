@@ -43,6 +43,7 @@ import {
   Upload,
   Image as ImageIcon,
   Trash2,
+  X,
   Star,
   FileImage,
   ChevronDown,
@@ -2740,101 +2741,178 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
         }}
       />
 
-      {/* Stock Adjustment Modal */}
+      {/* Stock Adjustment Modal - Ultra-Simple Drill-down with History */}
       {selectedProductForStock && (
-        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl text-stone-900">
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white border border-stone-200 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl text-stone-900 animate-scaleUp">
+            {/* Header: Title + Close */}
             <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-stone-700" />
-                <h3 className="text-base font-serif italic font-bold text-stone-900">
-                  Lançar Movimento no Ledger
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                  📦
+                </div>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-stone-900 leading-tight">
+                    {selectedProductForStock.name}
+                  </h3>
+                  <p className="text-[11px] text-stone-400 font-mono">
+                    {selectedProductForStock.sku} • {selectedProductForStock.category}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedProductForStock(null)}
-                className="text-stone-400 hover:text-stone-700 text-sm font-bold"
+                className="text-stone-400 hover:text-stone-700 p-1.5 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3 text-xs space-y-1">
-              <div className="font-bold text-stone-900">{selectedProductForStock.name}</div>
-              <div className="text-stone-500 font-mono">
-                SKU: {selectedProductForStock.sku} • Saldo Físico Atual: {selectedProductForStock.stockPhysical} un
+            {/* Big Stock Number & Progress bar */}
+            <div className="text-center py-3 bg-stone-50 rounded-2xl border border-stone-100 space-y-1">
+              <div className="text-xs text-stone-500 font-semibold uppercase tracking-wider">
+                Estoque Atual
+              </div>
+              <div className="text-5xl font-serif font-bold text-stone-900 tracking-tight">
+                {selectedProductForStock.stockPhysical}
+              </div>
+              <div className="text-[11px] text-stone-500 font-medium">
+                {selectedProductForStock.stockPhysical === 0 ? (
+                  <span className="text-rose-600 font-bold">🔴 Sem estoque</span>
+                ) : selectedProductForStock.stockPhysical <= 3 ? (
+                  <span className="text-amber-700 font-bold">🟡 Estoque baixo</span>
+                ) : (
+                  <span className="text-emerald-700 font-bold">🟢 Disponível</span>
+                )}
+                {" • "}
+                {selectedProductForStock.stockConsigned > 0 && `${selectedProductForStock.stockConsigned} em maletas • `}
+                {selectedProductForStock.stockAvailable} livres para venda
               </div>
             </div>
 
-            <form onSubmit={handleStockAdjustmentSubmit} className="space-y-3 text-xs">
+            {/* Quick Adjustment Form */}
+            <form onSubmit={handleStockAdjustmentSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block text-stone-500 mb-1 font-semibold">Tipo de Operação</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-stone-600 mb-1.5 font-bold uppercase tracking-wider text-[10px]">
+                  Operação Rápida
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setStockActionType("ADD")}
-                    className={`py-2 rounded-xl font-bold border transition-all ${
+                    onClick={() => {
+                      setStockActionType("ADD");
+                      setStockReason("Entrada de fornecedor / lote");
+                    }}
+                    className={`py-3 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                       stockActionType === "ADD"
-                        ? "bg-emerald-50 text-emerald-900 border-emerald-300 shadow-xs"
-                        : "bg-stone-50 text-stone-600 border-stone-200"
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-200"
+                        : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
                     }`}
                   >
-                    + Entrada / Compra
+                    <Plus className="w-4 h-4" />
+                    <span>+ ENTRADA</span>
                   </button>
+
                   <button
                     type="button"
-                    onClick={() => setStockActionType("SUB")}
-                    className={`py-2 rounded-xl font-bold border transition-all ${
+                    onClick={() => {
+                      setStockActionType("SUB");
+                      setStockReason("Ajuste / Venda balcão");
+                    }}
+                    className={`py-3 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                       stockActionType === "SUB"
-                        ? "bg-amber-50 text-amber-900 border-amber-300 shadow-xs"
-                        : "bg-stone-50 text-stone-600 border-stone-200"
+                        ? "bg-rose-600 text-white border-rose-600 shadow-sm ring-2 ring-rose-200"
+                        : "bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
                     }`}
                   >
-                    - Saída / Ajuste
+                    <span className="text-base font-bold leading-none">-</span>
+                    <span>- SAÍDA</span>
                   </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-stone-500 mb-1 font-semibold">Quantidade (unidades)</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={stockDelta}
-                  onChange={(e) => setStockDelta(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 font-bold focus:bg-white text-sm"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-1">
+                  <label className="block text-stone-500 mb-1 font-semibold text-[11px]">Qtd</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={stockDelta}
+                    onChange={(e) => setStockDelta(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 font-bold focus:bg-white text-center text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-stone-500 mb-1 font-semibold text-[11px]">Motivo</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Entrada fornecedor"
+                    value={stockReason}
+                    onChange={(e) => setStockReason(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 focus:bg-white text-xs"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-stone-500 mb-1 font-semibold">Motivo / Documento de Referência</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Nota Fiscal Fornecedor #4821 ou Ajuste de Inventário"
-                  value={stockReason}
-                  onChange={(e) => setStockReason(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-stone-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-stone-100 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProductForStock(null)}
-                  className="px-4 py-2 rounded-full bg-stone-100 text-stone-700 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-full bg-stone-900 text-white font-bold uppercase tracking-wider hover:bg-stone-800"
-                >
-                  Gravar no Ledger
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-stone-900 text-white font-bold uppercase tracking-wider hover:bg-stone-800 transition-all cursor-pointer shadow-xs text-xs"
+              >
+                Confirmar Ajuste
+              </button>
             </form>
+
+            {/* Recent Product Movements History */}
+            <div className="space-y-2 pt-2 border-t border-stone-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1">
+                  <History className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Histórico da Peça</span>
+                </span>
+                <span className="text-[10px] text-stone-400">Últimos eventos</span>
+              </div>
+
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {ledger
+                  .filter(
+                    (m) =>
+                      m.productId === selectedProductForStock.id ||
+                      m.sku === selectedProductForStock.sku
+                  )
+                  .slice(0, 5)
+                  .map((mov) => (
+                    <div
+                      key={mov.id}
+                      className="flex items-center justify-between p-2 rounded-xl bg-stone-50 border border-stone-100 text-[11px]"
+                    >
+                      <div className="truncate mr-2">
+                        <span className="font-semibold text-stone-800 block truncate">
+                          {mov.reason || mov.type}
+                        </span>
+                        <span className="text-[10px] text-stone-400">{mov.timestamp}</span>
+                      </div>
+                      <span
+                        className={`font-mono font-bold shrink-0 text-xs ${
+                          mov.qtyChange > 0 ? "text-emerald-700" : "text-rose-700"
+                        }`}
+                      >
+                        {mov.qtyChange > 0 ? `+${mov.qtyChange}` : mov.qtyChange} un
+                      </span>
+                    </div>
+                  ))}
+                {ledger.filter(
+                  (m) =>
+                    m.productId === selectedProductForStock.id ||
+                    m.sku === selectedProductForStock.sku
+                ).length === 0 && (
+                  <div className="text-center py-3 text-stone-400 text-xs italic">
+                    Sem movimentações registradas ainda.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

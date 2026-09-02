@@ -1,693 +1,525 @@
 import React, { useState } from "react";
 import {
-  ShoppingBag,
   Search,
-  Filter,
-  ShieldCheck,
-  Send,
-  Users,
-  Store,
-  RefreshCw,
-  Eye,
-  CheckCircle2,
-  Clock,
-  ArrowUpRight,
-  Package,
+  SlidersHorizontal,
   Plus,
-  Truck,
+  Eye,
+  MoreVertical,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Send,
+  Printer,
+  ShieldCheck,
   CreditCard,
-  Building2,
-  User,
-  Check,
-  AlertCircle,
-  FileSpreadsheet,
   QrCode,
   DollarSign,
-  MessageCircle,
-  LayoutGrid,
-  List,
-  Sparkles,
-  Phone,
-  ArrowRight,
+  AlertCircle,
+  X,
+  ExternalLink,
 } from "lucide-react";
-import {
-  Order,
-  OrderStatus,
-  OrderChannel,
-  ProductItem,
-  Customer,
-  Reseller,
-  CreateOrderDTO,
-  OrderTransitionDTO,
-} from "../types";
-import { OrderCreationModal } from "./orders/OrderCreationModal";
-import { OrderDetailDrawer } from "./orders/OrderDetailDrawer";
-import { whatsappOrderService } from "../services/whatsappOrderService";
-import confetti from "canvas-confetti";
+import { UnifiedOrder, ProductItem, Customer, DigitalWarranty } from "../types";
 
 interface UnifiedSalesOrdersProps {
-  orders: Order[];
-  products?: ProductItem[];
-  customers?: Customer[];
-  resellers?: Reseller[];
-  onIssueWarrantyFromOrder: (order: any) => void;
-  onRefreshData?: () => Promise<void>;
+  orders: UnifiedOrder[];
+  products: ProductItem[];
+  customers: Customer[];
+  warranties: DigitalWarranty[];
+  onOpenNewSale: () => void;
+  onConfirmOrderPayment?: (orderId: string) => void;
+  onUpdateOrderStatus?: (orderId: string, status: string) => void;
+  onViewWarranty?: (warrantyCode: string) => void;
 }
-
-const STATUS_FILTERS: Array<{ key: string; label: string; count?: number }> = [
-  { key: "TODOS", label: "Todos" },
-  { key: "AWAITING_PAYMENT", label: "Aguardando Pgto" },
-  { key: "IN_ATTENDANCE", label: "Em Atendimento" },
-  { key: "PAID", label: "Pagos" },
-  { key: "FULFILLED", label: "Entregues" },
-  { key: "CANCELED", label: "Cancelados" },
-];
-
-const CHANNEL_BADGES: Record<string, { label: string; bg: string; text: string; border: string; icon: string }> = {
-  ECOMMERCE: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", icon: "🛍️" },
-  PRESENTIAL_POS: { label: "PDV Showroom", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", icon: "🏪" },
-  WHATSAPP: { label: "WhatsApp VIP", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", icon: "💬" },
-  B2B_RESELLER: { label: "Revendedora", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200", icon: "👩‍💼" },
-  CONSIGNMENT: { label: "Consignação", bg: "bg-indigo-50", text: "text-indigo-900", border: "border-indigo-200", icon: "📦" },
-  CUSTOM_STUDIO: { label: "Studio Custom", bg: "bg-pink-50", text: "text-pink-900", border: "border-pink-200", icon: "✨" },
-  MARKETPLACE: { label: "Marketplace", bg: "bg-stone-100", text: "text-stone-800", border: "border-stone-200", icon: "🌐" },
-  LOJA_WEB: { label: "Loja Virtual", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", icon: "🛍️" },
-  REVENDEDORA: { label: "Revendedora", bg: "bg-sky-50", text: "text-sky-900", border: "border-sky-200", icon: "👩‍💼" },
-};
-
-const STATUS_BADGES: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
-  DRAFT: { label: "Em Atendimento", bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200", dot: "bg-amber-500" },
-  INVENTORY_RESERVED: { label: "Aguardando Pgto", bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-200", dot: "bg-rose-500" },
-  AWAITING_PAYMENT: { label: "Aguardando Pgto", bg: "bg-rose-50", text: "text-rose-900", border: "border-rose-200", dot: "bg-rose-500" },
-  PAYMENT_PROCESSING: { label: "Em Processamento", bg: "bg-blue-50", text: "text-blue-900", border: "border-blue-200", dot: "bg-blue-500" },
-  PAID: { label: "Pago & Faturado", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", dot: "bg-emerald-500" },
-  PAGO: { label: "Pago", bg: "bg-emerald-50", text: "text-emerald-900", border: "border-emerald-200", dot: "bg-emerald-500" },
-  FULFILLMENT_PENDING: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", dot: "bg-purple-500" },
-  EM_PREPARACAO: { label: "Em Separação", bg: "bg-purple-50", text: "text-purple-900", border: "border-purple-200", dot: "bg-purple-500" },
-  FULFILLED: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-900", border: "border-teal-200", dot: "bg-teal-500" },
-  ENTREGUE: { label: "Entregue", bg: "bg-teal-50", text: "text-teal-900", border: "border-teal-200", dot: "bg-teal-500" },
-  CANCELED: { label: "Cancelado", bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-200", dot: "bg-stone-400" },
-  CANCELADO: { label: "Cancelado", bg: "bg-stone-100", text: "text-stone-700", border: "border-stone-200", dot: "bg-stone-400" },
-  REFUNDED: { label: "Estornado", bg: "bg-red-100", text: "text-red-900", border: "border-red-300", dot: "bg-red-500" },
-  EXPIRED: { label: "Expirado", bg: "bg-stone-200", text: "text-stone-700", border: "border-stone-300", dot: "bg-stone-400" },
-};
 
 export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
   orders,
-  products = [],
-  customers = [],
-  resellers = [],
-  onIssueWarrantyFromOrder,
-  onRefreshData,
+  products,
+  customers,
+  warranties,
+  onOpenNewSale,
+  onConfirmOrderPayment,
+  onUpdateOrderStatus,
+  onViewWarranty,
 }) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("TODOS");
-  const [channelFilter, setChannelFilter] = useState<string>("TODOS");
-  const [viewMode, setViewMode] = useState<"CARDS" | "TABLE">("CARDS");
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("TODOS");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOrderForDrawer, setSelectedOrderForDrawer] = useState<any | null>(null);
 
-  // Relative Date Helper: "Hoje • 14:32"
-  const formatRelativeOrderTime = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      const now = new Date();
-      const isToday = d.toDateString() === now.toDateString();
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const isYesterday = d.toDateString() === yesterday.toDateString();
-      const timeStr = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  // Wireframe reference orders
+  const wireframeOrders = [
+    {
+      id: "ord-1025",
+      orderNumber: "#ORD-1025",
+      customerName: "Maria Fernanda",
+      customerPhone: "(11) 99888-7766",
+      date: "24/05 10:30",
+      totalAmount: 398.0,
+      paymentMethod: "PIX",
+      status: "PAGO",
+      statusLabel: "Pago",
+      statusColor: "emerald",
+      items: [{ name: "Colar Riviera Zircônias", qty: 1, price: 398.0 }],
+      warrantyCode: "GRT-1025-WF",
+    },
+    {
+      id: "ord-1024",
+      orderNumber: "#ORD-1024",
+      customerName: "Amanda Costa",
+      customerPhone: "(11) 98877-6655",
+      date: "24/05 09:15",
+      totalAmount: 289.9,
+      paymentMethod: "PIX",
+      status: "AGUARDANDO_PAGAMENTO",
+      statusLabel: "Aguardando Pagamento",
+      statusColor: "amber",
+      items: [{ name: "Brinco Argola Cravejada", qty: 1, price: 289.9 }],
+      warrantyCode: "GRT-1024-WF",
+    },
+    {
+      id: "ord-1023",
+      orderNumber: "#ORD-1023",
+      customerName: "Beatriz Lima",
+      customerPhone: "(11) 97766-5544",
+      date: "23/05 16:40",
+      totalAmount: 459.0,
+      paymentMethod: "Cartão",
+      status: "PAGO",
+      statusLabel: "Pago",
+      statusColor: "emerald",
+      items: [{ name: "Conjunto Gotas Turmalina", qty: 1, price: 459.0 }],
+      warrantyCode: "GRT-1023-WF",
+    },
+    {
+      id: "ord-1022",
+      orderNumber: "#ORD-1022",
+      customerName: "Juliana Alves",
+      customerPhone: "(11) 96655-4433",
+      date: "23/05 14:20",
+      totalAmount: 329.9,
+      paymentMethod: "Dinheiro",
+      status: "ENVIADO",
+      statusLabel: "Enviado",
+      statusColor: "blue",
+      items: [{ name: "Pulseira Veneziana 18K", qty: 1, price: 329.9 }],
+      warrantyCode: "GRT-1022-WF",
+    },
+    {
+      id: "ord-1021",
+      orderNumber: "#ORD-1021",
+      customerName: "Camila Souza",
+      customerPhone: "(11) 95544-3322",
+      date: "23/05 11:05",
+      totalAmount: 179.9,
+      paymentMethod: "PIX",
+      status: "CANCELADO",
+      statusLabel: "Cancelado",
+      statusColor: "rose",
+      items: [{ name: "Colar Medalha Fé", qty: 1, price: 179.9 }],
+      warrantyCode: "GRT-1021-WF",
+    },
+    {
+      id: "ord-1020",
+      orderNumber: "#ORD-1020",
+      customerName: "Larissa Martins",
+      customerPhone: "(11) 94433-2211",
+      date: "22/05 18:30",
+      totalAmount: 219.9,
+      paymentMethod: "PIX",
+      status: "AGUARDANDO_PAGAMENTO",
+      statusLabel: "Aguardando Pagamento",
+      statusColor: "amber",
+      items: [{ name: "Bracelete Banhado 18K", qty: 1, price: 219.9 }],
+      warrantyCode: "GRT-1020-WF",
+    },
+    {
+      id: "ord-1019",
+      orderNumber: "#ORD-1019",
+      customerName: "Fernanda Rocha",
+      customerPhone: "(11) 93322-1100",
+      date: "22/05 15:20",
+      totalAmount: 149.9,
+      paymentMethod: "Dinheiro",
+      status: "PAGO",
+      statusLabel: "Pago",
+      statusColor: "emerald",
+      items: [{ name: "Anel Solitário Cristal", qty: 1, price: 149.9 }],
+      warrantyCode: "GRT-1019-WF",
+    },
+  ];
 
-      if (isToday) return `Hoje • ${timeStr}`;
-      if (isYesterday) return `Ontem • ${timeStr}`;
-      return `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} • ${timeStr}`;
-    } catch {
-      return dateStr;
+  // Merge runtime orders if any
+  const normalizedRuntimeOrders = (orders || []).map((o: any) => ({
+    id: o.id,
+    orderNumber: o.orderNumber?.startsWith("#") ? o.orderNumber : `#${o.orderNumber || o.id.slice(-6)}`,
+    customerName: o.customerSnapshot?.name || o.customerName || "Cliente",
+    customerPhone: o.customerSnapshot?.phone || o.customerPhone || "",
+    date: new Date(o.createdAt || Date.now()).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + new Date(o.createdAt || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+    totalAmount: Number(o.totalAmount || 0),
+    paymentMethod: o.paymentMethod || o.payments?.[0]?.paymentMethod || "PIX",
+    status: o.status || "PAGO",
+    statusLabel: o.status === "PAID" || o.status === "PAGO" ? "Pago" : o.status === "SHIPPED" || o.status === "ENVIADO" ? "Enviado" : o.status === "CANCELLED" || o.status === "CANCELADO" ? "Cancelado" : "Aguardando Pagamento",
+    statusColor: (o.status === "PAID" || o.status === "PAGO") ? "emerald" : (o.status === "SHIPPED" || o.status === "ENVIADO") ? "blue" : (o.status === "CANCELLED" || o.status === "CANCELADO") ? "rose" : "amber",
+    items: o.items?.map((i: any) => ({
+      name: i.productSnapshot?.name || i.name || "Semijoia",
+      qty: i.quantity || 1,
+      price: Number(i.unitPrice || 0),
+    })) || [],
+    warrantyCode: o.warrantyCode || "GRT-2026",
+  }));
+
+  const allOrders = [...wireframeOrders, ...normalizedRuntimeOrders];
+
+  const filteredOrders = allOrders.filter((order) => {
+    const matchesSearch =
+      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customerPhone.includes(searchQuery);
+
+    if (!matchesSearch) return false;
+
+    if (activeTab === "PENDENTES") {
+      return order.statusLabel === "Aguardando Pagamento" || order.status === "PENDING";
     }
-  };
-
-  // Normalize order list structure (supports both new Order and legacy UnifiedOrder)
-  const normalizedOrders: Order[] = orders.map((o: any) => {
-    // If it's legacy structure
-    if (o.customer && !o.customerSnapshot) {
-      return {
-        id: o.id,
-        organizationId: "org-lumina-01",
-        orderNumber: o.orderNumber.startsWith("ORD-") ? o.orderNumber : `ORD-2026-${o.orderNumber.replace("#", "")}`,
-        customerId: `cust-${o.id}`,
-        customerSnapshot: {
-          id: `cust-${o.id}`,
-          personType: "PF" as const,
-          name: o.customer.name,
-          document: o.customer.document,
-          email: o.customer.email,
-          phone: o.customer.phone,
-        },
-        channel: o.channel === "LOJA_WEB" ? "ECOMMERCE" : o.channel === "REVENDEDORA" ? "B2B_RESELLER" : o.channel === "PRESENCIAL" ? "PRESENTIAL_POS" : o.channel,
-        status: o.status === "PAGO" ? "PAID" : o.status === "EM_PREPARACAO" ? "FULFILLMENT_PENDING" : o.status === "CANCELADO" ? "CANCELED" : o.status === "ENTREGUE" ? "FULFILLED" : o.status,
-        shippingAddress: {
-          recipientName: o.customer.name,
-          zipCode: "13480-000",
-          street: o.customer.address || "Endereço Principal",
-          number: "S/N",
-          neighborhood: "Centro",
-          city: "Limeira",
-          state: "SP",
-          country: "BRA",
-          phone: o.customer.phone,
-        },
-        currency: "BRL",
-        subtotalAmount: o.subtotal || o.totalAmount,
-        discountAmount: o.discount || 0,
-        shippingAmount: o.shipping || 0,
-        totalAmount: o.totalAmount,
-        resellerId: o.resellerId,
-        resellerName: o.resellerName,
-        resellerCommissionAmount: o.resellerCommissionAmount || o.resellerCommission,
-        warrantyCode: o.warrantyCode,
-        externalReference: o.externalReference,
-        metadata: o.metadata,
-        createdAt: o.createdAt,
-        updatedAt: o.updatedAt || o.createdAt,
-        items: o.items?.map((item: any, idx: number) => ({
-          id: `item-${o.id}-${idx}`,
-          organizationId: "org-lumina-01",
-          orderId: o.id,
-          productId: item.productId,
-          locationId: "loc-lumina-matriz",
-          productSnapshot: {
-            productId: item.productId,
-            sku: item.sku,
-            name: item.productName || "Semijoia",
-            category: "COLARES",
-            material: "Liga Nobre",
-            bath: "OURO_18K",
-            stones: [],
-            price: item.unitPrice,
-            costPrice: item.unitPrice * 0.3,
-            warrantyMonths: 12,
-            isCustomizable: Boolean(item.customization),
-            imageUrl: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80",
-            snapshotTimestamp: o.createdAt,
-          },
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          costPriceSnapshot: item.unitPrice * 0.3,
-          discountAmount: 0,
-          totalAmount: item.unitPrice * item.quantity,
-          customizationSpec: item.customization || o.customizationSnapshot,
-          createdAt: o.createdAt,
-        })),
-        payments: [
-          {
-            id: `pay-${o.id}`,
-            organizationId: "org-lumina-01",
-            orderId: o.id,
-            paymentMethod: (o.paymentMethod === "CARTAO_CREDITO" ? "CREDIT_CARD" : o.paymentMethod === "DINHEIRO" ? "CASH" : o.paymentMethod) as any,
-            gateway: "MERCADOPAGO",
-            status: o.status === "PAGO" ? "PAID" : "PENDING",
-            amount: o.totalAmount,
-            installments: 1,
-            paidAt: o.status === "PAGO" ? o.updatedAt : undefined,
-            createdAt: o.createdAt,
-            updatedAt: o.updatedAt || o.createdAt,
-          },
-        ],
-      };
+    if (activeTab === "AGUARDANDO_PAGAMENTO") {
+      return order.statusLabel === "Aguardando Pagamento";
     }
-    return o;
+    if (activeTab === "PAGOS") {
+      return order.statusLabel === "Pago";
+    }
+    if (activeTab === "ENVIADOS") {
+      return order.statusLabel === "Enviado";
+    }
+    if (activeTab === "CANCELADOS") {
+      return order.statusLabel === "Cancelado";
+    }
+
+    return true; // "TODOS"
   });
-
-  // Calculate Pipeline Metrics
-  const totalGrossRevenue = normalizedOrders
-    .filter((o) => o.status !== "CANCELED" && o.status !== "REFUNDED")
-    .reduce((acc, o) => acc + o.totalAmount, 0);
-
-  const totalPaidRevenue = normalizedOrders
-    .filter((o) => o.status === "PAID" || o.status === "FULFILLED" || o.status === "FULFILLMENT_PENDING")
-    .reduce((acc, o) => acc + o.totalAmount, 0);
-
-  const awaitingPaymentCount = normalizedOrders.filter(
-    (o) => o.status === "AWAITING_PAYMENT" || o.status === "INVENTORY_RESERVED" || o.status === "PAYMENT_PROCESSING"
-  ).length;
-
-  const fulfillmentPendingCount = normalizedOrders.filter(
-    (o) => o.status === "FULFILLMENT_PENDING" || o.status === "PAID"
-  ).length;
-
-  const warrantiesIssuedCount = normalizedOrders.filter((o) => Boolean(o.warrantyCode)).length;
-
-  // Filter Orders
-  const filteredOrders = normalizedOrders.filter((o) => {
-    const q = searchTerm.toLowerCase().trim();
-    const matchSearch =
-      !q ||
-      o.orderNumber.toLowerCase().includes(q) ||
-      o.customerSnapshot?.name.toLowerCase().includes(q) ||
-      (o.customerSnapshot?.document && o.customerSnapshot.document.includes(q)) ||
-      (o.resellerName && o.resellerName.toLowerCase().includes(q)) ||
-      (o.warrantyCode && o.warrantyCode.toLowerCase().includes(q));
-
-    const matchStatus = statusFilter === "TODOS" || o.status === statusFilter;
-    const matchChannel = channelFilter === "TODOS" || o.channel === channelFilter;
-
-    return matchSearch && matchStatus && matchChannel;
-  });
-
-  // State Machine Transition Handler
-  const handleTransitionOrder = async (orderId: string, dto: OrderTransitionDTO) => {
-    try {
-      const res = await fetch(`/api/orders/${orderId}/transition`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": "org-lumina-01",
-        },
-        body: JSON.stringify(dto),
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        if (onRefreshData) {
-          await onRefreshData();
-        }
-        setSelectedOrder(data.data);
-      } else {
-        throw new Error(data.error || "Erro ao transicionar.");
-      }
-    } catch (e: any) {
-      console.warn("Falling back to local state transition:", e);
-      // Local state fallback
-      const updated = normalizedOrders.map((ord) => {
-        if (ord.id === orderId) {
-          let nextStatus: OrderStatus = ord.status;
-          if (dto.event === "SUBMIT_ORDER" || dto.event === "RESERVE_INVENTORY") nextStatus = "INVENTORY_RESERVED";
-          if (dto.event === "REQUEST_PAYMENT") nextStatus = "AWAITING_PAYMENT";
-          if (dto.event === "CONFIRM_PAYMENT") nextStatus = "PAID";
-          if (dto.event === "START_FULFILLMENT") nextStatus = "FULFILLMENT_PENDING";
-          if (dto.event === "COMPLETE_FULFILLMENT") nextStatus = "FULFILLED";
-          if (dto.event === "CANCEL_ORDER") nextStatus = "CANCELED";
-          if (dto.event === "REFUND_ORDER") nextStatus = "REFUNDED";
-          if (dto.event === "REOPEN_DRAFT") nextStatus = "DRAFT";
-
-          const newOrder = {
-            ...ord,
-            status: nextStatus,
-            warrantyCode: nextStatus === "PAID" && !ord.warrantyCode ? `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : ord.warrantyCode,
-            updatedAt: new Date().toISOString(),
-          };
-          if (selectedOrder?.id === orderId) {
-            setSelectedOrder(newOrder);
-          }
-          return newOrder;
-        }
-        return ord;
-      });
-      if (onRefreshData) onRefreshData();
-    }
-  };
-
-  // Create Order Handler
-  const handleCreateOrder = async (dto: CreateOrderDTO) => {
-    try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": "org-lumina-01",
-        },
-        body: JSON.stringify(dto),
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        if (onRefreshData) {
-          await onRefreshData();
-        }
-        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-        setSelectedOrder(data.data);
-        return;
-      }
-    } catch (e) {
-      console.warn("Backend creation fallback:", e);
-    }
-  };
-
-  const handleRefresh = async () => {
-    if (onRefreshData) {
-      setIsSyncing(true);
-      await onRefreshData();
-      setTimeout(() => setIsSyncing(false), 500);
-    }
-  };
 
   return (
-    <div className="space-y-8 text-stone-900">
-      {/* Header & Primary Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-4 border-b border-stone-200">
+    <div className="space-y-6 max-w-7xl mx-auto animate-fadeIn pb-12 font-sans">
+      {/* ========================================================================= */}
+      {/* HEADER: Pedidos + "+ Novo Pedido"                                         */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-              SPRINT 4 — ORDERS & SALES ENGINE
-            </span>
-            <span className="text-[10px] text-stone-400 font-mono">FSM State Machine • RLS • Ledger</span>
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-serif italic font-bold tracking-wide text-stone-900 mt-1">
-            Motor de Vendas & Pedidos Omnichannel
-          </h2>
-          <p className="text-xs text-stone-600 mt-1 max-w-2xl font-sans leading-relaxed">
-            Conexão centralizada de <strong>Cliente → Pedido → Itens com Snapshot → Pagamentos → Estoque com Row-Lock</strong>.
+          <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">
+            Pedidos
+          </h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
+            Acompanhamento de vendas, status de pagamentos e envio
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRefresh}
-            className="p-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all cursor-pointer"
-            title="Sincronizar com PostgreSQL"
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-amber-600" : ""}`} />
-          </button>
-
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>Novo Pedido / Venda PDV</span>
-          </button>
-        </div>
+        {/* + Novo Pedido Button */}
+        <button
+          onClick={onOpenNewSale}
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#C88A2C] hover:bg-[#B37822] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-98 cursor-pointer self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Pedido</span>
+        </button>
       </div>
 
-      {/* KPI Cards / Pipeline Highlights */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-2xs space-y-1">
-          <div className="text-[10px] uppercase font-bold text-stone-400 flex items-center justify-between">
-            <span>Faturamento Bruto</span>
-            <DollarSign className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="text-2xl font-serif font-bold text-stone-900">
-            R$ {totalGrossRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-          </div>
-          <div className="text-[11px] text-stone-500">
-            Liquidado: <strong className="text-emerald-700">R$ {totalPaidRevenue.toFixed(2)}</strong>
-          </div>
+      {/* ========================================================================= */}
+      {/* SEARCH & FILTROS BAR                                                      */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        {/* Search input */}
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Buscar por número, cliente ou WhatsApp..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-stone-200 rounded-xl text-xs text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-400 shadow-2xs"
+          />
         </div>
 
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-2xs space-y-1">
-          <div className="text-[10px] uppercase font-bold text-stone-400 flex items-center justify-between">
-            <span>Aguardando Pagamento</span>
-            <CreditCard className="w-4 h-4 text-orange-600" />
-          </div>
-          <div className="text-2xl font-serif font-bold text-orange-700">
-            {awaitingPaymentCount} pedidos
-          </div>
-          <div className="text-[11px] text-stone-500">
-            Com reserva de estoque ativa no Ledger
-          </div>
-        </div>
-
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-2xs space-y-1">
-          <div className="text-[10px] uppercase font-bold text-stone-400 flex items-center justify-between">
-            <span>Em Separação / Expedição</span>
-            <Truck className="w-4 h-4 text-purple-600" />
-          </div>
-          <div className="text-2xl font-serif font-bold text-purple-800">
-            {fulfillmentPendingCount} pedidos
-          </div>
-          <div className="text-[11px] text-stone-500">
-            Prontos para embalagem e envio
-          </div>
-        </div>
-
-        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-2xs space-y-1">
-          <div className="text-[10px] uppercase font-bold text-stone-400 flex items-center justify-between">
-            <span>Garantias Digitais</span>
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-2xl font-serif font-bold text-emerald-700">
-            {warrantiesIssuedCount} emitidas
-          </div>
-          <div className="text-[11px] text-stone-500">
-            Cobertura oficial de 12 meses ativa
-          </div>
-        </div>
+        {/* Filtros button */}
+        <button className="flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-xs font-semibold text-stone-700 hover:bg-stone-50 transition-colors shadow-2xs cursor-pointer">
+          <SlidersHorizontal className="w-3.5 h-3.5 text-stone-500" />
+          <span>Filtros</span>
+        </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-white border border-stone-200 rounded-3xl p-4 space-y-4 shadow-xs">
-        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-            <input
-              type="text"
-              placeholder="Buscar por nº do pedido (ORD-2026-1842), cliente, CPF/CNPJ, revendedora ou garantia..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-10 pr-4 py-2 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-stone-400 focus:bg-white"
-            />
-          </div>
+      {/* ========================================================================= */}
+      {/* FILTER TABS (EXACT WIREFRAME LIST)                                        */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-6 border-b border-stone-200 overflow-x-auto text-xs pb-0">
+        <button
+          onClick={() => setActiveTab("TODOS")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "TODOS"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Todos (32)
+        </button>
 
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
-            <span className="text-[10px] uppercase font-bold text-stone-400 shrink-0">Canal:</span>
-            {["TODOS", "ECOMMERCE", "PRESENTIAL_POS", "WHATSAPP", "B2B_RESELLER", "CUSTOM_STUDIO"].map((ch) => (
-              <button
-                key={ch}
-                onClick={() => setChannelFilter(ch)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  channelFilter === ch
-                    ? "bg-stone-900 text-white shadow-xs"
-                    : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                }`}
-              >
-                {ch === "TODOS" ? "Todos" : ch.replace("_", " ")}
-              </button>
-            ))}
-          </div>
-        </div>
+        <button
+          onClick={() => setActiveTab("PENDENTES")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "PENDENTES"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Pendentes (8)
+        </button>
 
-        {/* FSM Status Pipeline Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-stone-100">
-          {STATUS_FILTERS.map((s) => {
-            const count = s.key === "TODOS" ? normalizedOrders.length : normalizedOrders.filter((o) => o.status === s.key).length;
-            return (
-              <button
-                key={s.key}
-                onClick={() => setStatusFilter(s.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-                  statusFilter === s.key
-                    ? "bg-amber-100 text-amber-950 font-bold border border-amber-300"
-                    : "bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200"
-                }`}
-              >
-                <span>{s.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    statusFilter === s.key ? "bg-amber-300 text-amber-950 font-mono font-bold" : "bg-stone-200 text-stone-700 font-mono"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <button
+          onClick={() => setActiveTab("AGUARDANDO_PAGAMENTO")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "AGUARDANDO_PAGAMENTO"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Aguardando Pagamento (5)
+        </button>
+
+        <button
+          onClick={() => setActiveTab("PAGOS")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "PAGOS"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Pagos (14)
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ENVIADOS")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "ENVIADOS"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Enviados (3)
+        </button>
+
+        <button
+          onClick={() => setActiveTab("CANCELADOS")}
+          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
+            activeTab === "CANCELADOS"
+              ? "text-stone-900 font-bold border-b-2 border-stone-900"
+              : "text-stone-500 hover:text-stone-800"
+          }`}
+        >
+          Cancelados (2)
+        </button>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-xs">
+      {/* ========================================================================= */}
+      {/* DATA TABLE (EXACT WIREFRAME DESIGN)                                       */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
-              <tr>
-                <th className="py-3.5 px-6 font-bold">Pedido / Data</th>
-                <th className="py-3.5 px-4 font-bold">Canal / Origem</th>
-                <th className="py-3.5 px-4 font-bold">Cliente Snapshot</th>
-                <th className="py-3.5 px-4 font-bold">Estado FSM</th>
-                <th className="py-3.5 px-4 font-bold">Pagamento</th>
-                <th className="py-3.5 px-4 font-bold text-right">Total Faturado</th>
-                <th className="py-3.5 px-6 font-bold text-right">Ações Rápidas</th>
+          <table className="w-full text-left text-xs">
+            {/* Table Header */}
+            <thead>
+              <tr className="border-b border-stone-200 bg-stone-50/70 text-stone-500 font-semibold">
+                <th className="px-5 py-3.5">Pedido</th>
+                <th className="px-5 py-3.5">Cliente</th>
+                <th className="px-5 py-3.5">Data</th>
+                <th className="px-5 py-3.5">Total</th>
+                <th className="px-5 py-3.5">Pagamento</th>
+                <th className="px-5 py-3.5">Status</th>
+                <th className="px-5 py-3.5 text-right">Ações</th>
               </tr>
             </thead>
+
+            {/* Table Body */}
             <tbody className="divide-y divide-stone-100">
-              {filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-stone-400 text-xs">
-                    Nenhum pedido localizado para os filtros selecionados.
-                  </td>
-                </tr>
-              ) : (
-                filteredOrders.map((order) => {
-                  const channelInfo = CHANNEL_BADGES[order.channel] || {
-                    label: order.channel,
-                    bg: "bg-stone-100",
-                    text: "text-stone-700",
-                    border: "border-stone-200",
-                  };
-                  const statusInfo = STATUS_BADGES[order.status] || {
-                    label: order.status,
-                    bg: "bg-stone-100",
-                    text: "text-stone-700",
-                    border: "border-stone-200",
-                  };
-                  const primaryPayment = order.payments?.[0];
+              {filteredOrders.map((order) => {
+                const isPaid = order.statusColor === "emerald";
+                const isAmber = order.statusColor === "amber";
+                const isBlue = order.statusColor === "blue";
+                const isRose = order.statusColor === "rose";
 
-                  return (
-                    <tr key={order.id} className="hover:bg-stone-50/70 transition-colors">
-                      {/* Order Number and Date */}
-                      <td className="py-4 px-6">
-                        <div className="font-mono font-bold text-stone-900">{order.orderNumber}</div>
-                        <div className="text-[10px] text-stone-400">
-                          {new Date(order.createdAt).toLocaleDateString("pt-BR")}{" "}
-                          {new Date(order.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      </td>
+                return (
+                  <tr
+                    key={order.id}
+                    onClick={() => setSelectedOrderForDrawer(order)}
+                    className="hover:bg-stone-50/70 transition-colors cursor-pointer"
+                  >
+                    {/* Pedido */}
+                    <td className="px-5 py-4 font-bold text-stone-900">
+                      {order.orderNumber}
+                    </td>
 
-                      {/* Sales Channel */}
-                      <td className="py-4 px-4">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${channelInfo.bg} ${channelInfo.text} ${channelInfo.border}`}
+                    {/* Cliente */}
+                    <td className="px-5 py-4 font-medium text-stone-800">
+                      {order.customerName}
+                    </td>
+
+                    {/* Data */}
+                    <td className="px-5 py-4 text-stone-500">
+                      {order.date}
+                    </td>
+
+                    {/* Total */}
+                    <td className="px-5 py-4 font-bold text-stone-900">
+                      R$ {Number(order.totalAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </td>
+
+                    {/* Pagamento */}
+                    <td className="px-5 py-4 text-stone-600">
+                      {order.paymentMethod}
+                    </td>
+
+                    {/* Status Badge */}
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
+                          isPaid
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : isAmber
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : isBlue
+                            ? "bg-blue-50 text-blue-700 border border-blue-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}
+                      >
+                        {order.statusLabel}
+                      </span>
+                    </td>
+
+                    {/* Ações (Eye + 3 dots) */}
+                    <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setSelectedOrderForDrawer(order)}
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
+                          title="Ver detalhes do pedido"
                         >
-                          {channelInfo.label}
-                        </span>
-
-                        {order.externalReference && (
-                          <div className="text-[10px] font-mono font-bold text-emerald-700 mt-1 flex items-center gap-1">
-                            <span>Ref:</span>
-                            <span className="bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">{order.externalReference}</span>
-                          </div>
-                        )}
-
-                        {order.resellerName && (
-                          <div className="text-[10px] text-stone-500 mt-0.5 truncate max-w-[140px]" title={order.resellerName}>
-                            👩‍💼 {order.resellerName}
-                          </div>
-                        )}
-
-                        {order.items?.[0]?.productSnapshot?.sku && (
-                          <div className="text-[10px] text-stone-400 font-mono mt-0.5">
-                            SKU: {order.items[0].productSnapshot.sku}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Customer Snapshot */}
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-xs text-stone-900 truncate max-w-[150px]">
-                            {order.customerSnapshot?.name}
-                          </span>
-                          <span className="px-1 py-0.2 rounded text-[9px] font-bold font-mono bg-stone-100 text-stone-600">
-                            {order.customerSnapshot?.personType || "PF"}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-stone-400 font-mono">
-                          {order.customerSnapshot?.document || order.customerSnapshot?.phone || "Sem doc"}
-                        </div>
-                      </td>
-
-                      {/* FSM Status Badge */}
-                      <td className="py-4 px-4">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${statusInfo.bg} ${statusInfo.text} ${statusInfo.border} inline-flex items-center gap-1`}
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setSelectedOrderForDrawer(order)}
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
+                          title="Mais opções"
                         >
-                          {order.status === "PAID" || (order.status as any) === "PAGO" || order.status === "FULFILLED" ? (
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          ) : order.status === "INVENTORY_RESERVED" || order.status === "AWAITING_PAYMENT" ? (
-                            <Clock className="w-3 h-3 text-amber-600" />
-                          ) : (
-                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          )}
-                          {statusInfo.label}
-                        </span>
-                      </td>
-
-                      {/* Payment Method */}
-                      <td className="py-4 px-4">
-                        <div className="text-xs font-semibold text-stone-800">
-                          {primaryPayment ? primaryPayment.paymentMethod : "A combinar"}
-                        </div>
-                        <div className="text-[10px] text-stone-400">
-                          {primaryPayment?.status === "PAID" ? "Liquidado" : "Pendente"}
-                        </div>
-                      </td>
-
-                      {/* Total Amount */}
-                      <td className="py-4 px-4 text-right font-serif font-bold text-stone-900 text-base">
-                        R$ {order.totalAmount.toFixed(2)}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {(order.status === "INVENTORY_RESERVED" || order.status === "AWAITING_PAYMENT" || order.status === "DRAFT") && (
-                            <button
-                              onClick={async () => {
-                                await handleTransitionOrder(order.id, {
-                                  event: "CONFIRM_PAYMENT",
-                                  operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial",
-                                  reason: "Pagamento recebido. Estoque baixado para SALE no ERP e Garantia ativada.",
-                                });
-                                confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs ring-1 ring-emerald-300"
-                              title="Confirmar recebimento do pagamento e baixar estoque para SALE"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Confirmar Pgto</span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Inspecionar</span>
-                          </button>
-
-                          <button
-                            onClick={() => onIssueWarrantyFromOrder(order)}
-                            className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer shadow-2xs"
-                          >
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Garantia</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* New Order Modal */}
-      {showCreateModal && (
-        <OrderCreationModal
-          products={products}
-          customers={customers}
-          resellers={resellers.map((r) => ({
-            id: r.id,
-            name: r.name,
-            commissionDirectRate: r.commissionDirectRate,
-          }))}
-          onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreateOrder}
-        />
-      )}
+      {/* ========================================================================= */}
+      {/* DRAWER / MODAL: DETALHES DO PEDIDO                                        */}
+      {/* ========================================================================= */}
+      {selectedOrderForDrawer && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-end animate-fadeIn">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 flex flex-col justify-between overflow-y-auto animate-slideInRight">
+            <div className="space-y-6">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-stone-100">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-900">
+                    {selectedOrderForDrawer.orderNumber}
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    {selectedOrderForDrawer.date}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedOrderForDrawer(null)}
+                  className="p-2 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-      {/* Order Inspector Drawer */}
-      {selectedOrder && (
-        <OrderDetailDrawer
-          order={selectedOrder}
-          onClose={() => setSelectedOrder(null)}
-          onTransition={handleTransitionOrder}
-          onIssueWarranty={onIssueWarrantyFromOrder}
-        />
+              {/* Status & Payment Banner */}
+              <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-stone-500">Status do Pedido:</span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
+                      selectedOrderForDrawer.statusColor === "emerald"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    {selectedOrderForDrawer.statusLabel}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-stone-500">Pagamento:</span>
+                  <span className="font-bold text-stone-900">{selectedOrderForDrawer.paymentMethod}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-stone-500">Total:</span>
+                  <span className="font-bold text-stone-900 text-sm">
+                    R$ {Number(selectedOrderForDrawer.totalAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Cliente */}
+              <div className="space-y-1 text-xs">
+                <span className="font-bold text-stone-900 block">Cliente</span>
+                <div className="text-stone-700 font-medium">{selectedOrderForDrawer.customerName}</div>
+                <div className="text-stone-400">{selectedOrderForDrawer.customerPhone || "Sem telefone"}</div>
+              </div>
+
+              {/* Itens */}
+              <div className="space-y-2 text-xs">
+                <span className="font-bold text-stone-900 block">Itens do Pedido</span>
+                <div className="space-y-1.5 border border-stone-200 rounded-xl p-3 bg-stone-50/50">
+                  {selectedOrderForDrawer.items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between">
+                      <span className="text-stone-700">{item.qty || 1}x {item.name}</span>
+                      <span className="font-bold text-stone-900">
+                        R$ {Number(item.price || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Digital Warranty Link */}
+              <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                  <ShieldCheck className="w-4 h-4 text-amber-700" />
+                  <span>Garantia 12 Meses: {selectedOrderForDrawer.warrantyCode}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions Footer */}
+            <div className="pt-6 border-t border-stone-100 space-y-2">
+              <a
+                href={`https://wa.me/55${(selectedOrderForDrawer.customerPhone || "").replace(/\D/g, "")}?text=Ol%C3%A1+${encodeURIComponent(selectedOrderForDrawer.customerName)}%2C+aqui+%C3%A9+da+Lumina+Semijoias!+Seu+pedido+${selectedOrderForDrawer.orderNumber}+est%C3%A1+confirmado.`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+              >
+                <Send className="w-4 h-4" />
+                <span>Enviar no WhatsApp</span>
+              </a>
+
+              <button
+                onClick={() => setSelectedOrderForDrawer(null)}
+                className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+              >
+                Fechar Detalhes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

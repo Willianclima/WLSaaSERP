@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { SidebarNavigation } from "./components/SidebarNavigation";
+import { WireframeProductsCatalog } from "./components/WireframeProductsCatalog";
 import { HeaderNavbar } from "./components/HeaderNavbar";
 import { OwnerStoreHome } from "./components/OwnerStoreHome";
 import { QuickNewSaleModal } from "./components/QuickNewSaleModal";
@@ -21,6 +23,7 @@ import { SaaSControlPanel } from "./components/SaaSControlPanel";
 import { CustomerManager } from "./components/CustomerManager";
 import { ShareCatalogModal } from "./components/ShareCatalogModal";
 import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
+import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
 
 import {
@@ -84,6 +87,7 @@ export default function App() {
   const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
   const [showQuickSaleModal, setShowQuickSaleModal] = useState<boolean>(false);
   const [showQuickProductModal, setShowQuickProductModal] = useState<boolean>(false);
+  const [showAssistantHelpModal, setShowAssistantHelpModal] = useState<boolean>(false);
   const [trialRemainingDays, setTrialRemainingDays] = useState<number>(27);
   const [trialEndsAt, setTrialEndsAt] = useState<string>("2026-09-28");
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean>(true);
@@ -1295,151 +1299,194 @@ export default function App() {
         onOpenSettings={() => setActiveTab("storeSettings")}
       />
 
-      {/* Main App Navigation */}
-      <HeaderNavbar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        selectedTenant={selectedTenant}
-        branding={brandingConfig}
-        onTenantChange={setSelectedTenant}
-        onOpenShareModal={() => setShowShareModal(true)}
-        onOpenNewSale={() => setShowQuickSaleModal(true)}
-      />
-
-      {/* Active Tab View Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {(activeTab === "ownerHome" || activeTab === "dashboard" || activeTab === "home") && (
-          <OwnerStoreHome
+      {/* Main Layout Container with Sidebar and Content Rail */}
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-screen">
+        {/* Left Sidebar Navigation (Desktop) */}
+        <div className="hidden md:block">
+          <SidebarNavigation
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
             tenant={selectedTenant}
             branding={brandingConfig}
-            products={products}
-            orders={orders}
-            customers={customers}
-            warranties={warranties}
-            onNavigateTab={setActiveTab}
-            onOpenNewSale={() => setShowQuickSaleModal(true)}
-            onOpenNewProduct={() => setShowQuickProductModal(true)}
-            onOpenShareModal={() => setShowShareModal(true)}
-            onConfirmOrderPayment={handleConfirmOrderPayment}
+            onOpenHelp={() => setShowAssistantHelpModal(true)}
           />
-        )}
+        </div>
 
-        {activeTab === "saasBilling" && (
-          <SaaSControlPanel onNotify={showToast} />
-        )}
+        {/* Right Content Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header Navbar for Mobile / Quick Store Switch */}
+          <div className="md:hidden">
+            <HeaderNavbar
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              selectedTenant={selectedTenant}
+              branding={brandingConfig}
+              onTenantChange={setSelectedTenant}
+              onOpenShareModal={() => setShowShareModal(true)}
+              onOpenNewSale={() => setShowQuickSaleModal(true)}
+              onOpenHelp={() => setShowAssistantHelpModal(true)}
+            />
+          </div>
 
-        {activeTab === "storeSettings" && (
-          <StoreSettingsPanel
-            tenant={selectedTenant}
-            branding={brandingConfig}
-            paymentSettings={paymentSettings}
-            onUpdateBranding={handleUpdateBranding}
-            onUpdatePaymentSettings={(newSettings) => {
-              setPaymentSettings(newSettings);
-              showToast("Políticas de PIX, juros e parcelamento atualizadas com sucesso!");
-            }}
-            onNavigateTab={setActiveTab}
-          />
-        )}
+          {/* Active Tab View Body */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+            {(activeTab === "ownerHome" || activeTab === "dashboard" || activeTab === "home") && (
+              <OwnerStoreHome
+                tenant={selectedTenant}
+                branding={brandingConfig}
+                products={products}
+                orders={orders}
+                customers={customers}
+                warranties={warranties}
+                onNavigateTab={setActiveTab}
+                onOpenNewSale={() => setShowQuickSaleModal(true)}
+                onOpenNewProduct={() => setShowQuickProductModal(true)}
+                onOpenShareModal={() => setShowShareModal(true)}
+                onOpenNewCustomer={() => setActiveTab("customers")}
+                onConfirmOrderPayment={handleConfirmOrderPayment}
+              />
+            )}
 
-        {activeTab === "architecture" && (
-          <ArchitectureView onClose={() => setActiveTab("ownerHome")} />
-        )}
+            {(activeTab === "catalog" || activeTab === "products") && (
+              <WireframeProductsCatalog
+                products={products}
+                onOpenNewProduct={() => setShowQuickProductModal(true)}
+                onEditProduct={(p) => {
+                  setShowQuickProductModal(true);
+                }}
+              />
+            )}
 
-        {(activeTab === "catalog" || activeTab === "inventory") && (
-          <CatalogInventoryLedger
-            products={products}
-            ledger={ledger}
-            onAddProduct={handleAddProduct}
-            onUpdateProduct={handleUpdateProduct}
-            onUpdateStock={handleUpdateStock}
-            onReverseMovement={handleReverseMovement}
-            onOpenShareModal={() => setShowShareModal(true)}
-            onOpenStorefront={() => setActiveTab("storefront")}
-          />
-        )}
+            {activeTab === "inventory" && (
+              <CatalogInventoryLedger
+                products={products}
+                ledger={ledger}
+                onAddProduct={handleAddProduct}
+                onUpdateProduct={handleUpdateProduct}
+                onUpdateStock={handleUpdateStock}
+                onReverseMovement={handleReverseMovement}
+                onOpenShareModal={() => setShowShareModal(true)}
+                onOpenStorefront={() => setActiveTab("storefront")}
+              />
+            )}
 
-        {activeTab === "consignments" && (
-          <ConsignmentsManager
-            consignments={consignments}
-            resellers={resellers}
-            products={products}
-            onSettleConsignment={handleSettleConsignment}
-            onCreateConsignment={handleCreateConsignment}
-          />
-        )}
+            {activeTab === "saasBilling" && (
+              <SaaSControlPanel onNotify={showToast} />
+            )}
 
-        {activeTab === "commissions" && (
-          <CommissionEngine
-            tiers={tiers}
-            resellers={resellers}
-            onUpdateTiers={setTiers}
-          />
-        )}
+            {activeTab === "storeSettings" && (
+              <StoreSettingsPanel
+                tenant={selectedTenant}
+                branding={brandingConfig}
+                paymentSettings={paymentSettings}
+                onUpdateBranding={handleUpdateBranding}
+                onUpdatePaymentSettings={(newSettings) => {
+                  setPaymentSettings(newSettings);
+                  showToast("Políticas de PIX, juros e parcelamento atualizadas com sucesso!");
+                }}
+                onNavigateTab={setActiveTab}
+              />
+            )}
 
-        {activeTab === "warranties" && (
-          <DigitalWarrantyManager
-            warranties={warranties}
-            orders={orders}
-            onCreateWarranty={handleCreateWarranty}
-          />
-        )}
+            {activeTab === "architecture" && (
+              <ArchitectureView onClose={() => setActiveTab("ownerHome")} />
+            )}
 
-        {activeTab === "customJewelry" && (
-          <CustomJewelryStudio
-            onGenerateCustomOrder={handleGenerateCustomOrder}
-          />
-        )}
+            {activeTab === "consignments" && (
+              <ConsignmentsManager
+                consignments={consignments}
+                resellers={resellers}
+                products={products}
+                onSettleConsignment={handleSettleConsignment}
+                onCreateConsignment={handleCreateConsignment}
+              />
+            )}
 
-        {activeTab === "orders" && (
-          <UnifiedSalesOrders
-            orders={orders}
-            products={products}
-            customers={customers}
-            resellers={resellers}
-            onIssueWarrantyFromOrder={handleIssueWarrantyFromOrder}
-            onRefreshData={refreshBackendData}
-          />
-        )}
+            {activeTab === "commissions" || activeTab === "financial" ? (
+              <CommissionEngine
+                tiers={tiers}
+                resellers={resellers}
+                onUpdateTiers={setTiers}
+              />
+            ) : null}
 
-        {activeTab === "customers" && (
-          <CustomerManager
-            customers={customers}
-            onAddCustomer={handleAddCustomer}
-            onUpdateCustomer={handleUpdateCustomer}
-            onDeleteCustomer={handleDeleteCustomer}
-            onRefreshData={refreshBackendData}
-            onNavigateToOrder={(customerId) => {
-              setActiveTab("orders");
-            }}
-          />
-        )}
+            {activeTab === "warranties" && (
+              <DigitalWarrantyManager
+                warranties={warranties}
+                orders={orders}
+                onCreateWarranty={handleCreateWarranty}
+              />
+            )}
 
-        {activeTab === "resellers" && (
-          <ResellersNetworkManager
-            resellers={resellers}
-            onAddReseller={handleAddReseller}
-          />
-        )}
+            {activeTab === "customJewelry" && (
+              <CustomJewelryStudio
+                onGenerateCustomOrder={handleGenerateCustomOrder}
+              />
+            )}
 
-        {activeTab === "aiGateway" && (
-          <AIGatewayMCPCopilot
-            currentUser={currentUser}
-            mcpActions={mcpActions}
-            onExecuteMCPAction={handleExecuteMCPAction}
-            onRejectMCPAction={handleRejectMCPAction}
-          />
-        )}
+            {(activeTab === "orders" || activeTab === "sales") && (
+              <UnifiedSalesOrders
+                orders={orders}
+                products={products}
+                customers={customers}
+                warranties={warranties}
+                onOpenNewSale={() => setShowQuickSaleModal(true)}
+                onConfirmOrderPayment={handleConfirmOrderPayment}
+              />
+            )}
 
-        {activeTab === "security" && (
-          <SecurityAuditLGPD
-            currentUser={currentUser}
-            auditLogs={auditLogs}
-            branding={brandingConfig}
-            onNavigateTab={setActiveTab}
-          />
-        )}
-      </main>
+            {activeTab === "customers" && (
+              <CustomerManager
+                customers={customers}
+                onAddCustomer={handleAddCustomer}
+                onUpdateCustomer={handleUpdateCustomer}
+                onDeleteCustomer={handleDeleteCustomer}
+                onRefreshData={refreshBackendData}
+                onNavigateToOrder={(customerId) => {
+                  setActiveTab("orders");
+                }}
+              />
+            )}
+
+            {activeTab === "reports" && (
+              <DashboardOverview
+                tenant={selectedTenant}
+                products={products}
+                orders={orders}
+                resellers={resellers}
+                consignments={consignments}
+                warranties={warranties}
+                onNavigateTab={setActiveTab}
+              />
+            )}
+
+            {activeTab === "resellers" && (
+              <ResellersNetworkManager
+                resellers={resellers}
+                onAddReseller={handleAddReseller}
+              />
+            )}
+
+            {activeTab === "aiGateway" && (
+              <AIGatewayMCPCopilot
+                currentUser={currentUser}
+                mcpActions={mcpActions}
+                onExecuteMCPAction={handleExecuteMCPAction}
+                onRejectMCPAction={handleRejectMCPAction}
+              />
+            )}
+
+            {activeTab === "security" && (
+              <SecurityAuditLGPD
+                currentUser={currentUser}
+                auditLogs={auditLogs}
+                branding={brandingConfig}
+                onNavigateTab={setActiveTab}
+              />
+            )}
+          </main>
+        </div>
+      </div>
 
       {/* Editorial Footer */}
       <footer className="border-t border-stone-200 py-4 px-6 bg-stone-50 text-[10px] font-bold text-stone-500 uppercase tracking-[0.2em]">
@@ -1491,6 +1538,28 @@ export default function App() {
             ...p,
             id: `prod-${Date.now()}`,
           } as ProductItem);
+        }}
+      />
+
+      {/* Assistant Help Guided Modal */}
+      <AssistantHelpModal
+        isOpen={showAssistantHelpModal}
+        onClose={() => setShowAssistantHelpModal(false)}
+        onNavigateToTab={(tab) => {
+          setActiveTab(tab);
+          setShowAssistantHelpModal(false);
+        }}
+        onOpenNewSale={() => {
+          setShowAssistantHelpModal(false);
+          setShowQuickSaleModal(true);
+        }}
+        onOpenNewProduct={() => {
+          setShowAssistantHelpModal(false);
+          setShowQuickProductModal(true);
+        }}
+        onOpenShareCatalog={() => {
+          setShowAssistantHelpModal(false);
+          setShowShareModal(true);
         }}
       />
     </div>

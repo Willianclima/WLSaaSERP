@@ -34,6 +34,7 @@ interface HeaderNavbarProps {
   tenants?: TenantStore[];
   onOpenShareModal?: () => void;
   onOpenNewSale?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -45,6 +46,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   branding,
   onOpenShareModal,
   onOpenNewSale,
+  onOpenHelp,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const handleTabChange = onTabChange || onSelectTab || (() => {});
@@ -111,6 +113,18 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
           {/* Right Utility & Quick Actions */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Help / Assistant Button */}
+            {onOpenHelp && (
+              <button
+                onClick={onOpenHelp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold tracking-wide transition-all cursor-pointer shadow-2xs"
+                title="Tire dúvidas sobre como usar o sistema"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden sm:inline">Precisa de ajuda?</span>
+              </button>
+            )}
+
             {/* Quick New Sale button */}
             {onOpenNewSale && (
               <button

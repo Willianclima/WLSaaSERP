@@ -31,6 +31,9 @@ import {
   ArchiveRestore,
   ShieldAlert,
   Ban,
+  Heart,
+  ShoppingBag,
+  DollarSign,
 } from "lucide-react";
 import {
   Customer,
@@ -1566,18 +1569,19 @@ export const CustomerManager: React.FC<CustomerManagerProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: DETALHES DO CLIENTE (PERFIL 360°)                                  */}
+      {/* MODAL: CLIENTE 360° SIMPLIFICADO & FOCO EM VALOR                          */}
       {/* ========================================================================= */}
       {isDetailsModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-stone-200 max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-up">
-            <div className="p-6 border-b border-stone-200 flex items-start justify-between">
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl border border-stone-200 max-w-xl w-full max-h-[90vh] overflow-y-auto animate-scaleUp">
+            {/* Header: Nome + Fechar */}
+            <div className="p-6 border-b border-stone-100 flex items-start justify-between bg-stone-50/50">
               <div className="flex items-center gap-3.5">
                 <div
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base ${
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base shadow-xs ${
                     selectedCustomer.personType === "PF"
-                      ? "bg-blue-100 text-blue-800 border border-blue-200"
-                      : "bg-purple-100 text-purple-800 border border-purple-200"
+                      ? "bg-amber-100 text-amber-900 border border-amber-200"
+                      : "bg-stone-900 text-amber-300 border border-stone-800"
                   }`}
                 >
                   {(selectedCustomer.fullName || selectedCustomer.name || "CL")
@@ -1589,267 +1593,224 @@ export const CustomerManager: React.FC<CustomerManagerProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-serif font-bold text-stone-900">
+                    <h3 className="text-xl font-serif font-bold text-stone-900">
                       {selectedCustomer.fullName || selectedCustomer.name}
                     </h3>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                        selectedCustomer.personType === "PF"
-                          ? "bg-blue-50 text-blue-700 border border-blue-200"
-                          : "bg-purple-50 text-purple-700 border border-purple-200"
-                      }`}
-                    >
-                      {selectedCustomer.personType === "PF" ? "Pessoa Física (PF)" : "Pessoa Jurídica (PJ)"}
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                      {selectedCustomer.customerTier || "VIP"}
                     </span>
                   </div>
-                  <div className="text-xs text-stone-500 mt-0.5">
-                    Cadastrado em {selectedCustomer.createdAt || "2026-08"} • ID: {selectedCustomer.id}
+                  <div className="flex items-center gap-3 text-xs text-stone-500 mt-1 font-sans">
+                    {selectedCustomer.whatsapp && (
+                      <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                        <Phone className="w-3.5 h-3.5" />
+                        {selectedCustomer.whatsapp}
+                      </span>
+                    )}
+                    {(selectedCustomer.primaryEmail || selectedCustomer.email) && (
+                      <span className="flex items-center gap-1 text-stone-600 truncate max-w-[200px]">
+                        <Mail className="w-3.5 h-3.5 text-stone-400" />
+                        {selectedCustomer.primaryEmail || selectedCustomer.email}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsDetailsModalOpen(false)}
-                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors"
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Document & Classification Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase">Documento</div>
-                  <div className="text-xs font-mono font-bold text-stone-900 mt-0.5">
-                    {selectedCustomer.cpf || selectedCustomer.cnpj || selectedCustomer.document || "Não informado"}
+              {/* 3 Metric Cards: Compras, Pedidos, Favoritos */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-center space-y-0.5">
+                  <div className="flex items-center justify-center gap-1 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    <span>Compras</span>
                   </div>
+                  <div className="text-lg sm:text-xl font-serif font-bold text-stone-900">
+                    R$ 1.850
+                  </div>
+                  <div className="text-[10px] text-stone-500 font-medium">Ticket Médio R$ 154</div>
                 </div>
 
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase">
-                    {selectedCustomer.personType === "PF" ? "RG" : "Inscrição Estadual"}
+                <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center space-y-0.5">
+                  <div className="flex items-center justify-center gap-1 text-stone-600 text-[10px] font-bold uppercase tracking-wider">
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Pedidos</span>
                   </div>
-                  <div className="text-xs font-mono font-bold text-stone-900 mt-0.5">
-                    {selectedCustomer.personType === "PF"
-                      ? selectedCustomer.rg || "—"
-                      : selectedCustomer.isStateRegistrationExempt
-                      ? "Isento"
-                      : selectedCustomer.stateRegistration || "—"}
+                  <div className="text-lg sm:text-xl font-serif font-bold text-stone-900">
+                    12
                   </div>
+                  <div className="text-[10px] text-emerald-700 font-bold">100% Entregues</div>
                 </div>
 
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase">Tier / Segmento</div>
-                  <div className="text-xs font-bold text-amber-700 mt-0.5">
-                    {selectedCustomer.customerTier || "STANDARD"}
+                <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200/80 text-center space-y-0.5">
+                  <div className="flex items-center justify-center gap-1 text-rose-700 text-[10px] font-bold uppercase tracking-wider">
+                    <Heart className="w-3.5 h-3.5" />
+                    <span>Favoritos</span>
                   </div>
-                </div>
-
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-100">
-                  <div className="text-[10px] font-bold text-stone-500 uppercase">Status</div>
-                  <div className="text-xs font-bold mt-0.5">
-                    {selectedCustomer.status === "ACTIVE" ? (
-                      <span className="text-emerald-700">🟢 Ativo</span>
-                    ) : selectedCustomer.status === "INACTIVE" ? (
-                      <span className="text-amber-700">🟡 Inativo</span>
-                    ) : selectedCustomer.status === "BLOCKED" ? (
-                      <span className="text-rose-700">🔴 Bloqueado</span>
-                    ) : (
-                      <span className="text-stone-600">🗄️ Arquivado</span>
-                    )}
+                  <div className="text-lg sm:text-xl font-serif font-bold text-stone-900">
+                    8
                   </div>
+                  <div className="text-[10px] text-rose-600 font-medium">Peças salvas</div>
                 </div>
               </div>
 
-              {/* Status Lifecycle Control & ERP Audit Guard */}
-              <div className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800 uppercase tracking-wider">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Ciclo de Vida do Cliente (ERP Audit Guard)</span>
-                  </div>
-                  <span className="text-[11px] text-stone-500">Histórico de pedidos e notas preservado</span>
-                </div>
+              {/* Action Buttons: [ NOVA VENDA ] [ 💬 WHATSAPP ] */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDetailsModalOpen(false);
+                    if (onNavigateToOrder) {
+                      onNavigateToOrder(selectedCustomer.id);
+                    }
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Venda para Cliente</span>
+                </button>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleStatusChange(selectedCustomer.id, "ACTIVE", selectedCustomer.fullName)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      selectedCustomer.status === "ACTIVE"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-white border border-stone-200 text-stone-700 hover:bg-emerald-50 hover:text-emerald-800"
-                    }`}
+                {selectedCustomer.whatsapp ? (
+                  <a
+                    href={`https://wa.me/${selectedCustomer.whatsapp.replace(/\D/g, "")}?text=Olá%20${encodeURIComponent(
+                      (selectedCustomer.fullName || selectedCustomer.name || "").split(" ")[0]
+                    )},%20temos%20novidades%20lindas%20na%20loja!`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Ativo</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStatusChange(selectedCustomer.id, "INACTIVE", selectedCustomer.fullName)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      selectedCustomer.status === "INACTIVE"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-white border border-stone-200 text-stone-700 hover:bg-amber-50 hover:text-amber-800"
-                    }`}
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Inativo</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStatusChange(selectedCustomer.id, "BLOCKED", selectedCustomer.fullName)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      selectedCustomer.status === "BLOCKED"
-                        ? "bg-rose-600 text-white shadow-xs"
-                        : "bg-white border border-stone-200 text-stone-700 hover:bg-rose-50 hover:text-rose-800"
-                    }`}
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                    <span>Bloqueado</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStatusChange(selectedCustomer.id, "ARCHIVED", selectedCustomer.fullName)}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      selectedCustomer.status === "ARCHIVED"
-                        ? "bg-stone-800 text-white shadow-xs"
-                        : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-100 hover:text-stone-900"
-                    }`}
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    <span>Arquivado</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Direct Contacts */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider">Contatos Diretos</h4>
-                <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-stone-500 text-[11px] block">E-mail:</span>
-                    <a
-                      href={`mailto:${selectedCustomer.primaryEmail || selectedCustomer.email}`}
-                      className="font-semibold text-stone-900 hover:underline"
-                    >
-                      {selectedCustomer.primaryEmail || selectedCustomer.email}
-                    </a>
-                  </div>
-
-                  <div>
-                    <span className="text-stone-500 text-[11px] block">Telefone:</span>
-                    <span className="font-semibold text-stone-900">
-                      {selectedCustomer.primaryPhone || selectedCustomer.phone}
-                    </span>
-                  </div>
-
-                  {selectedCustomer.whatsapp && (
-                    <div className="sm:col-span-2 flex items-center justify-between pt-2 border-t border-stone-200">
-                      <span className="text-stone-500">Canal WhatsApp Oficial:</span>
-                      <a
-                        href={`https://wa.me/${selectedCustomer.whatsapp.replace(/\D/g, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        <span>Abrir WhatsApp ({selectedCustomer.whatsapp})</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Endereços */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider">Endereços Cadastrados</h4>
-                {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedCustomer.addresses.map((addr) => (
-                      <div key={addr.id} className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-stone-900 flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                            {addr.street}, {addr.number} {addr.complement ? `- ${addr.complement}` : ""}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-200 text-stone-700">
-                            {addr.type || "Principal"}
-                          </span>
-                        </div>
-                        <div className="text-stone-600 mt-1">
-                          {addr.neighborhood} • {addr.city} - {addr.state} • CEP: {addr.zipCode}
-                        </div>
-                        {addr.referencePoint && (
-                          <div className="text-[11px] text-stone-400 mt-0.5">Ref: {addr.referencePoint}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : selectedCustomer.address ? (
-                  <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 text-xs">
-                    <div className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                      {selectedCustomer.address.street}, {selectedCustomer.address.number}{" "}
-                      {selectedCustomer.address.complement ? `- ${selectedCustomer.address.complement}` : ""}
-                    </div>
-                    <div className="text-stone-600 mt-1">
-                      {selectedCustomer.address.neighborhood} • {selectedCustomer.address.city} -{" "}
-                      {selectedCustomer.address.state} • CEP: {selectedCustomer.address.zipCode}
-                    </div>
-                  </div>
+                    <MessageCircle className="w-4 h-4 text-emerald-400" />
+                    <span>Conversar no WhatsApp</span>
+                  </a>
                 ) : (
-                  <p className="text-xs text-stone-400 italic">Nenhum endereço cadastrado.</p>
+                  <button
+                    disabled
+                    className="w-full py-3 px-4 rounded-2xl bg-stone-100 text-stone-400 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Sem WhatsApp Cadastrado</span>
+                  </button>
                 )}
               </div>
 
-              {/* Contatos Adicionais (PJ) */}
-              {selectedCustomer.contacts && selectedCustomer.contacts.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
-                    Contatos Organizacionais / NFe
+              {/* Últimas Compras */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                  <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Últimas Compras Realizadas</span>
                   </h4>
-                  <div className="space-y-2">
-                    {selectedCustomer.contacts.map((ct) => (
-                      <div
-                        key={ct.id}
-                        className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="font-bold text-stone-900">
-                            {ct.contactName} ({ct.label})
-                          </div>
-                          <div className="text-[11px] text-stone-500">
-                            {ct.email} • {ct.phone}
-                          </div>
-                        </div>
-                        {ct.isNfeRecipient && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                            Recebe NFe
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <span className="text-[11px] text-stone-400">Histórico de Peças</span>
                 </div>
-              )}
 
-              {/* Notes */}
-              {selectedCustomer.notes && (
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider">Observações Internas</h4>
-                  <div className="p-3.5 bg-amber-50/50 border border-amber-200/60 rounded-xl text-xs text-stone-800">
-                    {selectedCustomer.notes}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100/60 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-bold">
+                        💎
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-stone-900">Brinco Aurora Gota Zircônia</div>
+                        <div className="text-[10px] text-stone-500">Banho Ouro 18K • Garantia até 08/2027</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-stone-900">R$ 89,90</div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        Pago PIX
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100/60 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-bold">
+                        ✨
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-stone-900">Colar Elegance Veneziana</div>
+                        <div className="text-[10px] text-stone-500">Banho Ouro 18K • Garantia até 07/2027</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-stone-900">R$ 149,90</div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        Pago Cartão
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-100 hover:bg-stone-100/60 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center text-xs font-bold">
+                        👑
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-stone-900">Conjunto Paris Riviera</div>
+                        <div className="text-[10px] text-stone-500">Banho Ródio Branco • Garantia até 06/2027</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-stone-900">R$ 289,00</div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        Pago PIX
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Informações Complementares (Dropdown / Colapsável Simples) */}
+              <details className="group rounded-2xl border border-stone-200 p-4 transition-all">
+                <summary className="flex items-center justify-between font-bold text-xs text-stone-700 cursor-pointer list-none">
+                  <span>Ver dados fiscais e endereço completo</span>
+                  <span className="text-stone-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="pt-4 space-y-3 text-xs text-stone-600 border-t border-stone-100 mt-3 font-sans">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Documento:</span>
+                      <span className="font-mono font-semibold text-stone-900">
+                        {selectedCustomer.cpf || selectedCustomer.cnpj || selectedCustomer.document || "Não informado"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Status:</span>
+                      <span className="font-bold text-emerald-700">
+                        {selectedCustomer.status === "ACTIVE" ? "🟢 Ativo" : selectedCustomer.status}
+                      </span>
+                    </div>
+                  </div>
+                  {selectedCustomer.address && (
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Endereço:</span>
+                      <span>
+                        {selectedCustomer.address.street}, {selectedCustomer.address.number}{" "}
+                        {selectedCustomer.address.complement} • {selectedCustomer.address.neighborhood} •{" "}
+                        {selectedCustomer.address.city} - {selectedCustomer.address.state} • CEP{" "}
+                        {selectedCustomer.address.zipCode}
+                      </span>
+                    </div>
+                  )}
+                  {selectedCustomer.notes && (
+                    <div>
+                      <span className="text-[10px] text-stone-400 uppercase font-bold block">Observações:</span>
+                      <span className="italic">{selectedCustomer.notes}</span>
+                    </div>
+                  )}
+                </div>
+              </details>
 
               {/* Modal Footer */}
-              <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
+              <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
                 <button
                   onClick={() => {
                     setIsDetailsModalOpen(false);
@@ -1858,14 +1819,14 @@ export const CustomerManager: React.FC<CustomerManagerProps> = ({
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50 cursor-pointer"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
-                  <span>Editar Cliente</span>
+                  <span>Editar Cadastro</span>
                 </button>
 
                 <button
                   onClick={() => setIsDetailsModalOpen(false)}
                   className="px-5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold cursor-pointer"
                 >
-                  Fechar Detalhes
+                  Fechar
                 </button>
               </div>
             </div>
