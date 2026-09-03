@@ -12,6 +12,7 @@ import {
   HelpCircle,
   Gem,
   ExternalLink,
+  Edit2,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig } from "../types";
 
@@ -99,17 +100,26 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     <aside className="w-64 bg-white border-r border-stone-200/80 flex flex-col justify-between shrink-0 min-h-screen select-none">
       {/* Brand Header */}
       <div>
-        <div className="p-6 pb-5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-700 flex items-center justify-center font-bold">
-            <Gem className="w-5 h-5 text-amber-600" />
+        <div
+          onClick={() => onTabChange("storeSettings")}
+          className="p-5 pb-4 flex items-center justify-between gap-2.5 cursor-pointer group hover:bg-stone-50 rounded-2xl mx-2 mt-2 transition-all"
+          title="Clique para alterar o nome e a identidade da loja"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform">
+              <Gem className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-serif font-extrabold text-sm tracking-wider text-stone-900 uppercase block leading-none truncate group-hover:text-amber-800 transition-colors">
+                {branding?.logoText || tenant?.name || "LUMINA"}
+              </span>
+              <span className="text-[9px] font-semibold text-stone-400 uppercase tracking-widest block mt-0.5 truncate">
+                {branding?.logoSubtext || "SEMIJOIAS"}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-serif font-extrabold text-sm tracking-widest text-stone-900 uppercase block leading-none">
-              LUMINA
-            </span>
-            <span className="text-[9px] font-semibold text-stone-400 uppercase tracking-widest block mt-0.5">
-              SEMIJOIAS
-            </span>
+          <div className="p-1 rounded-md text-stone-300 group-hover:text-amber-600 transition-colors shrink-0 opacity-40 group-hover:opacity-100">
+            <Edit2 className="w-3.5 h-3.5" />
           </div>
         </div>
 

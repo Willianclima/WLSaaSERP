@@ -160,8 +160,8 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
   onNavigateTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "payment_settings" | "domain" | "social_qr" | "poster" | "branding" | "welcome" | "contact" | "preview"
-  >("payment_settings");
+    "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview"
+  >("branding");
   const [formConfig, setFormConfig] = useState<StoreBrandingConfig>({ ...branding });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isAutoValidatingDNS, setIsAutoValidatingDNS] = useState<boolean>(false);
@@ -361,6 +361,18 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
       {/* Sub-Navigation Tabs */}
       <div className="flex space-x-2 border-b border-stone-200 pb-2 overflow-x-auto">
         <button
+          onClick={() => setActiveSubTab("branding")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeSubTab === "branding"
+              ? "bg-stone-900 text-amber-300 shadow-md border border-amber-400/50 ring-2 ring-amber-400/20"
+              : "bg-white text-stone-700 hover:bg-stone-100 border border-stone-200"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <span>✨ 1. Nome da Loja & Logotipo</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab("payment_settings")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeSubTab === "payment_settings"
@@ -369,7 +381,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <CreditCard className="w-3.5 h-3.5" />
-          <span>💳 Preços, PIX & Parcelamento</span>
+          <span>💳 2. Preços, PIX & Parcelamento</span>
         </button>
 
         <button
@@ -381,7 +393,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Globe className="w-3.5 h-3.5 text-amber-400" />
-          <span>🌐 Domínio & SSL</span>
+          <span>🌐 3. Domínio & SSL</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
         </button>
 
@@ -394,7 +406,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>📱 Redes Sociais & QR Codes</span>
+          <span>📱 4. Redes Sociais & QR Codes</span>
         </button>
 
         <button
@@ -406,19 +418,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>✨ Cartaz Expo</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab("branding")}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-            activeSubTab === "branding"
-              ? "bg-stone-900 text-white shadow-xs"
-              : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"
-          }`}
-        >
-          <Palette className="w-3.5 h-3.5 text-amber-400" />
-          <span>1. Logotipo & Cores</span>
+          <span>✨ 5. Cartaz Expo</span>
         </button>
 
         <button
@@ -430,7 +430,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Type className="w-3.5 h-3.5 text-amber-400" />
-          <span>2. Textos & Headlines</span>
+          <span>📝 6. Textos & Headlines</span>
         </button>
 
         <button
@@ -442,7 +442,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-          <span>3. Contatos</span>
+          <span>📞 7. Contatos & WhatsApp</span>
         </button>
 
         <button
@@ -707,174 +707,156 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
       {/* TAB 1: LOGOTIPO & CORES DA MARCA */}
       {activeSubTab === "branding" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Custom Domain Quick Setup Card */}
-          <div className="lg:col-span-12 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 rounded-3xl border border-stone-700/80 p-6 sm:p-8 space-y-5 text-white shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-800">
+          {/* Main Store Name & Brand Identity Hero Card */}
+          <div className="lg:col-span-12 bg-gradient-to-br from-amber-500/10 via-white to-stone-50 rounded-3xl border-2 border-amber-300/80 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-amber-200/60">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
-                  <Globe className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-stone-950 flex items-center justify-center font-serif italic font-bold text-xl shadow-md">
+                  💎
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-serif italic font-bold text-lg text-stone-100">
-                      Domínio Personalizado & SSL Gerenciado
+                    <h3 className="font-serif italic font-bold text-xl sm:text-2xl text-stone-900">
+                      Nome da Loja & Identidade da Marca
                     </h3>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                      <Lock className="w-3 h-3" />
-                      <span>Let's Encrypt TLS 1.3</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                      Edição Instantânea
                     </span>
                   </div>
-                  <p className="text-xs text-stone-300 font-light">
-                    Digite seu domínio próprio para validar a disponibilidade e configurar automaticamente o gerenciamento de SSL com certificado criptografado.
+                  <p className="text-xs sm:text-sm text-stone-600">
+                    Altere o nome da sua loja (ex: de <span className="font-bold text-stone-800">Lumina</span> para <span className="font-bold text-amber-700">Lilian</span>) a qualquer momento. A mudança atualiza imediatamente a barra superior, o menu lateral, o catálogo online para clientes e as mensagens de WhatsApp.
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setActiveSubTab("domain")}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-600 text-stone-200 text-xs font-semibold transition-all cursor-pointer shrink-0"
+                onClick={() => handleSave()}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 font-bold text-xs uppercase tracking-wider transition-all shadow-md cursor-pointer shrink-0"
               >
-                <span>Ver Painel Completo de DNS</span>
-                <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+                <Save className="w-4 h-4 text-amber-400" />
+                <span>Salvar Nome da Loja</span>
               </button>
             </div>
 
-            {/* Quick Domain Input with Availability & SSL Validation */}
-            <div className="relative z-10 space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
-                    <Lock className="w-4 h-4 text-emerald-400" />
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+              <div className="md:col-span-7 space-y-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1.5 flex items-center justify-between">
+                    <span>Nome Principal da Sua Loja:</span>
+                    <span className="text-[11px] text-stone-500 font-normal lowercase">
+                      (exibido em destaque em todo o sistema)
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formConfig.logoText}
+                      onChange={(e) => setFormConfig((prev) => ({ ...prev, logoText: e.target.value }))}
+                      placeholder="Ex: Lilian Semijoias"
+                      className="w-full bg-white border-2 border-amber-300/80 rounded-2xl px-4 py-3 text-base font-serif italic font-bold text-stone-900 focus:outline-none focus:border-stone-900 focus:ring-2 focus:ring-amber-200 transition-all shadow-xs"
+                    />
+                    {formConfig.logoText && (
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        Ativo
+                      </span>
+                    )}
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block mb-1.5 flex items-center justify-between">
+                    <span>Subtítulo / Especialidade da Marca:</span>
+                    <span className="text-[11px] text-stone-500 font-normal lowercase">
+                      (aparece abaixo do nome da loja)
+                    </span>
+                  </label>
                   <input
                     type="text"
-                    value={formConfig.customDomain || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormConfig((prev) => ({
-                        ...prev,
-                        customDomain: val,
-                        customDomainStatus: val ? "ACTIVE" : "NOT_CONFIGURED",
-                      }));
-                      if (dnsAutoValidationResult) {
-                        setDnsAutoValidationResult(null);
-                      }
-                    }}
-                    placeholder="loja.aura.com ou joias.suamarca.com.br"
-                    className="w-full bg-stone-950/90 border border-stone-700 rounded-2xl pl-10 pr-4 py-3 text-xs sm:text-sm font-mono font-bold text-amber-300 placeholder-stone-600 focus:outline-none focus:border-amber-400 transition-all shadow-inner"
+                    value={formConfig.logoSubtext}
+                    onChange={(e) => setFormConfig((prev) => ({ ...prev, logoSubtext: e.target.value }))}
+                    placeholder="Ex: Alta Semijoias & Banho Ouro 18k"
+                    className="w-full bg-white border border-stone-300 rounded-2xl px-4 py-2.5 text-xs tracking-[0.15em] uppercase font-bold text-stone-700 focus:outline-none focus:border-stone-900 focus:bg-white transition-all shadow-xs"
                   />
                 </div>
 
-                <div className="flex flex-wrap sm:flex-nowrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => runAutomaticDNSAndSSLValidation()}
-                    disabled={isAutoValidatingDNS || !formConfig.customDomain}
-                    className="flex-1 sm:flex-none py-3 px-4 rounded-2xl bg-stone-800 hover:bg-stone-700 border border-amber-400/40 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    title="Executa a consulta de DNS e validação criptográfica do certificado SSL"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isAutoValidatingDNS ? "animate-spin" : ""}`} />
-                    <span>{isAutoValidatingDNS ? "Consultando DNS..." : "Verificar Apontamento DNS & SSL"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!formConfig.customDomain) return;
-                      const updated: StoreBrandingConfig = {
-                        ...formConfig,
-                        customDomainStatus: "ACTIVE",
-                        customDomainSslAutoManaged: true,
-                        customDomainForceHttps: true,
-                        customDomainHstsEnabled: true,
-                        customDomainLastChecked: new Date().toISOString().replace("T", " ").substring(0, 16),
-                      };
-                      setFormConfig(updated);
-                      onUpdateBranding(updated);
-                      setSavedSuccess(true);
-                      confetti({
-                        particleCount: 40,
-                        spread: 60,
-                        origin: { y: 0.6 },
-                      });
-                      setTimeout(() => setSavedSuccess(false), 3500);
-                    }}
-                    className="flex-1 sm:flex-none py-3 px-5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0"
-                  >
-                    <Sparkle className="w-4 h-4" />
-                    <span>Salvar & Ativar</span>
-                  </button>
+                {/* Quick 1-Click Suggestions */}
+                <div className="pt-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1.5">
+                    Sugestões rápidas de 1 clique:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: "Lilian Semijoias", sub: "Alta Semijoias & Banho Ouro 18k" },
+                      { name: "Lilian Joias Finas", sub: "Peças Exclusivas & Garantia 1 Ano" },
+                      { name: "Ateliê Lilian", sub: "Semijoias Nobres & Noivas" },
+                      { name: "Lumina Semijoias", sub: "Alta Semijoias & Curadoria Fina" },
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            logoText: preset.name,
+                            logoSubtext: preset.sub,
+                          }))
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-amber-100/60 text-stone-800 text-xs font-medium border border-stone-300 hover:border-amber-400 transition-all cursor-pointer shadow-2xs"
+                      >
+                        💎 {preset.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Real-Time Automatic Validation Feedback */}
-              {dnsAutoValidationResult && (
-                <div
-                  className={`p-4 rounded-2xl border text-xs animate-in fade-in duration-300 space-y-3 ${
-                    dnsAutoValidationResult.valid
-                      ? "bg-emerald-950/80 border-emerald-500/40 text-emerald-100"
-                      : "bg-rose-950/80 border-rose-500/40 text-rose-100"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-white/10">
-                    <div className="flex items-center gap-2">
-                      {dnsAutoValidationResult.valid ? (
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 text-rose-400" />
-                      )}
-                      <span className="font-bold">
-                        {dnsAutoValidationResult.valid
-                          ? "DNS Apontado Corretamente & SSL Integrado"
-                          : "Inconsistência no Domínio Informado"}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-stone-300">
-                      Latência de Rede: {dnsAutoValidationResult.latencyMs}ms • Testado às {dnsAutoValidationResult.testedAt}
+              {/* Live Preview Card */}
+              <div className="md:col-span-5 bg-stone-950 text-white rounded-2xl p-5 border border-stone-800 flex flex-col justify-between space-y-4 shadow-md">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-stone-800 text-[10px] uppercase font-bold tracking-wider text-stone-400">
+                    <span>Pré-Visualização em Tempo Real</span>
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Ao Vivo
                     </span>
                   </div>
 
-                  <p className="text-[11px] leading-relaxed text-stone-200">
-                    {dnsAutoValidationResult.message}
-                  </p>
-
-                  {dnsAutoValidationResult.valid && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      {dnsAutoValidationResult.details.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="p-2.5 rounded-xl bg-black/30 border border-emerald-500/20 text-[11px] font-mono flex items-start gap-2 text-emerald-200"
-                        >
-                          <Check className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-                          <div>
-                            <span className="font-bold text-stone-100 block font-sans text-[10px] uppercase">
-                              {item.label}
-                            </span>
-                            <span className="text-emerald-300 text-[10px]">{item.text}</span>
-                          </div>
+                  <div className="p-3.5 rounded-xl bg-stone-900/90 border border-stone-800 space-y-1.5">
+                    <span className="text-[9px] uppercase tracking-wider text-amber-400 font-bold block">
+                      Barra Superior & Menu:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-stone-800 text-amber-300 flex items-center justify-center text-xs font-bold">
+                        💎
+                      </div>
+                      <div>
+                        <div className="font-serif italic font-bold text-base text-white leading-tight">
+                          {formConfig.logoText || "Lumina Semijoias"}
                         </div>
-                      ))}
+                        <div className="text-[9px] uppercase tracking-wider text-stone-400">
+                          {formConfig.logoSubtext || "Alta Semijoias"}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
 
-            {formConfig.customDomain && (
-              <div className="relative z-10 flex flex-wrap items-center gap-3 pt-1 text-[11px] text-stone-300">
-                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-semibold">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>https://{formConfig.customDomain}</span>
-                </span>
-                <span className="text-stone-600">•</span>
-                <span className="text-stone-400">CNAME: <span className="font-mono text-stone-300">cname.aura.com</span></span>
-                <span className="text-stone-600">•</span>
-                <span className="text-stone-400">SSL: <span className="text-emerald-400 font-semibold">Let's Encrypt Ativo</span></span>
+                  <div className="p-3 rounded-xl bg-stone-900/70 border border-stone-800/80 space-y-1 text-xs">
+                    <span className="text-[9px] uppercase tracking-wider text-emerald-400 font-bold block">
+                      Link do Catálogo de Compras:
+                    </span>
+                    <span className="font-mono text-[11px] text-stone-300 break-all">
+                      https://loja.aura.com/?loja={(formConfig.logoText || "lumina").toLowerCase().replace(/\s+/g, "-")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-stone-400 flex items-center gap-1.5 pt-2 border-t border-stone-800/60">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Clique em <strong>Salvar Nome da Loja</strong> acima para atualizar instantaneamente.</span>
+                </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Logo Customizer */}

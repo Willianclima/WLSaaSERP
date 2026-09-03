@@ -19,6 +19,7 @@ import {
   Crown,
   Building2,
   Store,
+  Edit3,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig } from "../types";
 
@@ -92,23 +93,34 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Brand & Store Identity */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleTabChange("ownerHome")}
-              className="text-left flex items-center gap-2.5 group cursor-pointer"
-            >
-              <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
-                💎
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-serif font-bold text-stone-900 group-hover:text-amber-800 transition-colors leading-tight">
-                  {storeName}
-                </h1>
-                <span className="text-[10px] font-medium text-emerald-800 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Loja Online Ativa
-                </span>
-              </div>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleTabChange("ownerHome")}
+                className="text-left flex items-center gap-2.5 group cursor-pointer"
+                title="Voltar ao início"
+              >
+                <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                  💎
+                </div>
+                <div>
+                  <h1 className="text-lg sm:text-xl font-serif font-bold text-stone-900 group-hover:text-amber-800 transition-colors leading-tight">
+                    {storeName}
+                  </h1>
+                  <span className="text-[10px] font-medium text-emerald-800 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Loja Online Ativa
+                  </span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleTabChange("storeSettings")}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-amber-700 hover:bg-amber-50/70 border border-transparent hover:border-amber-200 transition-all cursor-pointer"
+                title="Alterar o nome da loja (ex: Lumina para Lilian)"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Right Utility & Quick Actions */}

@@ -67,9 +67,27 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>("ownerHome");
   const [storefrontCategory, setStorefrontCategory] = useState<string>("TODOS");
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
-  const [selectedTenant, setSelectedTenant] = useState<TenantStore>(mockTenants[0]);
+  const [brandingConfig, setBrandingConfig] = useState<StoreBrandingConfig>(() => {
+    try {
+      const saved = localStorage.getItem("aura_branding_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_BRANDING_CONFIG;
+  });
+  const [selectedTenant, setSelectedTenant] = useState<TenantStore>(() => {
+    const base = mockTenants[0];
+    try {
+      const saved = localStorage.getItem("aura_branding_config");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.logoText) {
+          return { ...base, name: parsed.logoText };
+        }
+      }
+    } catch (e) {}
+    return base;
+  });
   const [currentUser] = useState<RBACUser>(mockCurrentUser);
-  const [brandingConfig, setBrandingConfig] = useState<StoreBrandingConfig>(DEFAULT_BRANDING_CONFIG);
   const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
 
   // Dynamic state
@@ -245,12 +263,15 @@ export default function App() {
 
   const handleUpdateBranding = (newBranding: StoreBrandingConfig) => {
     setBrandingConfig(newBranding);
+    try {
+      localStorage.setItem("aura_branding_config", JSON.stringify(newBranding));
+    } catch (e) {}
     setSelectedTenant((prev) => ({
       ...prev,
       name: newBranding.logoText || prev.name,
       logo: newBranding.logoUrl || prev.logo,
     }));
-    showToast("Identidade visual e branding da loja salvos com sucesso!");
+    showToast(`Nome da loja atualizado para "${newBranding.logoText || 'Lumina'}" com sucesso!`);
   };
 
   // Add Product handler (Persisted to Backend API)
