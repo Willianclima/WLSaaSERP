@@ -25,6 +25,7 @@ import {
   PaymentMethod,
   CustomJewelryOrderSpec,
 } from "../../types";
+import { toast } from "../../utils/toast";
 
 interface OrderCreationModalProps {
   products: ProductItem[];
@@ -168,7 +169,7 @@ export const OrderCreationModal: React.FC<OrderCreationModalProps> = ({
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) {
-      alert("Adicione ao menos 1 item.");
+      toast.warning("Adicione ao menos 1 peça ao pedido antes de confirmar.");
       return;
     }
 
@@ -200,9 +201,10 @@ export const OrderCreationModal: React.FC<OrderCreationModalProps> = ({
       };
 
       await onSubmit(orderDto);
+      toast.success("Pedido gerado com sucesso! Estoque reservado no ERP.");
       onClose();
     } catch (err: any) {
-      alert(err.message || "Erro ao registrar pedido.");
+      toast.error(err.message || "Erro ao registrar pedido.");
     } finally {
       setIsSubmitting(false);
     }

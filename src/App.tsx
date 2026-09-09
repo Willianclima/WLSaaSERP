@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { SidebarNavigation } from "./components/SidebarNavigation";
 import { WireframeProductsCatalog } from "./components/WireframeProductsCatalog";
 import { HeaderNavbar } from "./components/HeaderNavbar";
@@ -26,6 +26,8 @@ import { ShareCatalogModal } from "./components/ShareCatalogModal";
 import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
+import { apiClient } from "./services/apiClient";
+import { toast } from "./utils/toast";
 
 import {
   mockTenants,
@@ -118,6 +120,15 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
   };
+
+  // Subscribe to universal toast notifications
+  useEffect(() => {
+    const unsub = toast.subscribe(({ message, type }) => {
+      setToastMessage(type === "error" ? `❌ ${message}` : type === "warning" ? `⚠️ ${message}` : message);
+      setTimeout(() => setToastMessage(null), 4000);
+    });
+    return unsub;
+  }, []);
 
   // Check onboarding status and trial info
   const checkOnboardingStatus = async () => {
@@ -938,6 +949,7 @@ export default function App() {
     };
 
     const payload = {
+      organizationId: tenantId,
       customerId: custSnapshot.id || orderData.customerId,
       customerSnapshot: custSnapshot,
       channel: orderData.channel || "ECOMMERCE",
@@ -967,12 +979,18 @@ export default function App() {
       metadata: orderData.metadata,
     };
 
-    const response = await fetch("/api/orders", {
+    const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-tenant-id": tenantId,
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const response = await fetch("/api/orders/public", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-tenant-id": tenantId,
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 
@@ -1332,16 +1350,15 @@ export default function App() {
   // Direct Payment Confirmation Handler
   const handleConfirmOrderPayment = async (orderId: string) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      const res = await fetch(`/api/orders/${orderId}/transition`, {
+      const res = await apiClient.authenticatedFetch(`/api/orders/${orderId}/transition`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
         },
         body: JSON.stringify({
+          event: "CONFIRM_PAYMENT",
           targetStatus: "PAID",
-          operator: "Dona da Loja",
+          operator: currentUser?.name || "Dona da Loja",
           reason: "Confirmação manual de recebimento PIX / Dinheiro",
         }),
       });

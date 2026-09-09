@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ProductItem } from "../types";
 import { ClientStorageService } from "../services/storageService";
+import { toast } from "../utils/toast";
 
 interface QuickNewProductModalProps {
   isOpen: boolean;
@@ -81,11 +82,11 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
 
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      alert("Por favor, selecione um arquivo de imagem (JPEG, PNG, WebP).");
+      toast.error("Por favor, selecione um arquivo de imagem válido (JPEG, PNG, WebP).");
       return;
     }
     if (file.size > 15 * 1024 * 1024) {
-      alert("A imagem selecionada excede o limite de 15MB.");
+      toast.error("A imagem selecionada excede o limite de 15MB.");
       return;
     }
 
@@ -97,10 +98,11 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
       });
       if (uploadRes && (uploadRes.url || uploadRes.cdnUrl)) {
         setImageUrl(uploadRes.cdnUrl || uploadRes.url);
+        toast.success("Foto da peça carregada com sucesso!");
       }
     } catch (err: any) {
       console.error("Falha no upload da foto:", err);
-      alert("Não foi possível carregar a imagem. Você também pode colar o link direto abaixo.");
+      toast.warning("Não foi possível carregar a imagem. Você também pode colar o link direto abaixo.");
     } finally {
       setIsUploading(false);
     }
@@ -117,11 +119,11 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      alert("Por favor, digite o nome da semijoia.");
+      toast.warning("Por favor, digite o nome da semijoia.");
       return;
     }
     if (!price || Number(price) <= 0) {
-      alert("Por favor, informe o preço de venda.");
+      toast.warning("Por favor, informe o preço de venda da semijoia.");
       return;
     }
 
@@ -154,6 +156,7 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
       };
 
       await onAddProduct(productPayload);
+      toast.success(`Peça "${name.trim()}" cadastrada com sucesso no catálogo!`);
       onClose();
       // Reset form
       setName("");
@@ -162,7 +165,7 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
       setStock("1");
       setImageUrl("");
     } catch (err: any) {
-      alert(err.message || "Erro ao cadastrar produto.");
+      toast.error(err.message || "Erro ao cadastrar produto.");
     } finally {
       setIsSubmitting(false);
     }

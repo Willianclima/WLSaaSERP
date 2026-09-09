@@ -73,6 +73,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isBagOpen, setIsBagOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [customerCity, setCustomerCity] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [isOrderSuccess, setIsOrderSuccess] = useState(false);
@@ -245,7 +246,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       customerSnapshot: {
         personType: "PF",
         name: customerName?.trim() || "Cliente Loja Virtual",
-        phone: "",
+        phone: customerPhone?.trim() || "",
         email: "cliente.loja@lumina.com.br",
         document: "000.000.000-00",
       },
@@ -826,7 +827,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                   </span>
                 </div>
 
-                {/* Quick Name Input (Optional) */}
+                {/* Quick Customer Info (Name, WhatsApp, City) */}
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -835,13 +836,22 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:bg-white focus:outline-none focus:border-stone-400"
                   />
-                  <input
-                    type="text"
-                    placeholder="Sua cidade / bairro (opcional)"
-                    value={customerCity}
-                    onChange={(e) => setCustomerCity(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:bg-white focus:outline-none focus:border-stone-400"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="tel"
+                      placeholder="Seu WhatsApp (ex: 19 99999-0000)"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:bg-white focus:outline-none focus:border-stone-400"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Sua cidade / bairro"
+                      value={customerCity}
+                      onChange={(e) => setCustomerCity(e.target.value)}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 placeholder-stone-400 focus:bg-white focus:outline-none focus:border-stone-400"
+                    />
+                  </div>
                 </div>
 
                 {/* BOTÃO PRINCIPAL: [ Finalizar pelo WhatsApp ] */}

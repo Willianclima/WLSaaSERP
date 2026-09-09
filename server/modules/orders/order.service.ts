@@ -549,7 +549,7 @@ export class OrderService {
     operatorName: string = "Operador Financeiro"
   ): Promise<OrderPaymentEntity> {
     return await UnitOfWork.transaction(organizationId, async (tx: TransactionContext) => {
-      const order = OrderRepository.findById(organizationId, orderId, tx);
+      const order = await OrderRepository.findByIdAsync(organizationId, orderId, tx);
       if (!order) {
         throw new Error("Pedido não encontrado.");
       }
@@ -581,7 +581,7 @@ export class OrderService {
     userId?: string
   ): Promise<OrderEntity> {
     return await UnitOfWork.transaction(organizationId, async (tx: TransactionContext) => {
-      const order = OrderRepository.findById(organizationId, orderId, tx);
+      const order = await OrderRepository.findByIdAsync(organizationId, orderId, tx);
       if (!order) {
         throw new Error(`Pedido ${orderId} não encontrado.`);
       }
@@ -590,7 +590,7 @@ export class OrderService {
         throw new Error(`Devolução não permitida para pedido no status '${order.status}'. Somente pedidos pagos ou entregues podem receber devolução.`);
       }
 
-      const items = OrderRepository.getItemsByOrderId(organizationId, orderId, tx);
+      const items = await OrderRepository.getItemsByOrderIdAsync(organizationId, orderId, tx);
       const operatorName = dto.operatorName || "Operador de Garantia e Devoluções";
       const nowIso = new Date().toISOString();
 
@@ -713,7 +713,7 @@ export class OrderService {
     userId?: string
   ): Promise<OrderEntity> {
     return await UnitOfWork.transaction(organizationId, async (tx: TransactionContext) => {
-      const order = OrderRepository.findById(organizationId, orderId, tx);
+      const order = await OrderRepository.findByIdAsync(organizationId, orderId, tx);
       if (!order) {
         throw new Error(`Pedido ${orderId} não encontrado.`);
       }
@@ -732,7 +732,7 @@ export class OrderService {
         { orderId, amount: dto.amount, paymentStatus: order.paymentStatus }
       );
 
-      return this.hydrateOrder(order, tx);
+      return await this.hydrateOrderAsync(order, tx);
     });
   }
 
@@ -745,7 +745,7 @@ export class OrderService {
     dto: RefundOrderPaymentDTO,
     tx: TransactionContext
   ): Promise<void> {
-    const payments = OrderRepository.getPaymentsByOrderId(organizationId, order.id, tx);
+    const payments = await OrderRepository.getPaymentsByOrderIdAsync(organizationId, order.id, tx);
     const paidPayments = payments.filter((p) => p.status === "PAID" || p.status === "PARTIALLY_REFUNDED");
 
     if (paidPayments.length === 0) {
@@ -819,7 +819,7 @@ export class OrderService {
     tx: TransactionContext,
     userId?: string
   ): Promise<OrderEntity> {
-    const order = OrderRepository.findById(organizationId, orderId, tx);
+    const order = await OrderRepository.findByIdAsync(organizationId, orderId, tx);
     if (!order) {
       throw new Error(`Pedido ${orderId} não encontrado.`);
     }
@@ -835,7 +835,7 @@ export class OrderService {
     }
 
     const nextStatus = transitionCheck.toStatus;
-    const items = OrderRepository.getItemsByOrderId(organizationId, orderId, tx);
+    const items = await OrderRepository.getItemsByOrderIdAsync(organizationId, orderId, tx);
 
     // 1.1 Business Rules Validation against Real-Time Inventory State
     const inventoryCheck = await OrderStateMachine.validateInventoryRules(
@@ -862,7 +862,7 @@ export class OrderService {
 
       case "CONFIRM_PAYMENT":
         // A. Mark payments as PAID
-        const payments = OrderRepository.getPaymentsByOrderId(organizationId, orderId, tx);
+        const payments = await OrderRepository.getPaymentsByOrderIdAsync(organizationId, orderId, tx);
         for (const p of payments) {
           p.status = "PAID";
           p.paidAt = nowIso;
@@ -991,6 +991,6 @@ export class OrderService {
       { orderId, fromStatus: currentStatus, toStatus: nextStatus, event: dto.event }
     );
 
-    return this.hydrateOrder(order, tx);
+    return await this.hydrateOrderAsync(order, tx);
   }
 }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
 import { requireRole } from "../middlewares/rbacMiddleware";
 import { orgRepo, memberRepo, subRepo, planRepo, moduleRepo } from "../repositories";
+import { auditService } from "../services/auditService";
 
 const router = Router();
 
@@ -49,6 +50,28 @@ router.put(
         success: true,
         message: "Configurações da empresa atualizadas com sucesso.",
         organization: updated,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// GET /api/organizations/current/audit-logs - LGPD compliance audit logs for the store owner
+router.get(
+  "/current/audit-logs",
+  authMiddleware,
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const orgId = req.tenant!.id;
+      const limit = Math.min(parseInt((req.query.limit as string) || "100", 10), 200);
+      const logs = await auditService.listLogs(orgId, limit);
+
+      return res.json({
+        success: true,
+        data: logs,
+        total: logs.length,
       });
     } catch (error: any) {
       return res.status(500).json({ success: false, error: error.message });

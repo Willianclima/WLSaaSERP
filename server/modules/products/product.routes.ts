@@ -5,6 +5,9 @@ import { requireModule, requireRole } from "../../middlewares/rbacMiddleware";
 
 const router = Router();
 
+// Public storefront catalog listing (no operator login required; targets specified store)
+router.get("/public", ProductController.listPublic);
+
 // Protect all product routes with Authentication & Catalog Module authorization
 router.use(authMiddleware);
 router.use(requireModule("catalog_inventory"));

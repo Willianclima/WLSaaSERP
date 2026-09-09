@@ -26,6 +26,7 @@ import {
   Send,
 } from "lucide-react";
 import { ProductItem, Customer, UnifiedOrder, TenantStore, StoreBrandingConfig } from "../types";
+import { toast } from "../utils/toast";
 
 interface QuickSellScreenProps {
   products: ProductItem[];
@@ -273,7 +274,7 @@ export const QuickSellScreen: React.FC<QuickSellScreenProps> = ({
 
   const handleSendWhatsApp = () => {
     if (cartItems.length === 0) {
-      alert("Adicione pelo menos um produto antes de enviar o resumo.");
+      toast.warning("Adicione pelo menos um produto antes de enviar o resumo por WhatsApp.");
       return;
     }
 
@@ -302,7 +303,7 @@ export const QuickSellScreen: React.FC<QuickSellScreenProps> = ({
   // ---------------------------------------------------------------------------
   const handleRegisterSale = async () => {
     if (cartItems.length === 0) {
-      alert("Selecione pelo menos um produto para registrar a venda.");
+      toast.warning("Selecione pelo menos um produto para registrar a venda.");
       return;
     }
 

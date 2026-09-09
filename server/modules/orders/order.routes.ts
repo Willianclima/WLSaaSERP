@@ -4,7 +4,10 @@ import { authMiddleware } from "../../middlewares/authMiddleware";
 
 const router = Router();
 
-// Apply auth/tenant middleware to all order routes
+// Public storefront order checkout (no operator token required; validated against store existence)
+router.post("/public", OrderController.createPublic);
+
+// Apply auth/tenant middleware to all operator order routes
 router.use(authMiddleware);
 
 // Orders CRUD & Pipeline Querying

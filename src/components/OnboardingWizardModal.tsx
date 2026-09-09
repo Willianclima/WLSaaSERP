@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { TenantStore, StoreBrandingConfig, LaunchDiscountConfig } from "../types";
+import { toast } from "../utils/toast";
 
 interface OnboardingWizardModalProps {
   isOpen: boolean;
@@ -372,7 +373,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         origin: { y: 0.6 },
       });
     } catch (err: any) {
-      alert(err.message || "Erro ao salvar dados de Onboarding");
+      toast.error(err.message || "Erro ao salvar dados de Onboarding");
     } finally {
       setIsSaving(false);
     }
@@ -1450,7 +1451,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(`${window.location.origin}/?loja=${storeName.toLowerCase().replace(/\s+/g, "-")}`);
-                      alert("Link do catálogo copiado com sucesso!");
+                      toast.success("Link do catálogo copiado para a área de transferência!");
                     }}
                     className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-all cursor-pointer shrink-0"
                   >

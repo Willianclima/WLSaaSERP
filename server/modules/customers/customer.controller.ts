@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { CustomerService } from "./customer.service";
 import { CustomerFilterQuery } from "./customer.types";
+import { auditService } from "../../services/auditService";
 
 export class CustomerController {
   /**
@@ -65,6 +66,24 @@ export class CustomerController {
       const orgId = req.organizationId!;
       const newCustomer = await CustomerService.createCustomer(orgId, req.body);
 
+      const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+      const userAgent = req.headers["user-agent"] || "Aura Web Client";
+
+      await auditService.logAction(
+        orgId,
+        req.user?.id,
+        "CREATE_CUSTOMER",
+        "customers",
+        newCustomer.id,
+        clientIp,
+        userAgent,
+        `Cliente ${newCustomer.fullName || newCustomer.companyName || newCustomer.id} cadastrado com sucesso.`,
+        {
+          personType: newCustomer.personType,
+          customerTier: newCustomer.customerTier,
+        }
+      );
+
       return res.status(201).json({
         success: true,
         data: newCustomer,
@@ -87,6 +106,20 @@ export class CustomerController {
       const { id } = req.params;
 
       const updated = await CustomerService.updateCustomer(orgId, id, req.body);
+      const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+      const userAgent = req.headers["user-agent"] || "Aura Web Client";
+
+      await auditService.logAction(
+        orgId,
+        req.user?.id,
+        "UPDATE_CUSTOMER",
+        "customers",
+        id,
+        clientIp,
+        userAgent,
+        `Dados do cliente ${updated.fullName || updated.companyName || id} atualizados.`,
+        { updatedFields: Object.keys(req.body) }
+      );
 
       return res.json({
         success: true,
@@ -118,6 +151,20 @@ export class CustomerController {
       }
 
       const updated = await CustomerService.updateStatus(orgId, id, status);
+      const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+      const userAgent = req.headers["user-agent"] || "Aura Web Client";
+
+      await auditService.logAction(
+        orgId,
+        req.user?.id,
+        "CHANGE_CUSTOMER_STATUS",
+        "customers",
+        id,
+        clientIp,
+        userAgent,
+        `Status do cliente ${updated.fullName || id} alterado para ${status}.`,
+        { newStatus: status }
+      );
 
       return res.json({
         success: true,
@@ -142,6 +189,20 @@ export class CustomerController {
       const { id } = req.params;
 
       const archived = await CustomerService.deleteCustomer(orgId, id);
+      const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+      const userAgent = req.headers["user-agent"] || "Aura Web Client";
+
+      await auditService.logAction(
+        orgId,
+        req.user?.id,
+        "ARCHIVE_CUSTOMER",
+        "customers",
+        id,
+        clientIp,
+        userAgent,
+        `Cliente ${archived.fullName || id} arquivado para preservar histórico de pedidos e garantias.`,
+        { reason: "Customer soft-deleted to maintain warranty & fiscal integrity" }
+      );
 
       return res.json({
         success: true,

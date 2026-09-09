@@ -1,6 +1,8 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { OrderService } from "./order.service";
+import { OrderRepository } from "./order.repository";
+import { orgRepo } from "../../repositories";
 import {
   OrderFilterQuery,
   CreateOrderDTO,
@@ -11,6 +13,72 @@ import {
 } from "./order.types";
 
 export class OrderController {
+  /**
+   * POST /api/orders/public
+   * Public storefront checkout endpoint (no operator auth token required).
+   * Atomically validates stock, reserves inventory, creates customer, and persists order in PostgreSQL.
+   */
+  static async createPublic(req: Request, res: Response) {
+    try {
+      const targetIdentifier =
+        req.body.organizationId ||
+        req.body.tenantId ||
+        (req.headers["x-tenant-id"] as string) ||
+        (req.query.tenantId as string) ||
+        req.body.storeSlug;
+
+      if (!targetIdentifier) {
+        return res.status(400).json({
+          success: false,
+          error: "Identificador da loja (organizationId ou storeSlug) é obrigatório.",
+        });
+      }
+
+      // Resolve tenant
+      let org = await orgRepo.findById(targetIdentifier);
+      if (!org) {
+        org = await orgRepo.findBySlug(targetIdentifier);
+      }
+      if (!org) {
+        return res.status(404).json({
+          success: false,
+          error: "Loja não encontrada ou inativa.",
+        });
+      }
+
+      const dto: CreateOrderDTO = req.body;
+      if (!dto.items || dto.items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: "A sacola de compras deve conter ao menos 1 item.",
+        });
+      }
+
+      // Enforce channel, initialStatus (atomically reserves stock) and operator
+      const order = await OrderService.createOrder(
+        org.id,
+        {
+          ...dto,
+          channel: dto.channel || "ECOMMERCE",
+          initialStatus: dto.initialStatus || "INVENTORY_RESERVED",
+        },
+        "Cliente Vitrine (WhatsApp Storefront)"
+      );
+
+      return res.status(201).json({
+        success: true,
+        data: order,
+        message: `Pedido ${order.orderNumber} registrado no sistema com sucesso!`,
+      });
+    } catch (error: any) {
+      console.error("Erro ao registrar pedido público:", error);
+      return res.status(400).json({
+        success: false,
+        error: error.message || "Falha ao processar pedido na vitrine.",
+      });
+    }
+  }
+
   /**
    * GET /api/orders
    */
@@ -116,17 +184,41 @@ export class OrderController {
       const { id } = req.params;
       const dto: OrderTransitionDTO = req.body;
 
-      if (!dto.event) {
+      let event = dto.event;
+      if (!event && (req.body as any).targetStatus) {
+        const target = String((req.body as any).targetStatus).toUpperCase();
+        if (target === "PAID" || target === "PAGO") event = "CONFIRM_PAYMENT";
+        else if (target === "CANCELLED" || target === "CANCELADO") event = "CANCEL_ORDER";
+        else if (target === "DISPATCHED" || target === "ENVIADO") event = "START_FULFILLMENT";
+        else if (target === "DELIVERED" || target === "ENTREGUE") event = "COMPLETE_FULFILLMENT";
+        else if (target === "INVENTORY_RESERVED") event = "RESERVE_INVENTORY";
+      }
+
+      if (!event) {
         return res.status(400).json({
           success: false,
           error: "O evento de transição FSM (event) é obrigatório.",
         });
       }
 
-      const operatorName = (req as any).user?.name || dto.operatorName || "Operador Comercial";
+      const operatorName = (req as any).user?.name || dto.operatorName || (req.body as any).operator || "Operador Comercial";
       const userId = (req as any).user?.id;
+
+      // Gracefully advance DRAFT -> SUBMIT_ORDER if operator is confirming payment
+      if (event === "CONFIRM_PAYMENT") {
+        const existing = await OrderRepository.findByIdAsync(orgId, id);
+        if (existing && existing.status === "DRAFT") {
+          await OrderService.transitionOrder(orgId, id, {
+            event: "SUBMIT_ORDER",
+            operatorName,
+            reason: "Reserva automática prévia à liquidação de pagamento",
+          }, userId);
+        }
+      }
+
       const updatedOrder = await OrderService.transitionOrder(orgId, id, {
         ...dto,
+        event,
         operatorName,
       }, userId);
 

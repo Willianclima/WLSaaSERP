@@ -17,8 +17,10 @@ import {
   AlertCircle,
   X,
   ExternalLink,
+  Copy,
 } from "lucide-react";
 import { UnifiedOrder, ProductItem, Customer, DigitalWarranty } from "../types";
+import { toast } from "../utils/toast";
 
 interface UnifiedSalesOrdersProps {
   orders: UnifiedOrder[];
@@ -147,27 +149,56 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
     },
   ];
 
-  // Merge runtime orders if any
-  const normalizedRuntimeOrders = (orders || []).map((o: any) => ({
-    id: o.id,
-    orderNumber: o.orderNumber?.startsWith("#") ? o.orderNumber : `#${o.orderNumber || o.id.slice(-6)}`,
-    customerName: o.customerSnapshot?.name || o.customerName || "Cliente",
-    customerPhone: o.customerSnapshot?.phone || o.customerPhone || "",
-    date: new Date(o.createdAt || Date.now()).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + new Date(o.createdAt || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-    totalAmount: Number(o.totalAmount || 0),
-    paymentMethod: o.paymentMethod || o.payments?.[0]?.paymentMethod || "PIX",
-    status: o.status || "PAGO",
-    statusLabel: o.status === "PAID" || o.status === "PAGO" ? "Pago" : o.status === "SHIPPED" || o.status === "ENVIADO" ? "Enviado" : o.status === "CANCELLED" || o.status === "CANCELADO" ? "Cancelado" : "Aguardando Pagamento",
-    statusColor: (o.status === "PAID" || o.status === "PAGO") ? "emerald" : (o.status === "SHIPPED" || o.status === "ENVIADO") ? "blue" : (o.status === "CANCELLED" || o.status === "CANCELADO") ? "rose" : "amber",
-    items: o.items?.map((i: any) => ({
-      name: i.productSnapshot?.name || i.name || "Semijoia",
-      qty: i.quantity || 1,
-      price: Number(i.unitPrice || 0),
-    })) || [],
-    warrantyCode: o.warrantyCode || "GRT-2026",
-  }));
+  // Merge runtime orders if any (PostgreSQL orders first)
+  const normalizedRuntimeOrders = (orders || []).map((o: any) => {
+    const isPaid = o.status === "PAID" || o.status === "PAGO" || o.paymentStatus === "PAID";
+    const isShipped = o.status === "SHIPPED" || o.status === "ENVIADO" || o.status === "FULFILLMENT_PENDING";
+    const isDelivered = o.status === "DELIVERED" || o.status === "ENTREGUE" || o.status === "FULFILLED";
+    const isCancelled = o.status === "CANCELLED" || o.status === "CANCELADO";
 
-  const allOrders = [...wireframeOrders, ...normalizedRuntimeOrders];
+    let statusLabel = "Aguardando Pagamento";
+    let statusColor = "amber";
+    if (isPaid) {
+      statusLabel = "Pago";
+      statusColor = "emerald";
+    } else if (isShipped) {
+      statusLabel = "Enviado";
+      statusColor = "blue";
+    } else if (isDelivered) {
+      statusLabel = "Entregue";
+      statusColor = "emerald";
+    } else if (isCancelled) {
+      statusLabel = "Cancelado";
+      statusColor = "rose";
+    }
+
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber?.startsWith("#") ? o.orderNumber : `#${o.orderNumber || o.id.slice(-6)}`,
+      customerName: o.customerSnapshot?.name || o.customerName || "Cliente",
+      customerPhone: o.customerSnapshot?.phone || o.customerPhone || "",
+      date: new Date(o.createdAt || Date.now()).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + new Date(o.createdAt || Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      totalAmount: Number(o.totalAmount || 0),
+      paymentMethod: o.paymentMethod || o.payments?.[0]?.paymentMethod || "PIX",
+      status: o.status,
+      statusLabel,
+      statusColor,
+      items: o.items?.map((i: any) => ({
+        name: i.productSnapshot?.name || i.name || "Semijoia",
+        qty: i.quantity || 1,
+        price: Number(i.unitPrice || 0),
+      })) || [],
+      warrantyCode: o.warrantyCode || warranties?.find((w) => w.orderId === o.id)?.code || "GRT-2026-VAL",
+    };
+  });
+
+  const allOrders = [...normalizedRuntimeOrders, ...wireframeOrders];
+
+  const countAll = allOrders.length;
+  const countPending = allOrders.filter((o) => o.statusColor === "amber").length;
+  const countPaid = allOrders.filter((o) => o.statusColor === "emerald").length;
+  const countShipped = allOrders.filter((o) => o.statusColor === "blue").length;
+  const countCancelled = allOrders.filter((o) => o.statusColor === "rose").length;
 
   const filteredOrders = allOrders.filter((order) => {
     const matchesSearch =
@@ -177,20 +208,17 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
 
     if (!matchesSearch) return false;
 
-    if (activeTab === "PENDENTES") {
-      return order.statusLabel === "Aguardando Pagamento" || order.status === "PENDING";
-    }
-    if (activeTab === "AGUARDANDO_PAGAMENTO") {
-      return order.statusLabel === "Aguardando Pagamento";
+    if (activeTab === "PENDENTES" || activeTab === "AGUARDANDO_PAGAMENTO") {
+      return order.statusColor === "amber";
     }
     if (activeTab === "PAGOS") {
-      return order.statusLabel === "Pago";
+      return order.statusColor === "emerald";
     }
     if (activeTab === "ENVIADOS") {
-      return order.statusLabel === "Enviado";
+      return order.statusColor === "blue";
     }
     if (activeTab === "CANCELADOS") {
-      return order.statusLabel === "Cancelado";
+      return order.statusColor === "rose";
     }
 
     return true; // "TODOS"
@@ -256,29 +284,18 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
               : "text-stone-500 hover:text-stone-800"
           }`}
         >
-          Todos (32)
-        </button>
-
-        <button
-          onClick={() => setActiveTab("PENDENTES")}
-          className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
-            activeTab === "PENDENTES"
-              ? "text-stone-900 font-bold border-b-2 border-stone-900"
-              : "text-stone-500 hover:text-stone-800"
-          }`}
-        >
-          Pendentes (8)
+          Todos ({countAll})
         </button>
 
         <button
           onClick={() => setActiveTab("AGUARDANDO_PAGAMENTO")}
           className={`pb-3 font-semibold transition-colors relative cursor-pointer ${
-            activeTab === "AGUARDANDO_PAGAMENTO"
+            activeTab === "AGUARDANDO_PAGAMENTO" || activeTab === "PENDENTES"
               ? "text-stone-900 font-bold border-b-2 border-stone-900"
               : "text-stone-500 hover:text-stone-800"
           }`}
         >
-          Aguardando Pagamento (5)
+          Aguardando Pagamento ({countPending})
         </button>
 
         <button
@@ -289,7 +306,7 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
               : "text-stone-500 hover:text-stone-800"
           }`}
         >
-          Pagos (14)
+          Pagos ({countPaid})
         </button>
 
         <button
@@ -300,7 +317,7 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
               : "text-stone-500 hover:text-stone-800"
           }`}
         >
-          Enviados (3)
+          Enviados ({countShipped})
         </button>
 
         <button
@@ -311,7 +328,7 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
               : "text-stone-500 hover:text-stone-800"
           }`}
         >
-          Cancelados (2)
+          Cancelados ({countCancelled})
         </button>
       </div>
 
@@ -390,9 +407,27 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                       </span>
                     </td>
 
-                    {/* Ações (Eye + 3 dots) */}
+                    {/* Ações */}
                     <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
+                        {isAmber && onConfirmOrderPayment && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await onConfirmOrderPayment(order.id);
+                                toast.success(`Pagamento do pedido ${order.orderNumber} confirmado!`);
+                              } catch (err: any) {
+                                toast.error(err.message || "Erro ao confirmar pagamento");
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                            title="Confirmar pagamento recebido (baixa de estoque e emissão de garantia)"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Confirmar PIX</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedOrderForDrawer(order)}
                           className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
@@ -496,16 +531,51 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                   <ShieldCheck className="w-4 h-4 text-amber-700" />
                   <span>Garantia 12 Meses: {selectedOrderForDrawer.warrantyCode}</span>
                 </div>
+                <button
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      navigator.clipboard.writeText(selectedOrderForDrawer.warrantyCode);
+                      toast.success("Código da garantia copiado para a área de transferência!");
+                    }
+                  }}
+                  className="p-1 rounded-md text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                  title="Copiar código de garantia"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
             {/* Actions Footer */}
             <div className="pt-6 border-t border-stone-100 space-y-2">
+              {selectedOrderForDrawer.statusColor === "amber" && onConfirmOrderPayment && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await onConfirmOrderPayment(selectedOrderForDrawer.id);
+                      toast.success(`Pagamento do pedido ${selectedOrderForDrawer.orderNumber} confirmado!`);
+                      setSelectedOrderForDrawer((prev: any) => ({
+                        ...prev,
+                        statusLabel: "Pago",
+                        statusColor: "emerald",
+                        status: "PAID",
+                      }));
+                    } catch (err: any) {
+                      toast.error(err.message || "Erro ao confirmar pagamento");
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Confirmar Recebimento (PIX / Dinheiro)</span>
+                </button>
+              )}
+
               <a
                 href={`https://wa.me/55${(selectedOrderForDrawer.customerPhone || "").replace(/\D/g, "")}?text=Ol%C3%A1+${encodeURIComponent(selectedOrderForDrawer.customerName)}%2C+aqui+%C3%A9+da+Lumina+Semijoias!+Seu+pedido+${selectedOrderForDrawer.orderNumber}+est%C3%A1+confirmado.`}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
               >
                 <Send className="w-4 h-4" />
                 <span>Enviar no WhatsApp</span>

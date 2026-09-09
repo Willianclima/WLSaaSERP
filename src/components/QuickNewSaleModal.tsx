@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { ProductItem, Customer } from "../types";
+import { toast } from "../utils/toast";
 
 interface QuickNewSaleModalProps {
   isOpen: boolean;
@@ -114,13 +115,13 @@ export const QuickNewSaleModal: React.FC<QuickNewSaleModalProps> = ({
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (!customerName.trim()) {
-        alert("Por favor, preencha o nome do cliente.");
+        toast.warning("Por favor, preencha o nome do cliente.");
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (selectedItems.length === 0) {
-        alert("Por favor, selecione ao menos uma peça.");
+        toast.warning("Por favor, selecione ao menos uma peça.");
         return;
       }
       setCurrentStep(3);
@@ -161,6 +162,7 @@ export const QuickNewSaleModal: React.FC<QuickNewSaleModalProps> = ({
         notes,
       });
 
+      toast.success("Venda registrada com sucesso no sistema!");
       onClose();
       // Reset
       setCurrentStep(1);
@@ -169,7 +171,7 @@ export const QuickNewSaleModal: React.FC<QuickNewSaleModalProps> = ({
       setCustomerPhone("");
       setDeliveryAddress("");
     } catch (err: any) {
-      alert(err.message || "Erro ao criar pedido.");
+      toast.error(err.message || "Erro ao criar pedido.");
     } finally {
       setIsSubmitting(false);
     }

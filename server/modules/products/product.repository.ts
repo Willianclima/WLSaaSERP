@@ -127,8 +127,14 @@ export class ProductRepository implements IProductRepository {
         params.push(filter.bath);
       }
       if (filter.status && filter.status !== "TODOS") {
-        sql += ` AND status = $${idx++}`;
-        params.push(filter.status);
+        if (filter.status.toUpperCase() === "ACTIVE" || filter.status.toUpperCase() === "ATIVO") {
+          sql += ` AND status IN ('ATIVO', 'ACTIVE')`;
+        } else if (filter.status.toUpperCase() === "INACTIVE" || filter.status.toUpperCase() === "INATIVO") {
+          sql += ` AND status IN ('INATIVO', 'INACTIVE')`;
+        } else {
+          sql += ` AND status = $${idx++}`;
+          params.push(filter.status);
+        }
       }
       if (filter.search) {
         const q = `%${filter.search.toLowerCase()}%`;

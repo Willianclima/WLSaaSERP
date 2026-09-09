@@ -129,14 +129,27 @@ export class StorageService {
       throw new Error(validation.error);
     }
 
+    const MAX_IMAGE_SIZE = 15 * 1024 * 1024; // 15MB
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+    if (validation.type === "IMAGE" && buffer.length > MAX_IMAGE_SIZE) {
+      throw new Error(`Imagem excede o limite máximo permitido de 15MB (${(buffer.length / 1024 / 1024).toFixed(1)}MB).`);
+    }
+    if (validation.type === "VIDEO" && buffer.length > MAX_VIDEO_SIZE) {
+      throw new Error(`Vídeo excede o limite máximo permitido de 50MB (${(buffer.length / 1024 / 1024).toFixed(1)}MB).`);
+    }
+
     const storageKey = this.generateStorageKey(options, originalFilename);
     const etag = crypto.createHash("md5").update(buffer).digest("hex");
     const fileSizeBytes = buffer.length;
 
-    // Save to local object storage repository
-    const targetFilePath = path.join(this.localStorageDir, ...storageKey.split("/"));
-    const targetDirPath = path.dirname(targetFilePath);
+    // Save to local object storage repository with strict path safety check
+    const normalizedKey = path.normalize(storageKey).replace(/^(\.\.[\/\\])+/, "");
+    const targetFilePath = path.resolve(this.localStorageDir, normalizedKey);
+    if (!targetFilePath.startsWith(path.resolve(this.localStorageDir))) {
+      throw new Error("Caminho de armazenamento inseguro detectado.");
+    }
 
+    const targetDirPath = path.dirname(targetFilePath);
     if (!fs.existsSync(targetDirPath)) {
       fs.mkdirSync(targetDirPath, { recursive: true });
     }
@@ -237,11 +250,12 @@ export class StorageService {
    * Reads a file from local storage by storageKey
    */
   public getFileStream(storageKey: string): { filePath: string; exists: boolean } {
-    const cleanKey = storageKey.replace(/\.\./g, "");
-    const targetFilePath = path.join(this.localStorageDir, ...cleanKey.split("/"));
+    const normalizedKey = path.normalize(storageKey).replace(/^(\.\.[\/\\])+/, "");
+    const targetFilePath = path.resolve(this.localStorageDir, normalizedKey);
+    const safe = targetFilePath.startsWith(path.resolve(this.localStorageDir));
     return {
       filePath: targetFilePath,
-      exists: fs.existsSync(targetFilePath),
+      exists: safe && fs.existsSync(targetFilePath),
     };
   }
 
@@ -250,8 +264,11 @@ export class StorageService {
    */
   public async deleteFile(storageKey: string): Promise<boolean> {
     try {
-      const cleanKey = storageKey.replace(/\.\./g, "");
-      const targetFilePath = path.join(this.localStorageDir, ...cleanKey.split("/"));
+      const normalizedKey = path.normalize(storageKey).replace(/^(\.\.[\/\\])+/, "");
+      const targetFilePath = path.resolve(this.localStorageDir, normalizedKey);
+      if (!targetFilePath.startsWith(path.resolve(this.localStorageDir))) {
+        throw new Error("Violação de segurança de caminho detectada.");
+      }
       if (fs.existsSync(targetFilePath)) {
         fs.unlinkSync(targetFilePath);
         return true;

@@ -1,10 +1,78 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { ProductService } from "./product.service";
 import { CreateProductDTO, UpdateProductDTO, ProductFilterQuery } from "./product.types";
 import { auditService } from "../../services/auditService";
+import { orgRepo } from "../../repositories";
 
 export class ProductController {
+  /**
+   * GET /api/products/public
+   * Public storefront catalog listing for buyers (no operator auth required).
+   * Shows active products with live calculated stock and organization details.
+   */
+  static async listPublic(req: Request, res: Response) {
+    try {
+      const targetIdentifier =
+        (req.query.storeSlug as string) ||
+        (req.query.tenantId as string) ||
+        (req.query.organizationId as string) ||
+        (req.headers["x-tenant-id"] as string) ||
+        "org-lumina-01";
+
+      let org = await orgRepo.findById(targetIdentifier);
+      if (!org) {
+        org = await orgRepo.findBySlug(targetIdentifier);
+      }
+      if (!org) {
+        const all = await orgRepo.listAll();
+        org = all[0] || null;
+      }
+
+      if (!org) {
+        return res.status(404).json({
+          success: false,
+          error: "Loja / Catálogo não encontrado.",
+        });
+      }
+
+      const filter: ProductFilterQuery = {
+        category: req.query.category as string,
+        bath: req.query.bath as string,
+        status: "ACTIVE",
+        search: req.query.search as string,
+        minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
+        maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : 200,
+        offset: req.query.offset ? Number(req.query.offset) : 0,
+      };
+
+      const result = await ProductService.listProducts(org.id, filter);
+
+      return res.json({
+        success: true,
+        data: result.products,
+        total: result.total,
+        organization: {
+          id: org.id,
+          name: org.name,
+          slug: org.slug,
+          segment: org.segment,
+          contactWhatsapp: org.contactWhatsapp,
+          contactEmail: org.contactEmail,
+          city: org.city,
+          state: org.state,
+          logoUrl: org.logoUrl,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Erro ao carregar catálogo público.",
+      });
+    }
+  }
+
   /**
    * GET /api/products
    * Lists products for the current tenant with live stock computed from ledger.

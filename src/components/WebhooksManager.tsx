@@ -37,6 +37,7 @@ import {
   INITIAL_WEBHOOK_ENDPOINTS,
   INITIAL_WEBHOOK_LOGS,
 } from "../data/mockData";
+import { toast } from "../utils/toast";
 
 interface WebhooksManagerProps {
   tenant: TenantStore;
@@ -500,9 +501,9 @@ export const WebhooksManager: React.FC<WebhooksManagerProps> = ({ tenant }) => {
   };
 
   const handleRetryLog = (log: WebhookDeliveryLog) => {
-    alert(`Reenviando evento ${log.event} para ${log.endpointUrl}...`);
+    toast.info(`Reenviando evento ${log.event} para ${log.endpointUrl}...`);
     setTimeout(() => {
-      alert(`Disparo reenviado com sucesso! Código HTTP 200 OK (84ms)`);
+      toast.success(`Disparo reenviado com sucesso! Código HTTP 200 OK (84ms)`);
     }, 600);
   };
 

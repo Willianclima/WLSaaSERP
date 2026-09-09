@@ -32,6 +32,7 @@ import {
 } from "../../types/order";
 import { OrderReceiptPrintModal } from "./OrderReceiptPrintModal";
 import { whatsappOrderService } from "../../services/whatsappOrderService";
+import { toast } from "../../utils/toast";
 
 interface OrderDetailDrawerProps {
   order: Order;
@@ -91,8 +92,9 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
         operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial (Admin)",
         reason,
       });
+      toast.success("Status do pedido atualizado com sucesso!");
     } catch (e: any) {
-      alert(e.message || "Erro ao transicionar pedido.");
+      toast.error(e.message || "Erro ao transicionar pedido.");
     } finally {
       setIsTransitioning(false);
     }
@@ -106,8 +108,9 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
         operatorName: order.resellerName ? `Vendedora (${order.resellerName})` : "Gestor Comercial (Admin)",
         reason: `Pagamento recebido via ${selectedPaymentMode}. Estoque baixado para SALE no ERP e Garantia Digital ativada.`,
       });
+      toast.success("Pagamento confirmado com sucesso! Estoque baixado e garantia ativada.");
     } catch (e: any) {
-      alert(e.message || "Erro ao confirmar pagamento.");
+      toast.error(e.message || "Erro ao confirmar pagamento.");
     } finally {
       setIsTransitioning(false);
     }
