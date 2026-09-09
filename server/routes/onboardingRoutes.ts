@@ -1,30 +1,37 @@
-import { Router, Request, Response } from "express";
-import { dbStore } from "../db/store";
+import { Router, Response } from "express";
+import { query } from "../db/postgres";
+import { orgRepo, subRepo } from "../repositories";
+import { productRepo } from "../modules/products/product.repository";
+import { inventoryRepo } from "../modules/inventory/inventory.repository";
 import { ProductEntity } from "../modules/products/product.types";
 import { InventoryMovementEntity, InventoryBalanceEntity } from "../modules/inventory/inventory.types";
-import { OrganizationEntity, SubscriptionEntity } from "../types/saas";
+import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
 
 const router = Router();
 
-// GET /api/onboarding/status - Check onboarding status and trial details
-router.get("/status", async (req: Request, res: Response) => {
+// Protect all onboarding endpoints: Usuário autenticado -> Membership ativo -> Tenant permitido
+router.use(authMiddleware);
+
+// GET /api/onboarding/status - Check onboarding status and trial details strictly for authenticated tenant
+router.get("/status", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const orgId = (req.headers["x-tenant-id"] as string) || "org-lumina-01";
-    let org = dbStore.organizations.get(orgId);
-
+    const org = req.tenant;
     if (!org) {
-      // Fallback to first org
-      org = Array.from(dbStore.organizations.values())[0];
+      return res.status(404).json({ success: false, error: "Organização autenticada não encontrada." });
     }
+    const orgId = req.organizationId!;
 
-    if (!org) {
-      return res.status(404).json({ success: false, error: "Organização não encontrada." });
-    }
+    const subscription = await subRepo.findByOrgId(org.id);
 
-    const subscription = dbStore.subscriptions.get(org.id);
-    const orgProducts = Array.from(dbStore.products.values()).filter((p) => p.organizationId === org.id);
-    const orgOrders = Array.from(dbStore.orders.values()).filter((o) => o.organizationId === org.id);
-    const orgCustomers = Array.from(dbStore.customers.values()).filter((c) => c.organizationId === org.id);
+    const [prodCountRes, ordCountRes, custCountRes] = await Promise.all([
+      query("SELECT count(*) as count FROM products WHERE organization_id = $1", [org.id]),
+      query("SELECT count(*) as count FROM orders WHERE organization_id = $1", [org.id]),
+      query("SELECT count(*) as count FROM customers WHERE organization_id = $1", [org.id]),
+    ]);
+
+    const productsCount = parseInt(prodCountRes.rows[0]?.count || "0", 10);
+    const ordersCount = parseInt(ordCountRes.rows[0]?.count || "0", 10);
+    const customersCount = parseInt(custCountRes.rows[0]?.count || "0", 10);
 
     // Calculate trial remaining days
     let trialRemainingDays = 30;
@@ -35,21 +42,41 @@ router.get("/status", async (req: Request, res: Response) => {
       trialRemainingDays = diffDays;
     }
 
+    // Retrieve active launch discount if configured
+    let launchDiscount: any = (org as any).launchDiscount || null;
+    try {
+      const discountRes = await query(
+        "SELECT details FROM audit_logs WHERE organization_id = $1 AND action = 'ONBOARDING_LAUNCH_DISCOUNT' ORDER BY created_at DESC LIMIT 1",
+        [org.id]
+      );
+      if (discountRes.rows.length > 0 && discountRes.rows[0].details) {
+        launchDiscount = typeof discountRes.rows[0].details === "string"
+          ? JSON.parse(discountRes.rows[0].details)
+          : discountRes.rows[0].details;
+      }
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
     return res.json({
       success: true,
       data: {
-        organization: org,
+        organization: {
+          ...org,
+          launchDiscount,
+        },
         subscription: subscription || {
           status: "TRIALING",
           trialStartedAt: new Date().toISOString(),
           trialEndsAt: new Date(Date.now() + 30 * 86400000).toISOString(),
         },
         trialRemainingDays,
-        productsCount: orgProducts.length,
-        ordersCount: orgOrders.length,
-        customersCount: orgCustomers.length,
-        hasProducts: orgProducts.length > 0,
+        productsCount,
+        ordersCount,
+        customersCount,
+        hasProducts: productsCount > 0,
         isOnboardingComplete: Boolean((org as any).onboardingCompleted),
+        launchDiscount,
       },
     });
   } catch (error: any) {
@@ -57,37 +84,59 @@ router.get("/status", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/onboarding/save - Complete or update the onboarding wizard
-router.post("/save", async (req: Request, res: Response) => {
+// GET /api/onboarding/launch-discount - Get active launch discount configuration for authenticated tenant
+router.get("/launch-discount", async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const orgId = (req.headers["x-tenant-id"] as string) || req.body.orgId || "org-lumina-01";
+    const orgId = req.organizationId!;
+    const discountRes = await query(
+      "SELECT details FROM audit_logs WHERE organization_id = $1 AND action = 'ONBOARDING_LAUNCH_DISCOUNT' ORDER BY created_at DESC LIMIT 1",
+      [orgId]
+    );
+
+    let launchDiscount = null;
+    if (discountRes.rows.length > 0 && discountRes.rows[0].details) {
+      launchDiscount = typeof discountRes.rows[0].details === "string"
+        ? JSON.parse(discountRes.rows[0].details)
+        : discountRes.rows[0].details;
+    }
+
+    return res.json({
+      success: true,
+      data: launchDiscount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/onboarding/save - Complete or update the onboarding wizard strictly in authenticated tenant context
+router.post("/save", async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const orgId = req.organizationId!;
+    const org = req.tenant;
+    if (!org) {
+      return res.status(404).json({
+        success: false,
+        error: "Organização autenticada não encontrada no sistema.",
+      });
+    }
+
+    // Multi-tenant isolation: Never trust client-supplied organizationId or orgId in body
+    const untrustedBodyOrgId = req.body && (req.body.orgId || req.body.organizationId);
+    if (untrustedBodyOrgId && untrustedBodyOrgId !== orgId) {
+      return res.status(403).json({
+        success: false,
+        error: `Tentativa de violação multi-tenant bloqueada: o organizationId enviado (${untrustedBodyOrgId}) difere da sua organização autenticada (${orgId}). O onboarding deve respeitar estritamente o contexto de organização autenticado.`,
+      });
+    }
+
     const {
       storeIdentity,
       catalogSettings,
       serviceDelivery,
       initialProducts,
-    } = req.body;
-
-    let org = dbStore.organizations.get(orgId);
-    if (!org) {
-      org = {
-        id: orgId,
-        name: storeIdentity?.name || "Minha Loja de Semijoias",
-        slug: (storeIdentity?.name || "minha-loja").toLowerCase().replace(/\s+/g, "-"),
-        document: storeIdentity?.document || "00.000.000/0001-00",
-        segment: "SEMIJOIAS",
-        status: "ACTIVE",
-        city: storeIdentity?.city || "Limeira",
-        state: storeIdentity?.state || "SP",
-        contactEmail: storeIdentity?.email || "contato@loja.com.br",
-        contactWhatsapp: storeIdentity?.whatsapp || "(00) 00000-0000",
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      };
-      dbStore.organizations.set(orgId, org);
-    }
-
-    // 1. Update Organization with Store Identity & Delivery Details
+      launchDiscount,
+    } = req.body || {};
     org.name = storeIdentity?.name || org.name;
     org.document = storeIdentity?.document || org.document;
     org.contactWhatsapp = serviceDelivery?.orderWhatsapp || storeIdentity?.whatsapp || org.contactWhatsapp;
@@ -106,12 +155,34 @@ router.post("/save", async (req: Request, res: Response) => {
     (org as any).deliveryOptions = serviceDelivery?.deliveryOptions;
     (org as any).onboardingCompleted = true;
     (org as any).onboardingCompletedAt = new Date().toISOString();
-    org.updatedAt = new Date().toISOString().replace("T", " ").substring(0, 16);
+    
+    // Save launch discount configuration if provided
+    if (launchDiscount) {
+      (org as any).launchDiscount = launchDiscount;
+      try {
+        await query(
+          `INSERT INTO audit_logs (id, organization_id, action, entity, ip_address, details)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            `log-launch-discount-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            org.id,
+            "ONBOARDING_LAUNCH_DISCOUNT",
+            "LAUNCH_DISCOUNT",
+            req.ip || "127.0.0.1",
+            JSON.stringify(launchDiscount),
+          ]
+        );
+      } catch (err) {
+        console.error("Failed to log launch discount in PostgreSQL audit_logs:", err);
+      }
+    }
 
-    dbStore.organizations.set(org.id, org);
+    org.updatedAt = new Date().toISOString();
+
+    await orgRepo.update(org.id, org);
 
     // 2. Ensure Trial Subscription is active
-    let sub = dbStore.subscriptions.get(org.id);
+    let sub = await subRepo.findByOrgId(org.id);
     if (!sub) {
       const now = new Date();
       const trialEnd = new Date(now.getTime() + 30 * 86400000);
@@ -120,16 +191,16 @@ router.post("/save", async (req: Request, res: Response) => {
         organizationId: org.id,
         planId: "TRIAL_30D",
         status: "TRIALING",
-        trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
-        trialEndsAt: trialEnd.toISOString().replace("T", " ").substring(0, 16),
-        currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-        currentPeriodEnd: trialEnd.toISOString().replace("T", " ").substring(0, 16),
+        trialStartedAt: now.toISOString(),
+        trialEndsAt: trialEnd.toISOString(),
+        currentPeriodStart: now.toISOString(),
+        currentPeriodEnd: trialEnd.toISOString(),
         paymentMethod: "MANUAL_TRIAL",
         autoRenew: true,
-        createdAt: now.toISOString().replace("T", " ").substring(0, 16),
-        updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       };
-      dbStore.subscriptions.set(org.id, sub);
+      await subRepo.create(sub);
     }
 
     // 3. Process Initial Products if provided
@@ -156,11 +227,11 @@ router.post("/save", async (req: Request, res: Response) => {
           isCustomizable: false,
           status: "ATIVO",
           imageUrl: item.imageUrl || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-          updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
 
-        dbStore.products.set(prodId, newProduct);
+        await productRepo.create(newProduct);
 
         // Seed inventory balance for headquarters
         const locId = "loc-lumina-matriz";
@@ -174,10 +245,10 @@ router.post("/save", async (req: Request, res: Response) => {
           onHandQuantity: stockQty,
           reservedQuantity: 0,
           availableQuantity: stockQty,
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-          updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
-        dbStore.inventoryBalances.set(balanceKey, balance);
+        await inventoryRepo.upsertBalance(balance);
 
         // Seed initial purchase/inventory entry movement
         const movId = `mov-init-${prodId}`;
@@ -196,16 +267,13 @@ router.post("/save", async (req: Request, res: Response) => {
           referenceType: "INITIAL_STOCK",
           operatorName: (org as any).ownerName || "Consultora Titular",
           notes: "Carga inicial via Assistente de Onboarding da Consultora",
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+          createdAt: new Date().toISOString(),
         };
-        dbStore.inventoryMovements.set(movId, movement);
+        await inventoryRepo.createMovement(movement);
 
         insertedCount++;
       }
     }
-
-    // Persist all state to disk immediately
-    dbStore.saveToDisk();
 
     return res.json({
       success: true,
@@ -214,6 +282,7 @@ router.post("/save", async (req: Request, res: Response) => {
         organization: org,
         productsConfigured: insertedCount,
         trialStatus: "TRIALING",
+        launchDiscount: launchDiscount || null,
       },
     });
   } catch (error: any) {

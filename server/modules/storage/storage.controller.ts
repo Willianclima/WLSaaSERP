@@ -1,17 +1,35 @@
 import { Request, Response } from "express";
 import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { storageService, StorageUploadResult } from "../../services/storageService";
-import { dbStore } from "../../db/store";
 import { auditService } from "../../services/auditService";
 
 export class StorageController {
   /**
    * POST /api/storage/upload
    * Receives image/video (base64 or multipart payload) and uploads to Object Storage (AWS S3 / Local).
+   * Strict Multi-Tenant Rule: Authenticated Identity -> Membership -> Organization Context -> Storage.
    */
   static async upload(req: AuthenticatedRequest, res: Response) {
     try {
-      const orgId = req.organizationId || (req.body && req.body.organizationId) || "org-lumina-01";
+      if (!req.organizationId) {
+        return res.status(401).json({
+          success: false,
+          error: "Contexto de organização não autenticado. Identidade e membership válidos são obrigatórios.",
+        });
+      }
+
+      // Enforce server-resolved organization context, never trusting client-provided organizationId
+      const orgId = req.organizationId;
+
+      // Multi-tenant isolation: Never trust client-supplied organizationId from body
+      const untrustedBodyOrgId = req.body && req.body.organizationId;
+      if (untrustedBodyOrgId && untrustedBodyOrgId !== orgId) {
+        return res.status(403).json({
+          success: false,
+          error: `Tentativa de violação multi-tenant bloqueada: o organizationId enviado na requisição (${untrustedBodyOrgId}) difere da organização autenticada (${orgId}). O upload deve respeitar estritamente o contexto de organização autenticado.`,
+        });
+      }
+
       const { fileBase64, fileName, mimeType, sku, productId, folder } = req.body;
 
       if (!fileBase64 || !fileName) {
@@ -73,7 +91,23 @@ export class StorageController {
    */
   static async getPresignedUrl(req: AuthenticatedRequest, res: Response) {
     try {
-      const orgId = req.organizationId || "org-lumina-01";
+      if (!req.organizationId) {
+        return res.status(401).json({
+          success: false,
+          error: "Contexto de organização não autenticado. Identidade e membership válidos são obrigatórios.",
+        });
+      }
+
+      const orgId = req.organizationId;
+
+      const untrustedBodyOrgId = req.body && req.body.organizationId;
+      if (untrustedBodyOrgId && untrustedBodyOrgId !== orgId) {
+        return res.status(403).json({
+          success: false,
+          error: `Tentativa de violação multi-tenant bloqueada: o organizationId enviado (${untrustedBodyOrgId}) difere da organização autenticada (${orgId}). O upload deve respeitar estritamente o contexto de organização autenticado.`,
+        });
+      }
+
       const { fileName, mimeType, sku, productId, folder } = req.body;
 
       if (!fileName || !mimeType) {
@@ -145,13 +179,34 @@ export class StorageController {
 
   /**
    * DELETE /api/storage/*
-   * Deletes object from storage
+   * Deletes object from storage with strict organization boundary verification
    */
   static async delete(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!req.organizationId) {
+        return res.status(401).json({
+          success: false,
+          error: "Contexto de organização não autenticado.",
+        });
+      }
+
       const storageKey = req.params[0];
       if (!storageKey) {
         return res.status(400).json({ success: false, error: "Storage key missing" });
+      }
+
+      // Multi-tenant key isolation: Storage key prefix {organizationId}/...
+      const keySegments = storageKey.split("/");
+      const keyOrgId = keySegments[0];
+      if (
+        keyOrgId &&
+        keyOrgId !== req.organizationId &&
+        !req.user?.isPlatformSuperAdmin
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: "Acesso negado: você não tem permissão para deletar arquivos pertencentes a outra organização.",
+        });
       }
 
       const deleted = await storageService.deleteFile(storageKey);

@@ -20,6 +20,7 @@ import {
   Building2,
   Store,
   Edit3,
+  DollarSign,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig } from "../types";
 
@@ -61,24 +62,24 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
   const storeName = branding?.logoText || tenant.name || "Lumina Semijoias";
 
-  // The 7-8 primary core commercial tabs
+  // The 5 primary commercial areas + Configurações
   const mainNavTabs = [
-    { id: "ownerHome", label: "Início", icon: Home, badge: null },
-    { id: "orders", label: "Vendas & Pedidos", icon: ShoppingBag, badge: null },
-    { id: "catalog", label: "Produtos", icon: Sparkles, badge: null },
-    { id: "customers", label: "Clientes", icon: Users, badge: null },
-    { id: "inventory", label: "Estoque", icon: Package, badge: null },
-    { id: "storefront", label: "📲 Minha Vitrine", icon: Store, isStore: true },
-    { id: "warranties", label: "Garantias", icon: ShieldCheck, badge: null },
-    { id: "storeSettings", label: "Minha Loja", icon: Sliders, badge: null },
+    { id: "ownerHome", label: "Início", icon: Home },
+    { id: "vender", label: "Vender", icon: ShoppingBag },
+    { id: "catalog", label: "Produtos", icon: Package },
+    { id: "customers", label: "Clientes", icon: Users },
+    { id: "storefront", label: "Minha Loja", icon: Store },
+    { id: "storeSettings", label: "Configurações", icon: Sliders },
   ];
 
   // Secondary/Advanced tools in dropdown (hidden from daily clutter)
   const advancedTabs = [
+    { id: "warranties", label: "Garantias Digitais", icon: ShieldCheck },
+    { id: "customJewelry", label: "Peças Personalizadas", icon: Crown },
     { id: "consignments", label: "Consignações & Maletas", icon: RefreshCw },
     { id: "commissions", label: "Comissões & Metas", icon: Zap },
-    { id: "customJewelry", label: "Personalizados", icon: Crown },
-    { id: "saasBilling", label: "Gestão SaaS & Trial 30d", icon: Building2 },
+    { id: "reports", label: "Relatórios & Métricas", icon: BookOpen },
+    { id: "saasBilling", label: "Gestão SaaS & Assinatura", icon: Building2 },
     { id: "aiGateway", label: "AI Copilot MCP", icon: Bot },
     { id: "security", label: "Segurança & LGPD", icon: Lock },
     { id: "architecture", label: "Plano de Arquitetura", icon: BookOpen },
@@ -142,8 +143,9 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               <button
                 onClick={onOpenNewSale}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer active:scale-95"
+                title="Registrar venda rápida presencial e emitir garantia"
               >
-                <span>➕ Nova Venda</span>
+                <span>⚡ Registrar Venda</span>
               </button>
             )}
 
@@ -152,10 +154,10 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               <button
                 onClick={onOpenShareModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-amber-950 text-xs font-bold tracking-wide transition-all shadow-xs cursor-pointer"
-                title="Compartilhar catálogo via WhatsApp e Instagram"
+                title="Compartilhar vitrine via WhatsApp e redes sociais"
               >
                 <Share2 className="w-3.5 h-3.5 text-amber-700" />
-                <span className="hidden sm:inline">Enviar Link</span>
+                <span className="hidden sm:inline">📲 Divulgar Vitrine</span>
               </button>
             )}
 
@@ -176,7 +178,11 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           <div className="flex space-x-1 sm:space-x-2">
             {mainNavTabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id || (tab.id === "catalog" && activeTab === "inventory");
+              const isActive =
+                activeTab === tab.id ||
+                (tab.id === "ownerHome" && (activeTab === "dashboard" || activeTab === "home")) ||
+                (tab.id === "vender" && (activeTab === "vender" || activeTab === "orders" || activeTab === "sales" || activeTab === "financial" || activeTab === "commissions" || activeTab === "payments")) ||
+                (tab.id === "catalog" && (activeTab === "inventory" || activeTab === "products" || activeTab === "stock" || activeTab === "adjustments"));
               return (
                 <button
                   key={tab.id}
@@ -185,9 +191,9 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                     isActive
                       ? "bg-stone-900 text-white font-bold shadow-xs"
                       : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
-                  } ${tab.isStore ? "text-amber-900 font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200/60" : ""}`}
+                  }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-amber-300" : tab.isStore ? "text-amber-800" : "text-stone-500"}`} />
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-amber-300" : "text-stone-500"}`} />
                   <span>{tab.label}</span>
                 </button>
               );

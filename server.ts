@@ -16,7 +16,7 @@ import orderRoutes from "./server/modules/orders/order.routes";
 import storageRoutes from "./server/modules/storage/storage.routes";
 import onboardingRoutes from "./server/routes/onboardingRoutes";
 import { reservationExpiryWorker } from "./server/modules/inventory/reservationExpiryWorker";
-import { dbStore } from "./server/db/store";
+import { query } from "./server/db/postgres";
 
 dotenv.config();
 
@@ -26,30 +26,35 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// 1. Health check & Platform SaaS Diagnostics
-app.get("/api/health", (_req, res) => {
-  const totalOrgs = dbStore.organizations.size;
-  const totalUsers = dbStore.users.size;
-  const totalProducts = dbStore.products.size;
-  const totalMovements = dbStore.inventoryMovements.size;
-  const activeSubs = Array.from(dbStore.subscriptions.values()).filter(
-    (s) => s.status === "ACTIVE" || s.status === "TRIALING"
-  ).length;
+// 1. Health check & Platform SaaS Diagnostics (PostgreSQL Cloud SQL backed)
+app.get("/api/health", async (_req, res) => {
+  try {
+    const [orgs, users, products, movements, subs] = await Promise.all([
+      query("SELECT count(*) as count FROM organizations"),
+      query("SELECT count(*) as count FROM users"),
+      query("SELECT count(*) as count FROM products"),
+      query("SELECT count(*) as count FROM inventory_movements"),
+      query("SELECT count(*) as count FROM subscriptions WHERE status IN ('ACTIVE', 'TRIALING')"),
+    ]);
 
-  res.json({
-    status: "ok",
-    environment: process.env.NODE_ENV || "development",
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
-    platform: {
-      totalOrganizations: totalOrgs,
-      totalUsers: totalUsers,
-      totalProducts: totalProducts,
-      totalInventoryMovements: totalMovements,
-      activeSubscriptions: activeSubs,
-      defaultSeedTenant: "lumina",
-    },
-    timestamp: new Date().toISOString(),
-  });
+    res.json({
+      status: "ok",
+      database: "PostgreSQL (Cloud SQL)",
+      environment: process.env.NODE_ENV || "development",
+      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      platform: {
+        totalOrganizations: parseInt(orgs.rows[0]?.count || "0", 10),
+        totalUsers: parseInt(users.rows[0]?.count || "0", 10),
+        totalProducts: parseInt(products.rows[0]?.count || "0", 10),
+        totalInventoryMovements: parseInt(movements.rows[0]?.count || "0", 10),
+        activeSubscriptions: parseInt(subs.rows[0]?.count || "0", 10),
+        defaultSeedTenant: "lumina",
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ status: "error", error: err.message });
+  }
 });
 
 // 2. Mount Modular Core SaaS & ERP Routes

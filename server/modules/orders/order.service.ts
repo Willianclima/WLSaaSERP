@@ -1,5 +1,5 @@
-import { dbStore } from "../../db/store";
 import { UnitOfWork, TransactionContext } from "../../db/transaction";
+import { query } from "../../db/postgres";
 import {
   OrderEntity,
   OrderItemEntity,
@@ -20,13 +20,16 @@ import { OrderRepository } from "./order.repository";
 import { OrderStateMachine } from "./order.state-machine";
 import { inventoryRepo } from "../inventory/inventory.repository";
 import { auditService } from "../../services/auditService";
+import { productRepo } from "../products/product.repository";
+import { CustomerService } from "../customers/customer.service";
+import { userRepo } from "../../repositories";
 
 export class OrderService {
   /**
    * Helper to format sequential order numbers (e.g. ORD-2026-0001)
    */
-  private static generateOrderNumber(organizationId: string): string {
-    const existingOrgOrders = OrderRepository.list(organizationId);
+  private static async generateOrderNumber(organizationId: string): Promise<string> {
+    const existingOrgOrders = await OrderRepository.listAsync(organizationId);
     const count = existingOrgOrders.length + 1;
     const year = new Date().getFullYear();
     const padded = String(count).padStart(4, "0");
@@ -57,8 +60,8 @@ export class OrderService {
     organizationId: string,
     filter: OrderFilterQuery = {}
   ): Promise<{ orders: OrderEntity[]; total: number }> {
-    const allOrders = OrderRepository.list(organizationId, filter);
-    const hydratedOrders = allOrders.map((ord) => this.hydrateOrder(ord));
+    const allOrders = await OrderRepository.listAsync(organizationId, filter);
+    const hydratedOrders = await Promise.all(allOrders.map((ord) => this.hydrateOrderAsync(ord)));
 
     const total = hydratedOrders.length;
     const offset = filter.offset || 0;
@@ -75,16 +78,31 @@ export class OrderService {
     organizationId: string,
     orderId: string
   ): Promise<OrderEntity | null> {
-    const order = OrderRepository.findById(organizationId, orderId);
+    const order = await OrderRepository.findByIdAsync(organizationId, orderId);
     if (!order) {
       return null;
     }
-    return this.hydrateOrder(order);
+    return this.hydrateOrderAsync(order);
   }
 
   /**
    * Helper to hydrate order relationships (Items, Payments, FSM Transitions)
    */
+  private static async hydrateOrderAsync(order: OrderEntity, tx?: TransactionContext): Promise<OrderEntity> {
+    const [items, payments, transitions] = await Promise.all([
+      OrderRepository.getItemsByOrderIdAsync(order.organizationId, order.id, tx),
+      OrderRepository.getPaymentsByOrderIdAsync(order.organizationId, order.id, tx),
+      OrderRepository.getTransitionsByOrderIdAsync(order.organizationId, order.id, tx),
+    ]);
+
+    return {
+      ...order,
+      items,
+      payments,
+      transitions,
+    };
+  }
+
   private static hydrateOrder(order: OrderEntity, tx?: TransactionContext): OrderEntity {
     const items = OrderRepository.getItemsByOrderId(order.organizationId, order.id, tx);
     const payments = OrderRepository.getPaymentsByOrderId(order.organizationId, order.id, tx);
@@ -110,36 +128,121 @@ export class OrderService {
     userId?: string
   ): Promise<OrderEntity> {
     if (dto.idempotencyKey) {
-      const existingIdempotent = OrderRepository.findByIdempotencyKey(organizationId, dto.idempotencyKey);
+      const existingIdempotent = await OrderRepository.findByIdempotencyKey(organizationId, dto.idempotencyKey);
       if (existingIdempotent) {
-        return this.hydrateOrder(existingIdempotent);
+        return await this.hydrateOrderAsync(existingIdempotent);
       }
     }
 
     return await UnitOfWork.transaction(organizationId, async (tx: TransactionContext) => {
       // 1. Resolve Customer Snapshot (Frozen at order time)
-      let customerSnapshot: OrderCustomerSnapshot = {
-        id: dto.customerId || `cust-${Date.now()}`,
-        personType: "PF",
-        name: "Cliente Balcão",
-        document: "***.***.***-**",
-        email: "cliente@loja.com",
-        phone: "+55 (19) 99999-0000",
-        stateRegistration: undefined as string | undefined,
-      };
+      let customerId = dto.customerId;
+      let existingCustomer: any = null;
 
-      const existingCustomer = dbStore.customers.get(dto.customerId);
-      if (existingCustomer && existingCustomer.organizationId === organizationId) {
-        customerSnapshot = {
-          id: existingCustomer.id,
-          personType: existingCustomer.personType as "PF" | "PJ",
-          name: existingCustomer.fullName || existingCustomer.tradeName || existingCustomer.companyName || "Cliente",
-          document: existingCustomer.cpf || existingCustomer.cnpj || "",
-          email: existingCustomer.primaryEmail || "",
-          phone: existingCustomer.primaryPhone || existingCustomer.whatsapp || "",
-          stateRegistration: existingCustomer.stateRegistration,
-        };
+      if (customerId) {
+        try {
+          existingCustomer = await CustomerService.getCustomerById(organizationId, customerId);
+        } catch {
+          // not found by id
+        }
       }
+
+      const inputSnap = (dto as any).customerSnapshot || (dto as any).customer;
+      if (!existingCustomer && inputSnap) {
+        const doc = inputSnap.document || inputSnap.cpf || "";
+        const phone = inputSnap.phone || inputSnap.whatsapp || "";
+        const email = inputSnap.email || "";
+
+        if (doc || phone || email) {
+          try {
+            const foundCust = await query(
+              `SELECT * FROM customers WHERE organization_id = $1 AND (
+                ($2 <> '' AND (cpf = $2 OR document = $2)) OR
+                ($3 <> '' AND (primary_phone = $3 OR whatsapp = $3)) OR
+                ($4 <> '' AND primary_email = $4)
+              ) LIMIT 1`,
+              [organizationId, doc, phone, email]
+            );
+            if (foundCust.rows.length > 0) {
+              existingCustomer = foundCust.rows[0];
+              customerId = existingCustomer.id;
+            }
+          } catch {
+            // Ignore query error and proceed to auto-provision
+          }
+        }
+      }
+
+      // If customer doesn't exist in DB, auto-create to fulfill foreign key constraint
+      if (!existingCustomer) {
+        customerId = customerId || `cust-buyer-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const custName = inputSnap?.name || "Cliente Storefront";
+        const custDoc = inputSnap?.document || inputSnap?.cpf || null;
+        const custEmail = inputSnap?.email || `${customerId}@cliente.lumina.com.br`;
+        const custPhone = inputSnap?.phone || inputSnap?.whatsapp || "+55 (19) 99999-0000";
+
+        try {
+          await query(
+            `INSERT INTO customers (
+              id, organization_id, person_type, name, document, email, phone, full_name, cpf,
+              primary_email, primary_phone, whatsapp, status, customer_tier, notes, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+            ON CONFLICT (id) DO NOTHING`,
+            [
+              customerId,
+              organizationId,
+              inputSnap?.personType || "PF",
+              custName,
+              custDoc,
+              custEmail,
+              custPhone,
+              custName,
+              custDoc,
+              custEmail,
+              custPhone,
+              custPhone,
+              "ACTIVE",
+              "STANDARD",
+              `Origem automática via checkout ${dto.channel || "ECOMMERCE"}`,
+            ]
+          );
+        } catch (insertErr: any) {
+          console.error("CUSTOMER INSERT FAILED:", insertErr);
+          // If conflict on organization_id + cpf, select that customer
+          if (custDoc) {
+            const fallbackCust = await query(
+              "SELECT * FROM customers WHERE organization_id = $1 AND (cpf = $2 OR document = $2) LIMIT 1",
+              [organizationId, custDoc]
+            );
+            if (fallbackCust.rows.length > 0) {
+              customerId = fallbackCust.rows[0].id;
+              existingCustomer = fallbackCust.rows[0];
+            }
+          }
+        }
+
+        if (!existingCustomer) {
+          existingCustomer = {
+            id: customerId,
+            personType: inputSnap?.personType || "PF",
+            fullName: custName,
+            cpf: custDoc,
+            primaryEmail: custEmail,
+            primaryPhone: custPhone,
+            whatsapp: custPhone,
+          };
+        }
+      }
+
+      const customerSnapshot: OrderCustomerSnapshot = {
+        id: customerId!,
+        personType: (existingCustomer.personType || "PF") as "PF" | "PJ",
+        name: existingCustomer.fullName || existingCustomer.tradeName || existingCustomer.companyName || inputSnap?.name || "Cliente Storefront",
+        document: existingCustomer.cpf || existingCustomer.cnpj || existingCustomer.document || inputSnap?.document || "***.***.***-**",
+        email: existingCustomer.primaryEmail || inputSnap?.email || "cliente@lumina.com.br",
+        phone: existingCustomer.primaryPhone || existingCustomer.whatsapp || inputSnap?.phone || "+55 (19) 99999-0000",
+        stateRegistration: existingCustomer.stateRegistration,
+      };
 
       // 2. Resolve Shipping Address
       let shippingAddress = {
@@ -162,10 +265,8 @@ export class OrderService {
           ...dto.shippingAddress,
           recipientName: dto.shippingAddress.recipientName || customerSnapshot.name,
         };
-      } else if (existingCustomer) {
-        const defaultAddr = Array.from(dbStore.customerAddresses.values()).find(
-          (a) => a.organizationId === organizationId && a.customerId === existingCustomer.id && a.isDefault
-        );
+      } else if (existingCustomer?.addresses?.length) {
+        const defaultAddr = existingCustomer.addresses.find((a: any) => a.isDefault) || existingCustomer.addresses[0];
         if (defaultAddr) {
           shippingAddress = {
             recipientName: defaultAddr.recipientName || customerSnapshot.name,
@@ -185,14 +286,27 @@ export class OrderService {
 
       // 3. Resolve Order Items & Freeze Immutable Product Snapshots
       const orderId = `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const orderNumber = this.generateOrderNumber(organizationId);
+      const orderNumber = await this.generateOrderNumber(organizationId);
       const nowIso = new Date().toISOString();
 
       let subtotalAmount = 0;
       const itemsEntities: OrderItemEntity[] = [];
 
       for (const itemDto of dto.items) {
-        const prod = dbStore.products.get(itemDto.productId);
+        let prod = await productRepo.findById(organizationId, itemDto.productId);
+        if (!prod && (itemDto as any).sku) {
+          prod = await productRepo.findBySku(organizationId, (itemDto as any).sku);
+        }
+        if (!prod) {
+          const allProds = await productRepo.listByOrg(organizationId);
+          prod = allProds.find(
+            (p) =>
+              p.id === itemDto.productId ||
+              ((itemDto as any).sku && p.sku.toUpperCase() === String((itemDto as any).sku).toUpperCase()) ||
+              ((itemDto as any).name && p.name.toLowerCase() === String((itemDto as any).name).toLowerCase())
+          ) || null;
+        }
+
         if (!prod || prod.organizationId !== organizationId) {
           throw new Error(`Produto ${itemDto.productId} não encontrado no catálogo da organização.`);
         }
@@ -251,9 +365,7 @@ export class OrderService {
       let resellerCommissionAmount: number | undefined;
 
       if (dto.resellerId) {
-        const reseller = Array.from(dbStore.users.values()).find(
-          (u) => u.id === dto.resellerId || u.email === dto.resellerId
-        );
+        const reseller = await userRepo.findById(dto.resellerId);
         if (reseller) {
           resellerName = reseller.name;
         }
@@ -272,7 +384,7 @@ export class OrderService {
         orderNumber,
         customerId: customerSnapshot.id,
         customerSnapshot,
-        channel: dto.channel,
+        channel: dto.channel || "PRESENTIAL_POS",
         status: initialStatus,
         paymentStatus: "PENDING",
         shippingAddress,
@@ -286,6 +398,7 @@ export class OrderService {
         resellerName,
         resellerCommissionRate,
         resellerCommissionAmount,
+        warrantyCode: (dto as any).warrantyCode || `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         externalReference: dto.externalReference,
         metadata: dto.metadata,
         idempotencyKey: dto.idempotencyKey,

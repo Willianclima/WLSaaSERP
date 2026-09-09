@@ -1,5 +1,20 @@
 import crypto from "crypto";
-import { dbStore, IdempotencyRecord } from "../db/store";
+import { query } from "../db/postgres";
+
+export interface IdempotencyRecord {
+  id: string;
+  organizationId: string;
+  idempotencyKey: string;
+  resourceType: string;
+  requestHash?: string;
+  status: "PROCESSING" | "COMPLETED" | "FAILED";
+  responseCode?: number;
+  responseBody?: any;
+  userId?: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface IdempotencyExecuteOptions {
   organizationId: string;
@@ -19,6 +34,7 @@ export interface IdempotencyExecutionResult<T> {
 /**
  * Universal Idempotency Service for Distributed SaaS Operations
  * Handles idempotency keys for Orders, Payments, Inventory Reservations, Transfers, Consignments & Webhooks.
+ * Backed by PostgreSQL idempotency_keys table.
  */
 export class IdempotencyService {
   private static locks = new Map<string, Promise<any>>();
@@ -40,17 +56,31 @@ export class IdempotencyService {
    * Finds an existing valid idempotency record for the organization.
    */
   static async getRecord(orgId: string, idempotencyKey: string): Promise<IdempotencyRecord | null> {
-    const key = `${orgId}:${idempotencyKey}`;
-    const record = dbStore.idempotencyKeys.get(key);
-    if (!record) return null;
-
-    // Check expiration
-    if (new Date(record.expiresAt).getTime() <= Date.now()) {
-      dbStore.idempotencyKeys.delete(key);
+    try {
+      const res = await query(
+        "SELECT * FROM idempotency_keys WHERE organization_id = $1 AND idempotency_key = $2 AND expires_at > NOW()",
+        [orgId, idempotencyKey]
+      );
+      if (res.rows.length === 0) return null;
+      const r = res.rows[0];
+      return {
+        id: r.id,
+        organizationId: r.organization_id,
+        idempotencyKey: r.idempotency_key,
+        resourceType: r.resource_type,
+        requestHash: r.request_hash,
+        status: r.status,
+        responseCode: r.response_code,
+        responseBody: r.response_body,
+        userId: r.user_id,
+        expiresAt: r.expires_at,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      };
+    } catch (err: any) {
+      console.warn(`[IdempotencyService] Warning fetching record:`, err.message);
       return null;
     }
-
-    return record;
   }
 
   /**
@@ -70,7 +100,6 @@ export class IdempotencyService {
     } = options;
 
     if (!idempotencyKey) {
-      // If no key is provided, execute directly without idempotency wrapper
       const result = await operation();
       return {
         fromCache: false,
@@ -84,26 +113,24 @@ export class IdempotencyService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlMinutes * 60000).toISOString();
 
-    // Check existing record synchronously
-    const existingRec = dbStore.idempotencyKeys.get(mapKey);
-    if (existingRec && new Date(existingRec.expiresAt).getTime() > Date.now()) {
-      if (existingRec.status === "COMPLETED") {
-        return {
-          fromCache: true,
-          statusCode: existingRec.responseCode || 200,
-          data: existingRec.responseBody as T,
-        };
-      }
+    // Check existing record from PostgreSQL
+    const existingRec = await this.getRecord(organizationId, idempotencyKey);
+    if (existingRec && existingRec.status === "COMPLETED") {
+      return {
+        fromCache: true,
+        statusCode: existingRec.responseCode || 200,
+        data: existingRec.responseBody as T,
+      };
     }
 
-    // Check if another call is currently executing with this exact key
+    // Check if another in-flight call is currently executing with this exact key
     if (this.locks.has(mapKey)) {
       try {
         await this.locks.get(mapKey);
       } catch {
         // Handled by worker
       }
-      const cached = dbStore.idempotencyKeys.get(mapKey);
+      const cached = await this.getRecord(organizationId, idempotencyKey);
       if (cached && cached.status === "COMPLETED") {
         return {
           fromCache: true,
@@ -122,35 +149,41 @@ export class IdempotencyService {
     });
     this.locks.set(mapKey, lockPromise);
 
-    // Register initial PROCESSING record
+    // Register initial PROCESSING record in PostgreSQL
     const recordId = `idem-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    const pendingRecord: IdempotencyRecord = {
-      id: recordId,
-      organizationId,
-      idempotencyKey,
-      resourceType,
-      requestHash,
-      status: "PROCESSING",
-      userId,
-      expiresAt,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-    dbStore.idempotencyKeys.set(mapKey, pendingRecord);
+    try {
+      await query(
+        `INSERT INTO idempotency_keys (
+          id, organization_id, idempotency_key, resource_type, request_hash, status, user_id, expires_at, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, 'PROCESSING', $6, $7, NOW(), NOW())
+        ON CONFLICT (organization_id, idempotency_key) DO UPDATE SET
+          status = 'PROCESSING',
+          updated_at = NOW()`,
+        [recordId, organizationId, idempotencyKey, resourceType, requestHash, userId || null, expiresAt]
+      );
+    } catch (err: any) {
+      console.warn(`[IdempotencyService] Notice on initial insert:`, err.message);
+    }
 
     try {
       const result = await operation();
       const statusCode = result.statusCode || 200;
 
-      // Save COMPLETED status with cached response
-      const completedRecord: IdempotencyRecord = {
-        ...pendingRecord,
-        status: "COMPLETED",
-        responseCode: statusCode,
-        responseBody: result.data,
-        updatedAt: new Date().toISOString(),
-      };
-      dbStore.idempotencyKeys.set(mapKey, completedRecord);
+      // Save COMPLETED status with cached response in PostgreSQL
+      try {
+        await query(
+          `UPDATE idempotency_keys SET
+            status = 'COMPLETED',
+            response_code = $1,
+            response_body = $2,
+            updated_at = NOW()
+          WHERE organization_id = $3 AND idempotency_key = $4`,
+          [statusCode, JSON.stringify(result.data), organizationId, idempotencyKey]
+        );
+      } catch (err: any) {
+        console.warn(`[IdempotencyService] Notice on completion update:`, err.message);
+      }
+
       resolveLock();
 
       return {
@@ -160,14 +193,20 @@ export class IdempotencyService {
       };
     } catch (error: any) {
       // Mark as FAILED so client can retry with a fixed payload or new key
-      const failedRecord: IdempotencyRecord = {
-        ...pendingRecord,
-        status: "FAILED",
-        responseCode: 500,
-        responseBody: { error: error.message },
-        updatedAt: new Date().toISOString(),
-      };
-      dbStore.idempotencyKeys.set(mapKey, failedRecord);
+      try {
+        await query(
+          `UPDATE idempotency_keys SET
+            status = 'FAILED',
+            response_code = 500,
+            response_body = $1,
+            updated_at = NOW()
+          WHERE organization_id = $2 AND idempotency_key = $3`,
+          [JSON.stringify({ error: error.message }), organizationId, idempotencyKey]
+        );
+      } catch (err: any) {
+        console.warn(`[IdempotencyService] Notice on failure update:`, err.message);
+      }
+
       rejectLock(error);
       throw error;
     } finally {
@@ -176,17 +215,15 @@ export class IdempotencyService {
   }
 
   /**
-   * Sweeps expired idempotency keys
+   * Sweeps expired idempotency keys from PostgreSQL
    */
-  static sweepExpired(): number {
-    let swept = 0;
-    const now = Date.now();
-    for (const [key, rec] of dbStore.idempotencyKeys.entries()) {
-      if (new Date(rec.expiresAt).getTime() <= now) {
-        dbStore.idempotencyKeys.delete(key);
-        swept++;
-      }
+  static async sweepExpired(): Promise<number> {
+    try {
+      const res = await query("DELETE FROM idempotency_keys WHERE expires_at <= NOW()");
+      return res.rowCount || 0;
+    } catch (err: any) {
+      console.error(`[IdempotencyService] Error sweeping expired keys:`, err.message);
+      return 0;
     }
-    return swept;
   }
 }

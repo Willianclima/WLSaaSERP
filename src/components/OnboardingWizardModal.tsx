@@ -24,9 +24,17 @@ import {
   FileText,
   Palette,
   X,
+  Tag,
+  Percent,
+  Gift,
+  Zap,
+  Check,
+  Copy,
+  AlertCircle,
+  BadgePercent,
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { TenantStore, StoreBrandingConfig } from "../types";
+import { TenantStore, StoreBrandingConfig, LaunchDiscountConfig } from "../types";
 
 interface OnboardingWizardModalProps {
   isOpen: boolean;
@@ -77,6 +85,82 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const [deliveryLocal, setDeliveryLocal] = useState<boolean>(true);
   const [deliveryShipping, setDeliveryShipping] = useState<boolean>(true);
   const [deliveryCustom, setDeliveryCustom] = useState<boolean>(true);
+
+  // Step 5: Descontos Automáticos de Lançamento (Opcional)
+  const [launchDiscountEnabled, setLaunchDiscountEnabled] = useState<boolean>(true);
+  const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FIXED_AMOUNT" | "FREE_SHIPPING">("PERCENTAGE");
+  const [discountValue, setDiscountValue] = useState<number>(15);
+  const [couponCode, setCouponCode] = useState<string>("INAUGURACAO15");
+  const [maxFirstOrders, setMaxFirstOrders] = useState<number>(20);
+  const [minOrderAmount, setMinOrderAmount] = useState<number>(100);
+  const [applyAutomatically, setApplyAutomatically] = useState<boolean>(true);
+  const [bannerEnabled, setBannerEnabled] = useState<boolean>(true);
+  const [bannerHeadline, setBannerHeadline] = useState<string>(
+    "🎉 Celebração de Lançamento: 15% OFF nas primeiras 20 compras com cupom INAUGURACAO15!"
+  );
+  const [selectedPreset, setSelectedPreset] = useState<string>("VIP15");
+  const [copiedCoupon, setCopiedCoupon] = useState<boolean>(false);
+
+  const DISCOUNT_PRESETS = [
+    {
+      id: "VIP15",
+      title: "Inauguração VIP (15% OFF)",
+      badge: "Mais Recomendado",
+      desc: "15% de desconto automático para os primeiros 20 pedidos a partir de R$ 100",
+      type: "PERCENTAGE" as const,
+      value: 15,
+      code: "INAUGURACAO15",
+      maxOrders: 20,
+      minAmount: 100,
+      banner: "🎉 Celebração de Lançamento: 15% OFF nas primeiras 20 compras com cupom INAUGURACAO15!",
+    },
+    {
+      id: "BEMVINDA10",
+      title: "Boas-Vindas (10% OFF)",
+      badge: "Sem Valor Mínimo",
+      desc: "10% de desconto sem exigência de valor mínimo para as primeiras 30 compras",
+      type: "PERCENTAGE" as const,
+      value: 10,
+      code: "BEMVINDA10",
+      maxOrders: 30,
+      minAmount: 0,
+      banner: "✨ Boas-Vindas! Ganhe 10% OFF no seu primeiro pedido com o cupom BEMVINDA10!",
+    },
+    {
+      id: "FIXED25",
+      title: "R$ 25 OFF 1ª Compra",
+      badge: "Ticket Médio Alto",
+      desc: "Abatimento direto de R$ 25 em pedidos acima de R$ 150 para 25 clientes",
+      type: "FIXED_AMOUNT" as const,
+      value: 25,
+      code: "PRIMEIRACOMPRA",
+      maxOrders: 25,
+      minAmount: 150,
+      banner: "💎 Oferta Exclusiva: R$ 25 OFF em compras acima de R$ 150 com cupom PRIMEIRACOMPRA!",
+    },
+    {
+      id: "FRETE_GRATIS",
+      title: "Frete Grátis Lançamento",
+      badge: "Alta Conversão",
+      desc: "Frete 100% cortesia em pedidos a partir de R$ 99 para as primeiras 50 clientes",
+      type: "FREE_SHIPPING" as const,
+      value: 0,
+      code: "FRETEGRATIS",
+      maxOrders: 50,
+      minAmount: 99,
+      banner: "🚚 Inauguração: Frete 100% Grátis para todo o Brasil em compras a partir de R$ 99!",
+    },
+  ];
+
+  const handleApplyPreset = (preset: typeof DISCOUNT_PRESETS[0]) => {
+    setSelectedPreset(preset.id);
+    setDiscountType(preset.type);
+    setDiscountValue(preset.value);
+    setCouponCode(preset.code);
+    setMaxFirstOrders(preset.maxOrders);
+    setMinOrderAmount(preset.minAmount);
+    setBannerHeadline(preset.banner);
+  };
 
   // Step 4: Cadastro das Primeiras Peças (Planilha)
   const [initialProducts, setInitialProducts] = useState<Array<{
@@ -214,9 +298,39 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     ]);
   };
 
-  const handleFinishWizard = async () => {
+  const handleFinishWizard = async (overrideLaunchDiscountEnabled?: boolean) => {
     setIsSaving(true);
     try {
+      const isDiscountActive =
+        overrideLaunchDiscountEnabled !== undefined
+          ? overrideLaunchDiscountEnabled
+          : launchDiscountEnabled;
+
+      const launchDiscountData = isDiscountActive
+        ? {
+            enabled: true,
+            discountType,
+            discountValue: Number(discountValue),
+            couponCode: couponCode.trim().toUpperCase(),
+            maxFirstOrders: Number(maxFirstOrders),
+            minOrderAmount: Number(minOrderAmount),
+            applyAutomatically,
+            bannerEnabled,
+            bannerHeadline,
+            presetName: selectedPreset,
+          }
+        : {
+            enabled: false,
+            discountType: "PERCENTAGE",
+            discountValue: 0,
+            couponCode: "",
+            maxFirstOrders: 0,
+            minOrderAmount: 0,
+            applyAutomatically: false,
+            bannerEnabled: false,
+            bannerHeadline: "",
+          };
+
       const payload = {
         storeIdentity: {
           name: storeName,
@@ -247,13 +361,14 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
           },
         },
         initialProducts,
+        launchDiscount: launchDiscountData,
       };
 
       await onComplete(payload);
-      setStep(5);
+      setStep(6);
       confetti({
-        particleCount: 80,
-        spread: 80,
+        particleCount: 90,
+        spread: 85,
         origin: { y: 0.6 },
       });
     } catch (err: any) {
@@ -263,7 +378,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     }
   };
 
-  const progressPercentage = Math.round((step / 5) * 100);
+  const progressPercentage = Math.round((step / 6) * 100);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-md overflow-y-auto">
@@ -285,7 +400,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-stone-400">
-                  Configure seus dados, vitrine online e primeiras peças em poucos minutos.
+                  Configure seus dados, vitrine online, primeiras peças e estratégia de inauguração.
                 </p>
               </div>
             </div>
@@ -302,12 +417,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="text-amber-400">
-                Passo {step} de 5:{" "}
+                Passo {step} de 6:{" "}
                 {step === 1 && "Dados da Loja"}
                 {step === 2 && "Vitrine & Marca"}
                 {step === 3 && "Atendimento & Entrega"}
                 {step === 4 && "Cadastro de Peças"}
-                {step === 5 && "Loja Publicada!"}
+                {step === 5 && "Descontos de Lançamento (Opcional)"}
+                {step === 6 && "Loja Publicada!"}
               </span>
               <span className="text-stone-400">{progressPercentage}%</span>
             </div>
@@ -792,8 +908,468 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             </div>
           )}
 
-          {/* STEP 5: CONCLUSÃO & PUBLICAÇÃO */}
+          {/* STEP 5: DESCONTOS AUTOMÁTICOS DE LANÇAMENTO (OPCIONAL) */}
           {step === 5 && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header Title & Description */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-800">
+                <div className="flex items-center gap-2 text-amber-400">
+                  <BadgePercent className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-amber-300">
+                    5. Descontos Automáticos de Lançamento
+                  </h3>
+                </div>
+                <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  Opcional • Estratégia de Inauguração
+                </span>
+              </div>
+
+              <p className="text-xs text-stone-300 leading-relaxed">
+                Oferecer um benefício especial para os primeiros pedidos estimula suas clientes a comprarem imediatamente e gera as primeiras avaliações positivas para a sua marca.
+              </p>
+
+              {/* Master Activation Card */}
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                launchDiscountEnabled
+                  ? "bg-amber-950/20 border-amber-500/40 shadow-lg shadow-amber-950/30"
+                  : "bg-stone-950/70 border-stone-800"
+              }`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Gift className="w-4 h-4 text-amber-400" />
+                      <h4 className="text-sm font-bold text-stone-100">
+                        Ativar Benefício de Lançamento para Primeiras Clientes
+                      </h4>
+                    </div>
+                    <p className="text-xs text-stone-400">
+                      Cria uma regra de boas-vindas com cupom exclusivo e aplicação automática no carrinho.
+                    </p>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={() => setLaunchDiscountEnabled(!launchDiscountEnabled)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      launchDiscountEnabled ? "bg-amber-500" : "bg-stone-700"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-stone-950 shadow ring-0 transition duration-200 ease-in-out ${
+                        launchDiscountEnabled ? "translate-x-5 bg-white" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* If Disabled: Friendly Explanation */}
+              {!launchDiscountEnabled && (
+                <div className="p-6 rounded-2xl bg-stone-950/60 border border-stone-800 text-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-stone-800/80 text-stone-400 flex items-center justify-center mx-auto">
+                    <Tag className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1 max-w-md mx-auto">
+                    <h4 className="text-sm font-bold text-stone-200">
+                      Você optou por não aplicar descontos de inauguração
+                    </h4>
+                    <p className="text-xs text-stone-400 leading-relaxed">
+                      Suas semijoias serão ofertadas com o preço de tabela regular. Você poderá criar cupons, promoções e campanhas comemorativas a qualquer momento através do seu painel ERP.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLaunchDiscountEnabled(true);
+                      handleApplyPreset(DISCOUNT_PRESETS[0]);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-2"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Quero Ativar a Oferta Recomendada (15% OFF)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* If Enabled: Presets + Custom Settings + Live Simulator */}
+              {launchDiscountEnabled && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  {/* Presets Grid */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        Modelos Recomendados de Lançamento (1 Clique)
+                      </span>
+                      <span className="text-[10px] text-stone-500">Selecione para preencher rapidamente</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {DISCOUNT_PRESETS.map((preset) => {
+                        const isSelected = selectedPreset === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => handleApplyPreset(preset)}
+                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                              isSelected
+                                ? "bg-amber-950/40 border-amber-500 text-stone-100 shadow-md ring-1 ring-amber-500/50"
+                                : "bg-stone-950/60 border-stone-800 hover:border-stone-700 text-stone-300"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h5 className="text-xs font-bold text-stone-100">{preset.title}</h5>
+                                <p className="text-[11px] text-stone-400 line-clamp-2 mt-0.5">{preset.desc}</p>
+                              </div>
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
+                                  isSelected
+                                    ? "bg-amber-500 text-stone-950"
+                                    : "bg-stone-800 text-stone-400"
+                                }`}
+                              >
+                                {preset.badge}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 pt-1 text-[11px] font-mono text-amber-400">
+                              <Tag className="w-3 h-3" />
+                              <span>Cupom: {preset.code}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Detailed Settings Form */}
+                  <div className="bg-stone-950/80 border border-stone-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5" />
+                      Regra Promocional Personalizada
+                    </h4>
+
+                    {/* Benefit Type & Value */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Benefit Type Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-stone-300">Tipo de Benefício</label>
+                        <div className="grid grid-cols-3 gap-1.5 p-1 bg-stone-900 rounded-xl border border-stone-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDiscountType("PERCENTAGE");
+                              if (discountValue === 0) setDiscountValue(15);
+                            }}
+                            className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                              discountType === "PERCENTAGE"
+                                ? "bg-amber-500 text-stone-950 shadow"
+                                : "text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            % Desconto
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDiscountType("FIXED_AMOUNT");
+                              if (discountValue === 0) setDiscountValue(25);
+                            }}
+                            className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                              discountType === "FIXED_AMOUNT"
+                                ? "bg-amber-500 text-stone-950 shadow"
+                                : "text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            R$ Fixo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDiscountType("FREE_SHIPPING");
+                              setDiscountValue(0);
+                            }}
+                            className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                              discountType === "FREE_SHIPPING"
+                                ? "bg-amber-500 text-stone-950 shadow"
+                                : "text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            Frete Grátis
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Discount Value */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-stone-300">
+                          {discountType === "PERCENTAGE"
+                            ? "Porcentagem de Desconto (%)"
+                            : discountType === "FIXED_AMOUNT"
+                            ? "Valor do Desconto (R$)"
+                            : "Benefício de Frete"}
+                        </label>
+                        {discountType === "PERCENTAGE" && (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1"
+                              max="80"
+                              value={discountValue}
+                              onChange={(e) => setDiscountValue(Math.max(1, Number(e.target.value)))}
+                              className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-100 font-bold focus:border-amber-400 outline-none pr-8"
+                            />
+                            <Percent className="w-4 h-4 text-stone-400 absolute right-3 top-2.5" />
+                          </div>
+                        )}
+                        {discountType === "FIXED_AMOUNT" && (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1"
+                              step="5"
+                              value={discountValue}
+                              onChange={(e) => setDiscountValue(Math.max(1, Number(e.target.value)))}
+                              className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-100 font-bold focus:border-amber-400 outline-none pl-10"
+                            />
+                            <span className="text-xs font-bold text-stone-400 absolute left-3 top-2.5">R$</span>
+                          </div>
+                        )}
+                        {discountType === "FREE_SHIPPING" && (
+                          <div className="bg-stone-900/90 border border-stone-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-bold flex items-center gap-2">
+                            <Truck className="w-4 h-4 text-emerald-400" />
+                            <span>100% Gratuito (Subsidiado pela Loja)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Coupon Code & Target Limit */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Coupon Code */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-stone-300">Código do Cupom de Inauguração</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const randomNum = Math.floor(10 + Math.random() * 90);
+                              setCouponCode(`INAUGURA${randomNum}`);
+                            }}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                          >
+                            Sugerir Código
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={couponCode}
+                          onChange={(e) => setCouponCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""))}
+                          placeholder="EX: INAUGURACAO15"
+                          className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-amber-300 focus:border-amber-400 outline-none tracking-wider uppercase"
+                        />
+                      </div>
+
+                      {/* Limit of First Orders */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-stone-300">
+                            Válido para as Primeiras Clientes
+                          </label>
+                          <span className="text-[10px] text-stone-400">limite de escassez</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max="500"
+                            value={maxFirstOrders}
+                            onChange={(e) => setMaxFirstOrders(Math.max(1, Number(e.target.value)))}
+                            className="w-24 bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-100 font-bold focus:border-amber-400 outline-none"
+                          />
+                          <div className="flex items-center gap-1.5">
+                            {[10, 20, 30, 50].map((count) => (
+                              <button
+                                key={count}
+                                type="button"
+                                onClick={() => setMaxFirstOrders(count)}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  maxFirstOrders === count
+                                    ? "bg-amber-500 text-stone-950"
+                                    : "bg-stone-900 text-stone-400 hover:text-stone-200 border border-stone-800"
+                                }`}
+                              >
+                                {count}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Minimum Order Amount & Automatic Application */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {/* Min Order Amount */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-stone-300">
+                          Valor Mínimo do Pedido (R$)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="10"
+                            value={minOrderAmount}
+                            onChange={(e) => setMinOrderAmount(Math.max(0, Number(e.target.value)))}
+                            className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-sm text-stone-100 font-bold focus:border-amber-400 outline-none pl-10"
+                          />
+                          <span className="text-xs font-bold text-stone-400 absolute left-3 top-2.5">R$</span>
+                        </div>
+                        <p className="text-[10px] text-stone-500">
+                          {minOrderAmount > 0
+                            ? `O desconto só aplica se o carrinho atingir R$ ${minOrderAmount.toFixed(2)}`
+                            : "Sem valor mínimo de compra"}
+                        </p>
+                      </div>
+
+                      {/* Automatic Application Toggle */}
+                      <div className="p-3 bg-stone-900/90 border border-stone-800 rounded-xl flex items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-stone-200 block">
+                            Aplicar Automaticamente
+                          </span>
+                          <span className="text-[10px] text-stone-400 block">
+                            A cliente já vê o desconto no carrinho sem precisar digitar o código.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setApplyAutomatically(!applyAutomatically)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            applyAutomatically ? "bg-emerald-500" : "bg-stone-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              applyAutomatically ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Banner Headline Configuration */}
+                    <div className="space-y-2 pt-2 border-t border-stone-800/80">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-stone-300">
+                            Faixa Promocional no Topo da Vitrine (Banner)
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setBannerEnabled(!bannerEnabled)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            bannerEnabled ? "bg-amber-500" : "bg-stone-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              bannerEnabled ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {bannerEnabled && (
+                        <input
+                          type="text"
+                          value={bannerHeadline}
+                          onChange={(e) => setBannerHeadline(e.target.value)}
+                          placeholder="Ex: 🎉 Inauguração Especial: 15% OFF nas primeiras 20 compras com cupom INAUGURACAO15!"
+                          className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-200 focus:border-amber-400 outline-none"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Real-time Visual Profit & Discount Simulation Card */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-950/30 to-stone-950 border border-amber-500/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5" />
+                        Simulação em Tempo Real da Compra
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
+                        Margem Saudável Garantida
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      {/* Original Price */}
+                      <div className="p-3 bg-stone-900/80 rounded-xl border border-stone-800 space-y-1">
+                        <span className="text-[10px] text-stone-500 uppercase font-bold block">
+                          Exemplo: Colar Riviera Ouro 18k
+                        </span>
+                        <span className="text-sm font-bold text-stone-300">R$ 189,90</span>
+                        <span className="text-[10px] text-stone-500 block">Custo de fábrica: R$ 58,00</span>
+                      </div>
+
+                      {/* Discount Benefit */}
+                      <div className="p-3 bg-stone-900/80 rounded-xl border border-stone-800 space-y-1">
+                        <span className="text-[10px] text-amber-400 uppercase font-bold block">
+                          Desconto de Inauguração
+                        </span>
+                        <span className="text-sm font-bold text-amber-300">
+                          {discountType === "PERCENTAGE"
+                            ? `- R$ ${(189.9 * (discountValue / 100)).toFixed(2)} (${discountValue}%)`
+                            : discountType === "FIXED_AMOUNT"
+                            ? `- R$ ${discountValue.toFixed(2)} Fixo`
+                            : "Frete Grátis (~ R$ 18,90 OFF)"}
+                        </span>
+                        <span className="text-[10px] text-stone-400 block font-mono">
+                          Cupom: {couponCode || "INICIAL"}
+                        </span>
+                      </div>
+
+                      {/* Final Price for Buyer */}
+                      <div className="p-3 bg-stone-900/80 rounded-xl border border-stone-800 space-y-1">
+                        <span className="text-[10px] text-emerald-400 uppercase font-bold block">
+                          Valor Pago pela Cliente
+                        </span>
+                        <span className="text-sm font-bold text-emerald-400">
+                          {discountType === "PERCENTAGE"
+                            ? `R$ ${(189.9 * (1 - discountValue / 100)).toFixed(2)}`
+                            : discountType === "FIXED_AMOUNT"
+                            ? `R$ ${Math.max(0, 189.9 - discountValue).toFixed(2)}`
+                            : "R$ 189,90 (sem frete)"}
+                        </span>
+                        <span className="text-[10px] text-emerald-500 font-bold block">
+                          {discountType === "PERCENTAGE"
+                            ? `Lucro líquido: R$ ${(189.9 * (1 - discountValue / 100) - 58).toFixed(2)} / peça`
+                            : discountType === "FIXED_AMOUNT"
+                            ? `Lucro líquido: R$ ${(Math.max(0, 189.9 - discountValue) - 58).toFixed(2)} / peça`
+                            : "Lucro líquido: R$ 131,90 / peça"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-stone-400 flex items-center gap-1.5 pt-1">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>
+                        Mesmo com o desconto de inauguração, sua margem bruta permanece superior a <strong>60%</strong> e atrai novas clientes que voltarão a comprar no preço normal.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 6: CONCLUSÃO & PUBLICAÇÃO */}
+          {step === 6 && (
             <div className="space-y-6 text-center py-4 animate-in fade-in zoom-in-95 duration-200">
               <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-400 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
@@ -807,6 +1383,54 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   O catálogo digital de <strong>{storeName}</strong> já está ativo com {initialProducts.length} peças cadastradas e cálculo automático de estoque.
                 </p>
               </div>
+
+              {/* Active Launch Discount Highlight Box (if configured) */}
+              {launchDiscountEnabled && (
+                <div className="bg-amber-950/30 border border-amber-500/40 rounded-3xl p-4 max-w-lg mx-auto text-left space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Gift className="w-4 h-4 text-amber-400" />
+                      Oferta de Lançamento Ativa
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold">
+                      {applyAutomatically ? "Aplicação Automática" : "Via Cupom"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 bg-stone-900/90 rounded-2xl p-3 border border-stone-800">
+                    <div>
+                      <span className="text-xs text-stone-300 block font-bold">
+                        {discountType === "PERCENTAGE"
+                          ? `${discountValue}% OFF nas Primeiras ${maxFirstOrders} Compras`
+                          : discountType === "FIXED_AMOUNT"
+                          ? `R$ ${discountValue} OFF nas Primeiras ${maxFirstOrders} Compras`
+                          : `Frete Grátis nas Primeiras ${maxFirstOrders} Compras`}
+                      </span>
+                      <span className="text-[11px] text-stone-400">
+                        {minOrderAmount > 0
+                          ? `Para compras acima de R$ ${minOrderAmount.toFixed(2)}`
+                          : "Sem valor mínimo"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-mono text-xs font-bold border border-amber-500/40">
+                        {couponCode}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(couponCode);
+                          setCopiedCoupon(true);
+                          setTimeout(() => setCopiedCoupon(false), 2000);
+                        }}
+                        className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 transition-colors cursor-pointer"
+                        title="Copiar cupom"
+                      >
+                        {copiedCoupon ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Share Box */}
               <div className="bg-stone-950 border border-amber-500/30 rounded-3xl p-5 max-w-lg mx-auto space-y-4 text-left">
@@ -838,8 +1462,17 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   <button
                     onClick={() => {
                       const link = `${window.location.origin}/?loja=${storeName.toLowerCase().replace(/\s+/g, "-")}`;
-                      const msg = `✨ Olá! Conheça o catálogo de semijoias exclusivas da *${storeName}* com garantia de 12 meses:\n\n👉 ${link}\n\nEscolha suas peças favoritas e me chame por aqui para fechar seu pedido! 💎`;
-                      const cleanPhone = orderWhatsapp.replace(/\D/g, "");
+                      const discountText = launchDiscountEnabled
+                        ? discountType === "PERCENTAGE"
+                          ? `*${discountValue}% OFF* de inauguração`
+                          : discountType === "FIXED_AMOUNT"
+                          ? `*R$ ${discountValue} OFF* de presente de boas-vindas`
+                          : `*Frete 100% Grátis* de inauguração`
+                        : "";
+                      const couponMsg = launchDiscountEnabled
+                        ? `\n\n🎁 *Presente de Inauguração:* Ganhe ${discountText} nas primeiras compras usando o cupom *${couponCode}*!`
+                        : "";
+                      const msg = `✨ Olá! Conheça o novo catálogo oficial de semijoias da *${storeName}* com garantia de 12 meses:${couponMsg}\n\n👉 ${link}\n\nEscolha suas peças favoritas e me chame por aqui para fechar seu pedido! 💎`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
                     }}
                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
@@ -866,7 +1499,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
         {/* Modal Footer Controls */}
         <div className="p-5 border-t border-stone-800 bg-stone-950/80 flex items-center justify-between">
-          {step > 1 && step < 5 ? (
+          {step > 1 && step < 6 ? (
             <button
               onClick={() => setStep(step - 1)}
               className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all"
@@ -889,16 +1522,51 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
             {step === 4 && (
               <button
-                disabled={isSaving}
-                onClick={handleFinishWizard}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                onClick={() => setStep(5)}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isSaving ? "Salvando Loja..." : "Publicar Minha Loja"}</span>
+                <span>Avançar: Descontos de Lançamento</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             )}
 
             {step === 5 && (
+              <div className="flex items-center gap-2">
+                {launchDiscountEnabled ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleFinishWizard(false)}
+                      className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Pular sem Desconto
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => handleFinishWizard(true)}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{isSaving ? "Salvando Loja..." : "Publicar Loja com Desconto"}</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => handleFinishWizard(false)}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSaving ? "Salvando Loja..." : "Publicar Minha Loja"}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {step === 6 && (
               <button
                 onClick={() => {
                   onClose();

@@ -4,6 +4,7 @@ import { WireframeProductsCatalog } from "./components/WireframeProductsCatalog"
 import { HeaderNavbar } from "./components/HeaderNavbar";
 import { OwnerStoreHome } from "./components/OwnerStoreHome";
 import { QuickNewSaleModal } from "./components/QuickNewSaleModal";
+import { QuickSellScreen } from "./components/QuickSellScreen";
 import { QuickNewProductModal } from "./components/QuickNewProductModal";
 import { DashboardOverview } from "./components/DashboardOverview";
 import { ArchitectureView } from "./components/ArchitectureView";
@@ -163,6 +164,12 @@ export default function App() {
         name: payload.storeIdentity.name,
       }));
     }
+    if (payload.launchDiscount) {
+      setSelectedTenant((prev) => ({
+        ...prev,
+        launchDiscount: payload.launchDiscount,
+      }));
+    }
     if (payload.catalogSettings) {
       setBrandingConfig((prev) => ({
         ...prev,
@@ -171,6 +178,10 @@ export default function App() {
         primaryColor: payload.catalogSettings.primaryColor || prev.primaryColor,
         secondaryColor: payload.catalogSettings.secondaryColor || prev.secondaryColor,
         tagline: payload.catalogSettings.bio || prev.tagline,
+        announcementBarText: payload.launchDiscount?.enabled && payload.launchDiscount?.bannerEnabled && payload.launchDiscount?.bannerHeadline
+          ? payload.launchDiscount.bannerHeadline
+          : prev.announcementBarText,
+        launchDiscount: payload.launchDiscount,
       }));
     }
 
@@ -915,147 +926,239 @@ export default function App() {
     showToast(`Proposta MCP '${action.title}' rejeitada.`);
   };
 
-  // Place Buyer Order from Storefront
-  const handlePlaceBuyerOrder = (newOrder: any) => {
-    setOrders((prev) => [newOrder, ...prev]);
-
-    const custName = newOrder.customerSnapshot?.name || newOrder.customer?.name || "Cliente Storefront";
-    const custDoc = newOrder.customerSnapshot?.document || newOrder.customer?.document || "***.***.***-**";
-    const custPhone = newOrder.customerSnapshot?.phone || newOrder.customer?.phone || "";
-    const custEmail = newOrder.customerSnapshot?.email || newOrder.customer?.email || "";
-
-    // 1. Auto generate digital warranty for the order
-    const warrantyCode = newOrder.warrantyCode || `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const firstItem = newOrder.items?.[0];
-    const prod = products.find((p) => p.id === firstItem?.productId);
-    
-    const issueDate = new Date().toISOString();
-    const expDate = new Date();
-    expDate.setFullYear(expDate.getFullYear() + 1);
-
-    const newWarranty: DigitalWarranty = {
-      id: `war-${Date.now()}`,
-      code: warrantyCode,
-      customerName: custName,
-      customerDocument: custDoc,
-      customerPhone: custPhone,
-      customerEmail: custEmail,
-      orderNumber: newOrder.orderNumber,
-      sku: firstItem?.productSnapshot?.sku || firstItem?.sku || "SKU-001",
-      productName: firstItem?.productSnapshot?.name || firstItem?.productName || "Semijoia Lumina",
-      bathType: firstItem?.productSnapshot?.bath || prod?.bath || "OURO_18K",
-      issueDate: issueDate,
-      expirationDate: expDate.toISOString(),
-      status: "VALIDA",
-      terms: "Garantia de 12 meses cobrindo defeitos de fabricação, desprendimento de zircônias e desgaste anômalo do banho metálico.",
-      channel: newOrder.channel,
-      resellerName: newOrder.resellerName,
-      claimsCount: 0,
+  // Helper function: transactional order creation in PostgreSQL ERP backend
+  const submitBuyerOrderToBackend = async (orderData: any, tenantId: string) => {
+    const custSnapshot = orderData.customerSnapshot || {
+      id: orderData.customerId,
+      name: orderData.customer?.name || "Cliente Storefront",
+      document: orderData.customer?.document || "",
+      phone: orderData.customer?.phone || "",
+      email: orderData.customer?.email || "",
+      personType: "PF",
     };
-    setWarranties((prev) => [newWarranty, ...prev]);
 
-    // 2. Adjust inventory according to Order Status (Reserva de Estoque vs Baixa Física)
-    const isReservation =
-      newOrder.status === "INVENTORY_RESERVED" ||
-      newOrder.status === "PENDING_CONFIRMATION" ||
-      newOrder.status === "AWAITING_PAYMENT" ||
-      newOrder.status === "DRAFT";
-    setProducts((prev) =>
-      prev.map((p) => {
-        const orderItem = newOrder.items?.find((it: any) => it.productId === p.id);
-        if (orderItem) {
-          if (isReservation) {
-            // Reserva de Estoque: aumenta reservado, diminui disponível, mantém físico
-            const newReserved = (p.stockReserved || 0) + orderItem.quantity;
-            const newAvailable = Math.max(0, p.stockPhysical - newReserved);
-            return {
-              ...p,
-              stockReserved: newReserved,
-              stockAvailable: newAvailable,
-            };
-          } else {
-            // Baixa Imediata Física
-            const newPhysical = Math.max(0, p.stockPhysical - orderItem.quantity);
-            const newAvailable = Math.max(0, p.stockAvailable - orderItem.quantity);
-            return {
-              ...p,
-              stockPhysical: newPhysical,
-              stockAvailable: newAvailable,
-            };
-          }
-        }
-        return p;
-      })
-    );
-
-    // 3. Add to ledger
-    newOrder.items?.forEach((item: any) => {
-      const itemSku = item.productSnapshot?.sku || item.sku || "SKU-N/A";
-      const itemName = item.productSnapshot?.name || item.productName || "Produto Semijoia";
-      const ledgerEntry: InventoryLedgerEntry = {
-        id: `led-${Date.now()}-${item.productId}`,
+    const payload = {
+      customerId: custSnapshot.id || orderData.customerId,
+      customerSnapshot: custSnapshot,
+      channel: orderData.channel || "ECOMMERCE",
+      initialStatus: orderData.status || "INVENTORY_RESERVED",
+      items: (orderData.items || []).map((item: any) => ({
         productId: item.productId,
-        sku: itemSku,
-        productName: itemName,
-        type: newOrder.channel === "B2B_RESELLER" || newOrder.channel === "REVENDEDORA" ? "VENDA_REVENDEDORA" : "VENDA_DIRETA",
-        qtyChange: -item.quantity,
-        physicalBalanceAfter: Math.max(0, (products.find((p) => p.id === item.productId)?.stockPhysical || 1) - item.quantity),
-        consignedBalanceAfter: products.find((p) => p.id === item.productId)?.stockConsigned || 0,
-        timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-        resellerId: newOrder.resellerId,
-        resellerName: newOrder.resellerName,
-        orderNumber: newOrder.orderNumber,
-        operator: "Checkout do Comprador (E-commerce)",
-        reason: isReservation
-          ? `Reserva de estoque no storefront para WhatsApp - Pedido ${newOrder.orderNumber}`
-          : `Venda B2C via ${newOrder.channel} - Pedido ${newOrder.orderNumber}`,
-      };
-      setLedger((prev) => [ledgerEntry, ...prev]);
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        discountAmount: item.discountAmount || 0,
+        customizationSpec: item.customizationSpec,
+        locationId: item.locationId || "loc-lumina-matriz",
+      })),
+      payments: orderData.payments || [
+        {
+          paymentMethod: orderData.paymentMethod || "PIX",
+          amount: orderData.totalAmount,
+        },
+      ],
+      shippingAddress: orderData.shippingAddress,
+      shippingAmount: orderData.shippingAmount || 0,
+      discountAmount: orderData.discountAmount || 0,
+      resellerId: orderData.resellerId,
+      resellerCommissionRate: orderData.resellerCommissionRate,
+      warrantyCode: orderData.warrantyCode,
+      externalReference: orderData.externalReference,
+      notes: orderData.notes,
+      metadata: orderData.metadata,
+    };
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tenant-id": tenantId,
+      },
+      body: JSON.stringify(payload),
     });
 
-    // 4. If reseller linked, update reseller sales & commission
-    if (newOrder.resellerId) {
-      setResellers((prev) =>
-        prev.map((r) =>
-          r.id === newOrder.resellerId
-            ? {
-                ...r,
-                totalSalesAccumulated: r.totalSalesAccumulated + newOrder.totalAmount,
-                pendingCommissionValue:
-                  r.pendingCommissionValue +
-                  (newOrder.totalAmount * (r.commissionDirectRate / 100)),
-              }
-            : r
-        )
-      );
+    const responseData = await response.json().catch(() => ({}));
+
+    if (!response.ok || !responseData.success) {
+      const errorMsg =
+        responseData.error ||
+        responseData.message ||
+        `Falha ao registrar pedido no ERP (HTTP ${response.status})`;
+      throw new Error(errorMsg);
     }
 
-    // 5. Audit log
-    const auditEntry: AuditLogEntry = {
-      id: `aud-${Date.now()}`,
-      action: "STOREFRONT_ORDER_PLACED",
-      entity: "Order",
-      entityId: newOrder.orderNumber,
-      userName: custName,
-      userEmail: custEmail,
-      actor: "Comprador B2C (Storefront)",
-      userRole: "LOJA_ADMIN",
-      status: "SUCESSO",
-      ipAddress: "189.44.120.18",
-      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
-      details: `Novo pedido ${newOrder.orderNumber} realizado pelo cliente ${custName} (R$ ${Number(newOrder.totalAmount).toFixed(2)}) com emissão de garantia digital ${warrantyCode}.`,
-      changes: {
-        orderNumber: newOrder.orderNumber,
-        totalAmount: newOrder.totalAmount,
-        channel: newOrder.channel,
-        resellerName: newOrder.resellerName,
-        warrantyCode: warrantyCode,
-      },
-    };
-    setAuditLogs((prev) => [auditEntry, ...prev]);
+    return responseData.data;
+  };
 
-    showToast(`Pedido ${newOrder.orderNumber} realizado com sucesso! Garantia ${warrantyCode} emitida.`);
+  // Place Buyer Order from Storefront (True Transactional Flow)
+  const handlePlaceBuyerOrder = async (newOrder: any) => {
+    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+
+    try {
+      // 1. Transactional call to backend FIRST - Wait for confirmed success
+      const backendOrder = await submitBuyerOrderToBackend(newOrder, tenantId);
+
+      // Backend PostgreSQL record is the single source of truth
+      const confirmedOrder = {
+        ...newOrder,
+        ...backendOrder,
+        id: backendOrder?.id || newOrder.id,
+        orderNumber: backendOrder?.orderNumber || newOrder.orderNumber,
+        warrantyCode: backendOrder?.warrantyCode || newOrder.warrantyCode,
+        status: backendOrder?.status || newOrder.status,
+        customerSnapshot: backendOrder?.customerSnapshot || newOrder.customerSnapshot,
+        items: backendOrder?.items?.length ? backendOrder.items : newOrder.items,
+        totalAmount: backendOrder?.totalAmount ?? newOrder.totalAmount,
+      };
+
+      // 2. Only after confirmed success, perform local state updates
+      setOrders((prev) => [confirmedOrder, ...prev]);
+
+      const custName = confirmedOrder.customerSnapshot?.name || confirmedOrder.customer?.name || "Cliente Storefront";
+      const custDoc = confirmedOrder.customerSnapshot?.document || confirmedOrder.customer?.document || "***.***.***-**";
+      const custPhone = confirmedOrder.customerSnapshot?.phone || confirmedOrder.customer?.phone || "";
+      const custEmail = confirmedOrder.customerSnapshot?.email || confirmedOrder.customer?.email || "";
+
+      // Warranty Generation
+      const warrantyCode = confirmedOrder.warrantyCode || `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const firstItem = confirmedOrder.items?.[0];
+      const prod = products.find((p) => p.id === firstItem?.productId);
+      
+      const issueDate = new Date().toISOString();
+      const expDate = new Date();
+      expDate.setFullYear(expDate.getFullYear() + 1);
+
+      const newWarranty: DigitalWarranty = {
+        id: `war-${Date.now()}`,
+        code: warrantyCode,
+        customerName: custName,
+        customerDocument: custDoc,
+        customerPhone: custPhone,
+        customerEmail: custEmail,
+        orderNumber: confirmedOrder.orderNumber,
+        sku: firstItem?.productSnapshot?.sku || firstItem?.sku || "SKU-001",
+        productName: firstItem?.productSnapshot?.name || firstItem?.productName || "Semijoia Lumina",
+        bathType: firstItem?.productSnapshot?.bath || prod?.bath || "OURO_18K",
+        issueDate: issueDate,
+        expirationDate: expDate.toISOString(),
+        status: "VALIDA",
+        terms: "Garantia de 12 meses cobrindo defeitos de fabricação, desprendimento de zircônias e desgaste anômalo do banho metálico.",
+        channel: confirmedOrder.channel,
+        resellerName: confirmedOrder.resellerName,
+        claimsCount: 0,
+      };
+      setWarranties((prev) => [newWarranty, ...prev]);
+
+      // Adjust inventory according to Order Status (Reserva de Estoque vs Baixa Física)
+      const isReservation =
+        confirmedOrder.status === "INVENTORY_RESERVED" ||
+        confirmedOrder.status === "PENDING_CONFIRMATION" ||
+        confirmedOrder.status === "AWAITING_PAYMENT" ||
+        confirmedOrder.status === "DRAFT";
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          const orderItem = confirmedOrder.items?.find((it: any) => it.productId === p.id);
+          if (orderItem) {
+            if (isReservation) {
+              const newReserved = (p.stockReserved || 0) + orderItem.quantity;
+              const newAvailable = Math.max(0, p.stockPhysical - newReserved);
+              return {
+                ...p,
+                stockReserved: newReserved,
+                stockAvailable: newAvailable,
+              };
+            } else {
+              const newPhysical = Math.max(0, p.stockPhysical - orderItem.quantity);
+              const newAvailable = Math.max(0, p.stockAvailable - orderItem.quantity);
+              return {
+                ...p,
+                stockPhysical: newPhysical,
+                stockAvailable: newAvailable,
+              };
+            }
+          }
+          return p;
+        })
+      );
+
+      // Add to ledger
+      confirmedOrder.items?.forEach((item: any) => {
+        const itemSku = item.productSnapshot?.sku || item.sku || "SKU-N/A";
+        const itemName = item.productSnapshot?.name || item.productName || "Produto Semijoia";
+        const ledgerEntry: InventoryLedgerEntry = {
+          id: `led-${Date.now()}-${item.productId}`,
+          productId: item.productId,
+          sku: itemSku,
+          productName: itemName,
+          type: confirmedOrder.channel === "B2B_RESELLER" || confirmedOrder.channel === "REVENDEDORA" ? "VENDA_REVENDEDORA" : "VENDA_DIRETA",
+          qtyChange: -item.quantity,
+          physicalBalanceAfter: Math.max(0, (products.find((p) => p.id === item.productId)?.stockPhysical || 1) - item.quantity),
+          consignedBalanceAfter: products.find((p) => p.id === item.productId)?.stockConsigned || 0,
+          timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+          resellerId: confirmedOrder.resellerId,
+          resellerName: confirmedOrder.resellerName,
+          orderNumber: confirmedOrder.orderNumber,
+          operator: "Checkout do Comprador (E-commerce)",
+          reason: isReservation
+            ? `Reserva de estoque no storefront para WhatsApp - Pedido ${confirmedOrder.orderNumber}`
+            : `Venda B2C via ${confirmedOrder.channel} - Pedido ${confirmedOrder.orderNumber}`,
+        };
+        setLedger((prev) => [ledgerEntry, ...prev]);
+      });
+
+      // If reseller linked, update reseller sales & commission
+      if (confirmedOrder.resellerId) {
+        setResellers((prev) =>
+          prev.map((r) =>
+            r.id === confirmedOrder.resellerId
+              ? {
+                  ...r,
+                  totalSalesAccumulated: r.totalSalesAccumulated + confirmedOrder.totalAmount,
+                  pendingCommissionValue:
+                    r.pendingCommissionValue +
+                    (confirmedOrder.totalAmount * (r.commissionDirectRate / 100)),
+                }
+              : r
+          )
+        );
+      }
+
+      // Audit log
+      const auditEntry: AuditLogEntry = {
+        id: `aud-${Date.now()}`,
+        action: "STOREFRONT_ORDER_PLACED",
+        entity: "Order",
+        entityId: confirmedOrder.orderNumber,
+        userName: custName,
+        userEmail: custEmail,
+        actor: "Comprador B2C (Storefront)",
+        userRole: "LOJA_ADMIN",
+        status: "SUCESSO",
+        ipAddress: "189.44.120.18",
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+        timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
+        details: `Novo pedido ${confirmedOrder.orderNumber} realizado pelo cliente ${custName} (R$ ${Number(confirmedOrder.totalAmount).toFixed(2)}) transacionado com sucesso no ERP com garantia digital ${warrantyCode}.`,
+        changes: {
+          orderNumber: confirmedOrder.orderNumber,
+          totalAmount: confirmedOrder.totalAmount,
+          channel: confirmedOrder.channel,
+          resellerName: confirmedOrder.resellerName,
+          warrantyCode: warrantyCode,
+        },
+      };
+      setAuditLogs((prev) => [auditEntry, ...prev]);
+
+      // Trigger background sync to refresh all backend state
+      refreshBackendData();
+
+      showToast(`Pedido ${confirmedOrder.orderNumber} confirmado e registrado no ERP! Garantia ${warrantyCode} emitida.`);
+      return confirmedOrder;
+    } catch (err: any) {
+      console.error("Falha ao registrar pedido no ERP:", err);
+      const errorMsg = err?.message || "Erro de comunicação com o ERP ao registrar o pedido.";
+      showToast(`❌ Falha no pedido: ${errorMsg}`);
+      throw err;
+    }
   };
 
   // Quick New Sale Handler for Store Owner (Instant Sale + Stock Decrement + Digital Warranty)
@@ -1064,6 +1167,8 @@ export default function App() {
     customerPhone: string;
     items: { productId: string; name: string; quantity: number; unitPrice: number }[];
     totalAmount: number;
+    subtotalAmount?: number;
+    shippingAmount?: number;
     paymentMethod: "PIX" | "CREDIT_CARD" | "DEBIT_CARD" | "CASH";
     notes?: string;
   }) => {
@@ -1164,9 +1269,9 @@ export default function App() {
         country: "BR",
       },
       currency: "BRL",
-      subtotalAmount: saleData.totalAmount,
+      subtotalAmount: saleData.subtotalAmount !== undefined ? saleData.subtotalAmount : saleData.totalAmount,
       discountAmount: 0,
-      shippingAmount: 0,
+      shippingAmount: saleData.shippingAmount || 0,
       totalAmount: saleData.totalAmount,
       items: orderItems,
       warrantyCode,
@@ -1221,6 +1326,7 @@ export default function App() {
     });
 
     showToast(`Venda de R$ ${saleData.totalAmount.toFixed(2)} concluída! Estoque baixado e garantia emitida.`);
+    return { orderNumber, warrantyCode, newOrder };
   };
 
   // Direct Payment Confirmation Handler
@@ -1303,8 +1409,8 @@ export default function App() {
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 border border-stone-800 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-medium animate-bounce">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <div className={`fixed bottom-6 right-6 z-50 ${toastMessage.startsWith("❌") ? "bg-rose-950 border-rose-800 text-rose-100" : "bg-stone-900 border-stone-800 text-white"} border px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-medium animate-bounce`}>
+          <span className={`w-2 h-2 rounded-full ${toastMessage.startsWith("❌") ? "bg-rose-400" : "bg-emerald-400"}`} />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -1330,6 +1436,10 @@ export default function App() {
             tenant={selectedTenant}
             branding={brandingConfig}
             onOpenHelp={() => setShowAssistantHelpModal(true)}
+            onOpenNewSale={() => setShowQuickSaleModal(true)}
+            onOpenNewProduct={() => setShowQuickProductModal(true)}
+            onOpenShareModal={() => setShowShareModal(true)}
+            pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
           />
         </div>
 
@@ -1360,7 +1470,7 @@ export default function App() {
                 customers={customers}
                 warranties={warranties}
                 onNavigateTab={setActiveTab}
-                onOpenNewSale={() => setShowQuickSaleModal(true)}
+                onOpenNewSale={() => setActiveTab("vender")}
                 onOpenNewProduct={() => setShowQuickProductModal(true)}
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenNewCustomer={() => setActiveTab("customers")}
@@ -1413,7 +1523,7 @@ export default function App() {
               <ArchitectureView onClose={() => setActiveTab("ownerHome")} />
             )}
 
-            {activeTab === "consignments" && (
+            {(activeTab === "consignments" || activeTab === "adjustments") && (
               <ConsignmentsManager
                 consignments={consignments}
                 resellers={resellers}
@@ -1445,13 +1555,26 @@ export default function App() {
               />
             )}
 
-            {(activeTab === "orders" || activeTab === "sales") && (
+            {(activeTab === "vender" || activeTab === "sales") && (
+              <QuickSellScreen
+                products={products}
+                customers={customers}
+                orders={orders}
+                tenant={selectedTenant}
+                branding={brandingConfig}
+                onCompleteSale={handleQuickNewSale}
+                onNavigateTab={setActiveTab}
+                onOpenOrderHistory={() => setActiveTab("orders")}
+              />
+            )}
+
+            {activeTab === "orders" && (
               <UnifiedSalesOrders
                 orders={orders}
                 products={products}
                 customers={customers}
                 warranties={warranties}
-                onOpenNewSale={() => setShowQuickSaleModal(true)}
+                onOpenNewSale={() => setActiveTab("vender")}
                 onConfirmOrderPayment={handleConfirmOrderPayment}
               />
             )}

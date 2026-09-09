@@ -1,4 +1,4 @@
-import { dbStore } from "../../db/store";
+import { orgRepo } from "../../repositories";
 import { inventoryRepo } from "./inventory.repository";
 import { InventoryConcurrencyService } from "./inventoryConcurrency.service";
 import { auditService } from "../../services/auditService";
@@ -212,11 +212,9 @@ export class ReservationExpiryWorker {
       if (targetOrgId) {
         orgIds.add(targetOrgId);
       } else {
-        for (const org of dbStore.organizations.values()) {
+        const orgs = await orgRepo.listAll();
+        for (const org of orgs) {
           orgIds.add(org.id);
-        }
-        for (const res of dbStore.inventoryReservations.values()) {
-          orgIds.add(res.organizationId);
         }
       }
 
@@ -307,9 +305,8 @@ export class ReservationExpiryWorker {
 
     // Identifica candidatas preliminares (ACTIVE e com expiresAt <= now)
     const candidateIds: string[] = [];
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (res.organizationId !== orgId || res.status !== "ACTIVE") continue;
-
+    const activeReservations = await inventoryRepo.listReservations(orgId, { status: "ACTIVE" });
+    for (const res of activeReservations) {
       const expiryTime = new Date(res.expiresAt).getTime();
       const isExpired = expiryTime <= now;
 
@@ -325,7 +322,7 @@ export class ReservationExpiryWorker {
 
     // Processa cada reserva atômica com locks determinísticos
     for (const resId of candidateIds) {
-      const current = dbStore.inventoryReservations.get(resId);
+      const current = await inventoryRepo.findReservationById(orgId, resId);
       if (!current || current.status !== "ACTIVE") continue;
 
       const lockKeys = [
@@ -410,8 +407,8 @@ export class ReservationExpiryWorker {
     const activeSums = new Map<string, number>(); // key: `${productId}:::${locationId}`
     const productLocations = new Set<string>();
 
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (res.organizationId !== orgId || res.status !== "ACTIVE") continue;
+    const activeReservations = await inventoryRepo.listReservations(orgId, { status: "ACTIVE" });
+    for (const res of activeReservations) {
       if (filterProductIds && filterProductIds.length > 0 && !filterProductIds.includes(res.productId)) continue;
 
       const key = `${res.productId}:::${res.locationId}`;
@@ -421,8 +418,8 @@ export class ReservationExpiryWorker {
     }
 
     // 2. Coleta todos os registros de saldo existentes
-    for (const bal of dbStore.inventoryBalances.values()) {
-      if (bal.organizationId !== orgId) continue;
+    const balances = await inventoryRepo.listAllBalancesByOrg(orgId);
+    for (const bal of balances) {
       if (filterProductIds && filterProductIds.length > 0 && !filterProductIds.includes(bal.productId)) continue;
 
       const key = `${bal.productId}:::${bal.locationId}`;

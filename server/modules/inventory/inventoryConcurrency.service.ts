@@ -1,6 +1,6 @@
 import { inventoryRepo } from "./inventory.repository";
 import { auditService } from "../../services/auditService";
-import { dbStore } from "../../db/store";
+import { query } from "../../db/postgres";
 import { IdempotencyService } from "../../services/idempotency.service";
 import {
   InventoryBalanceEntity,
@@ -792,7 +792,7 @@ export class InventoryConcurrencyService {
         }
         if (createdRecord) {
           try {
-            dbStore.inventoryReservations.delete(createdRecord.id);
+            await query("DELETE FROM inventory_reservations WHERE id = $1", [createdRecord.id]);
           } catch (rbErr) {
             console.error(`[ROLLBACK_ERROR] Falha ao remover registro de reserva:`, rbErr);
           }
@@ -1051,19 +1051,16 @@ export class InventoryConcurrencyService {
 
     // 1. Identifica candidatas preliminares (ACTIVE e expiresAt <= now)
     const candidateIds: string[] = [];
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (
-        res.organizationId === orgId &&
-        res.status === "ACTIVE" &&
-        new Date(res.expiresAt).getTime() <= now
-      ) {
+    const activeReservations = await inventoryRepo.listReservations(orgId, { status: "ACTIVE" });
+    for (const res of activeReservations) {
+      if (new Date(res.expiresAt).getTime() <= now) {
         candidateIds.push(res.id);
       }
     }
 
     // 2. Processa cada reserva atomicamente com lock individual
     for (const resId of candidateIds) {
-      const current = dbStore.inventoryReservations.get(resId);
+      const current = await inventoryRepo.findReservationById(orgId, resId);
       if (!current || current.status !== "ACTIVE") continue;
 
       const lockKeys = [

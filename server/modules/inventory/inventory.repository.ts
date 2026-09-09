@@ -1,4 +1,4 @@
-import { dbStore } from "../../db/store";
+import { query } from "../../db/postgres";
 import { TransactionContext } from "../../db/transaction";
 import {
   InventoryMovementEntity,
@@ -7,8 +7,77 @@ import {
   InventoryLocationEntity,
   InventoryReservationEntity,
   InventoryReservationStatus,
+  InventoryReferenceType,
   LocationBalanceDetail,
 } from "./inventory.types";
+
+function mapRowToMovement(row: any): InventoryMovementEntity {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    productId: row.product_id,
+    type: row.type,
+    quantityChange: parseInt(row.quantity_change, 10),
+    physicalBalanceAfter: parseInt(row.physical_balance_after, 10),
+    consignedBalanceAfter: parseInt(row.consigned_balance_after, 10),
+    locationId: row.location_id || undefined,
+    referenceType: row.reference_type || undefined,
+    referenceId: row.reference_id || undefined,
+    operatorName: row.operator_name,
+    notes: row.notes || undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+  };
+}
+
+function mapRowToLocation(row: any): InventoryLocationEntity {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    name: row.name,
+    code: row.code,
+    type: row.type,
+    isActive: Boolean(row.is_active),
+    description: row.description || (row.address ? (typeof row.address === "string" ? row.address : JSON.stringify(row.address)) : undefined),
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+  };
+}
+
+function mapRowToBalance(row: any): InventoryBalanceEntity {
+  const onHand = parseInt(row.on_hand_quantity, 10);
+  const reserved = parseInt(row.reserved_quantity, 10);
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    productId: row.product_id,
+    locationId: row.location_id,
+    onHandQuantity: onHand,
+    reservedQuantity: reserved,
+    availableQuantity: Math.max(0, onHand - reserved),
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
+}
+
+function mapRowToReservation(row: any): InventoryReservationEntity {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    productId: row.product_id,
+    locationId: row.location_id,
+    quantity: parseInt(row.quantity, 10),
+    status: row.status,
+    referenceType: (row.reference_type as InventoryReferenceType) || "ORDER",
+    referenceId: row.reference_id || row.order_id || "",
+    idempotencyKey: row.idempotency_key || undefined,
+    expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : String(row.expires_at),
+    confirmedAt: row.confirmed_at instanceof Date ? row.confirmed_at.toISOString() : (row.confirmed_at ? String(row.confirmed_at) : undefined),
+    releasedAt: row.released_at instanceof Date ? row.released_at.toISOString() : (row.released_at ? String(row.released_at) : undefined),
+    operatorName: row.operator_name || undefined,
+    notes: row.notes || undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
+}
 
 export interface IInventoryRepository {
   createMovement(movement: InventoryMovementEntity, tx?: TransactionContext): Promise<InventoryMovementEntity>;
@@ -56,36 +125,61 @@ export interface IInventoryRepository {
 }
 
 export class InventoryRepository implements IInventoryRepository {
+  private getBalanceKey(orgId: string, productId: string, locationId: string): string {
+    return `${orgId}:${productId}:${locationId}`;
+  }
+
   async createMovement(movement: InventoryMovementEntity, tx?: TransactionContext): Promise<InventoryMovementEntity> {
     if (tx) {
       tx.stagedInventoryMovements.set(movement.id, movement);
-    } else {
-      dbStore.inventoryMovements.set(movement.id, movement);
+      return movement;
     }
-    return movement;
+
+    const res = await query(
+      `INSERT INTO inventory_movements (
+        id, organization_id, product_id, type, quantity_change,
+        physical_balance_after, consigned_balance_after, location_id,
+        reference_type, reference_id, operator_name, notes, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+      RETURNING *`,
+      [
+        movement.id,
+        movement.organizationId,
+        movement.productId,
+        movement.type,
+        movement.quantityChange,
+        movement.physicalBalanceAfter,
+        movement.consignedBalanceAfter,
+        movement.locationId || null,
+        movement.referenceType || null,
+        movement.referenceId || null,
+        movement.operatorName,
+        movement.notes || null,
+      ]
+    );
+    return mapRowToMovement(res.rows[0]);
   }
 
   async removeMovement(id: string): Promise<boolean> {
-    return dbStore.inventoryMovements.delete(id);
+    const res = await query("DELETE FROM inventory_movements WHERE id = $1", [id]);
+    return (res.rowCount || 0) > 0;
   }
 
   async findById(orgId: string, id: string): Promise<InventoryMovementEntity | null> {
-    const mov = dbStore.inventoryMovements.get(id);
-    if (mov && mov.organizationId === orgId) {
-      return mov;
-    }
-    return null;
+    const res = await query(
+      "SELECT * FROM inventory_movements WHERE organization_id = $1 AND id = $2",
+      [orgId, id]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToMovement(res.rows[0]);
   }
 
   async listMovementsByOrg(orgId: string, limit = 100): Promise<InventoryMovementEntity[]> {
-    const list: InventoryMovementEntity[] = [];
-    for (const mov of dbStore.inventoryMovements.values()) {
-      if (mov.organizationId === orgId) {
-        list.push(mov);
-      }
-    }
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return list.slice(0, limit);
+    const res = await query(
+      "SELECT * FROM inventory_movements WHERE organization_id = $1 ORDER BY created_at DESC LIMIT $2",
+      [orgId, limit]
+    );
+    return res.rows.map(mapRowToMovement);
   }
 
   async listMovementsByProduct(
@@ -93,94 +187,104 @@ export class InventoryRepository implements IInventoryRepository {
     productId: string,
     limit = 50
   ): Promise<InventoryMovementEntity[]> {
-    const list: InventoryMovementEntity[] = [];
-    for (const mov of dbStore.inventoryMovements.values()) {
-      if (mov.organizationId === orgId && mov.productId === productId) {
-        list.push(mov);
-      }
-    }
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return list.slice(0, limit);
+    const res = await query(
+      "SELECT * FROM inventory_movements WHERE organization_id = $1 AND product_id = $2 ORDER BY created_at DESC LIMIT $3",
+      [orgId, productId, limit]
+    );
+    return res.rows.map(mapRowToMovement);
   }
 
   // --- Inventory Locations ---
 
   async listLocations(orgId: string): Promise<InventoryLocationEntity[]> {
-    const list: InventoryLocationEntity[] = [];
-    for (const loc of dbStore.inventoryLocations.values()) {
-      if (loc.organizationId === orgId && loc.isActive) {
-        list.push(loc);
-      }
-    }
-    return list;
+    const res = await query(
+      "SELECT * FROM inventory_locations WHERE organization_id = $1 AND is_active = TRUE ORDER BY name ASC",
+      [orgId]
+    );
+    return res.rows.map(mapRowToLocation);
   }
 
   async findLocationById(orgId: string, locationId: string): Promise<InventoryLocationEntity | null> {
-    const loc = dbStore.inventoryLocations.get(locationId);
-    if (loc && loc.organizationId === orgId) {
-      return loc;
-    }
-    return null;
+    const res = await query(
+      "SELECT * FROM inventory_locations WHERE organization_id = $1 AND id = $2",
+      [orgId, locationId]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToLocation(res.rows[0]);
   }
 
   async createLocation(location: InventoryLocationEntity): Promise<InventoryLocationEntity> {
-    dbStore.inventoryLocations.set(location.id, location);
-    return location;
+    const res = await query(
+      `INSERT INTO inventory_locations (
+        id, organization_id, name, code, type, is_active, address, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      RETURNING *`,
+      [
+        location.id,
+        location.organizationId,
+        location.name,
+        location.code,
+        location.type,
+        location.isActive,
+        location.description ? JSON.stringify({ description: location.description }) : null,
+      ]
+    );
+    return mapRowToLocation(res.rows[0]);
   }
 
-  // --- Inventory Balances (Multi-Dimensional: Product + Location) ---
-
-  private getBalanceKey(orgId: string, productId: string, locationId: string): string {
-    return `${orgId}:${productId}:${locationId}`;
-  }
+  // --- Inventory Balances ---
 
   async getBalance(orgId: string, productId: string, locationId: string, tx?: TransactionContext): Promise<InventoryBalanceEntity | null> {
     const key = this.getBalanceKey(orgId, productId, locationId);
     if (tx && tx.stagedInventoryBalances.has(key)) {
       return tx.stagedInventoryBalances.get(key);
     }
-    return dbStore.inventoryBalances.get(key) || null;
+    const res = await query(
+      "SELECT * FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3",
+      [orgId, productId, locationId]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToBalance(res.rows[0]);
   }
 
-  /**
-   * PostgreSQL Row-Level Lock Query Simulation (SELECT ... FOR UPDATE)
-   */
   async getBalanceForUpdate(orgId: string, productId: string, locationId: string, tx?: TransactionContext): Promise<InventoryBalanceEntity | null> {
     const key = this.getBalanceKey(orgId, productId, locationId);
-    let bal: InventoryBalanceEntity | undefined;
     if (tx && tx.stagedInventoryBalances.has(key)) {
-      bal = tx.stagedInventoryBalances.get(key);
-    } else {
-      bal = dbStore.inventoryBalances.get(key);
+      return tx.stagedInventoryBalances.get(key);
     }
-    if (!bal) {
-      return null;
-    }
-    return { ...bal };
+    const res = await query(
+      "SELECT * FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3 FOR UPDATE",
+      [orgId, productId, locationId]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToBalance(res.rows[0]);
   }
 
   async listBalancesByProduct(orgId: string, productId: string): Promise<InventoryBalanceEntity[]> {
-    const balances: InventoryBalanceEntity[] = [];
-    for (const bal of dbStore.inventoryBalances.values()) {
-      if (bal.organizationId === orgId && bal.productId === productId) {
-        balances.push(bal);
-      }
-    }
-    return balances;
+    const res = await query(
+      "SELECT * FROM inventory_balances WHERE organization_id = $1 AND product_id = $2",
+      [orgId, productId]
+    );
+    return res.rows.map(mapRowToBalance);
   }
 
   async listBalancesByLocation(orgId: string, locationId: string): Promise<InventoryBalanceEntity[]> {
-    const balances: InventoryBalanceEntity[] = [];
-    for (const bal of dbStore.inventoryBalances.values()) {
-      if (bal.organizationId === orgId && bal.locationId === locationId) {
-        balances.push(bal);
-      }
-    }
-    return balances;
+    const res = await query(
+      "SELECT * FROM inventory_balances WHERE organization_id = $1 AND location_id = $2",
+      [orgId, locationId]
+    );
+    return res.rows.map(mapRowToBalance);
+  }
+
+  async listAllBalancesByOrg(orgId: string): Promise<InventoryBalanceEntity[]> {
+    const res = await query(
+      "SELECT * FROM inventory_balances WHERE organization_id = $1",
+      [orgId]
+    );
+    return res.rows.map(mapRowToBalance);
   }
 
   async upsertBalance(balance: InventoryBalanceEntity, tx?: TransactionContext): Promise<InventoryBalanceEntity> {
-    // Enforce DB CHECK Constraints at repository level
     if (balance.onHandQuantity < 0) {
       throw new Error(`Violação de integridade CHECK (on_hand_quantity >= 0): valor=${balance.onHandQuantity}`);
     }
@@ -198,20 +302,31 @@ export class InventoryRepository implements IInventoryRepository {
 
     const key = this.getBalanceKey(balance.organizationId, balance.productId, balance.locationId);
     if (tx) {
-      if (!tx.originalInventoryBalances.has(key) && dbStore.inventoryBalances.has(key)) {
-        tx.originalInventoryBalances.set(key, JSON.parse(JSON.stringify(dbStore.inventoryBalances.get(key))));
-      }
       tx.stagedInventoryBalances.set(key, balance);
-    } else {
-      dbStore.inventoryBalances.set(key, balance);
+      return balance;
     }
-    return balance;
+
+    const res = await query(
+      `INSERT INTO inventory_balances (
+        id, organization_id, product_id, location_id, on_hand_quantity, reserved_quantity, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      ON CONFLICT (organization_id, product_id, location_id) DO UPDATE SET
+        on_hand_quantity = EXCLUDED.on_hand_quantity,
+        reserved_quantity = EXCLUDED.reserved_quantity,
+        updated_at = NOW()
+      RETURNING *`,
+      [
+        balance.id,
+        balance.organizationId,
+        balance.productId,
+        balance.locationId,
+        balance.onHandQuantity,
+        balance.reservedQuantity,
+      ]
+    );
+    return mapRowToBalance(res.rows[0]);
   }
 
-  /**
-   * ATOMIC STOCK RESERVATION (supports TransactionContext)
-   * Enforces: AVAILABLE = ON_HAND - RESERVED >= quantity
-   */
   async reserveStock(
     orgId: string,
     productId: string,
@@ -256,9 +371,6 @@ export class InventoryRepository implements IInventoryRepository {
     return await this.upsertBalance(updated, tx);
   }
 
-  /**
-   * ATOMIC RESERVATION RELEASE
-   */
   async releaseReservation(
     orgId: string,
     productId: string,
@@ -287,10 +399,6 @@ export class InventoryRepository implements IInventoryRepository {
     return await this.upsertBalance(updated, tx);
   }
 
-  /**
-   * COMMIT RESERVATION (Order Completed / Consignment Dispatched)
-   * Deducts both on_hand_quantity and reserved_quantity simultaneously.
-   */
   async commitReservation(
     orgId: string,
     productId: string,
@@ -324,9 +432,6 @@ export class InventoryRepository implements IInventoryRepository {
     return await this.upsertBalance(updated, tx);
   }
 
-  /**
-   * ADJUST ON-HAND QUANTITY (Direct Inflow/Outflow like Purchase, Direct Sale, Adjustment)
-   */
   async adjustOnHand(
     orgId: string,
     productId: string,
@@ -369,26 +474,45 @@ export class InventoryRepository implements IInventoryRepository {
     return await this.upsertBalance(updated, tx);
   }
 
-  // --- Formal Inventory Reservations (Sprint 3 Lifecycle) ---
+  // --- Formal Inventory Reservations ---
 
   async createReservationRecord(reservation: InventoryReservationEntity, tx?: TransactionContext): Promise<InventoryReservationEntity> {
     if (tx) {
       tx.stagedInventoryReservations.set(reservation.id, reservation);
-    } else {
-      dbStore.inventoryReservations.set(reservation.id, reservation);
+      return reservation;
     }
-    return reservation;
+
+    const res = await query(
+      `INSERT INTO inventory_reservations (
+        id, organization_id, product_id, location_id, quantity,
+        status, order_id, idempotency_key, expires_at, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      RETURNING *`,
+      [
+        reservation.id,
+        reservation.organizationId,
+        reservation.productId,
+        reservation.locationId,
+        reservation.quantity,
+        reservation.status,
+        reservation.referenceId || null,
+        reservation.idempotencyKey || null,
+        reservation.expiresAt,
+      ]
+    );
+    return mapRowToReservation(res.rows[0]);
   }
 
   async findReservationById(orgId: string, reservationId: string, tx?: TransactionContext): Promise<InventoryReservationEntity | null> {
     if (tx && tx.stagedInventoryReservations.has(reservationId)) {
       return tx.stagedInventoryReservations.get(reservationId);
     }
-    const res = dbStore.inventoryReservations.get(reservationId);
-    if (res && res.organizationId === orgId) {
-      return res;
-    }
-    return null;
+    const res = await query(
+      "SELECT * FROM inventory_reservations WHERE organization_id = $1 AND id = $2",
+      [orgId, reservationId]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToReservation(res.rows[0]);
   }
 
   async findReservationByIdempotencyKey(orgId: string, idempotencyKey: string, tx?: TransactionContext): Promise<InventoryReservationEntity | null> {
@@ -399,12 +523,12 @@ export class InventoryRepository implements IInventoryRepository {
         }
       }
     }
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (res.organizationId === orgId && res.idempotencyKey === idempotencyKey) {
-        return res;
-      }
-    }
-    return null;
+    const res = await query(
+      "SELECT * FROM inventory_reservations WHERE organization_id = $1 AND idempotency_key = $2",
+      [orgId, idempotencyKey]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToReservation(res.rows[0]);
   }
 
   async updateReservationStatus(
@@ -426,10 +550,15 @@ export class InventoryRepository implements IInventoryRepository {
 
     if (tx) {
       tx.stagedInventoryReservations.set(reservationId, updated);
-    } else {
-      dbStore.inventoryReservations.set(reservationId, updated);
+      return updated;
     }
-    return updated;
+
+    const queryRes = await query(
+      "UPDATE inventory_reservations SET status = $1, updated_at = NOW() WHERE organization_id = $2 AND id = $3 RETURNING *",
+      [status, orgId, reservationId]
+    );
+    if (queryRes.rows.length === 0) return null;
+    return mapRowToReservation(queryRes.rows[0]);
   }
 
   async listActiveReservations(orgId: string): Promise<InventoryReservationEntity[]> {
@@ -444,33 +573,34 @@ export class InventoryRepository implements IInventoryRepository {
       locationId?: string;
     }
   ): Promise<InventoryReservationEntity[]> {
-    const list: InventoryReservationEntity[] = [];
+    let sql = "SELECT * FROM inventory_reservations WHERE organization_id = $1";
+    const params: any[] = [orgId];
+    let idx = 2;
 
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (res.organizationId !== orgId) continue;
-      if (filter?.status && res.status !== filter.status) continue;
-      if (filter?.productId && res.productId !== filter.productId) continue;
-      if (filter?.locationId && res.locationId !== filter.locationId) continue;
-      list.push(res);
+    if (filter?.status) {
+      sql += ` AND status = $${idx++}`;
+      params.push(filter.status);
     }
-    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (filter?.productId) {
+      sql += ` AND product_id = $${idx++}`;
+      params.push(filter.productId);
+    }
+    if (filter?.locationId) {
+      sql += ` AND location_id = $${idx++}`;
+      params.push(filter.locationId);
+    }
+
+    sql += " ORDER BY created_at DESC";
+    const res = await query(sql, params);
+    return res.rows.map(mapRowToReservation);
   }
 
   async expireStaleReservations(orgId: string): Promise<InventoryReservationEntity[]> {
-    const expired: InventoryReservationEntity[] = [];
-    const now = new Date();
-
-    for (const res of dbStore.inventoryReservations.values()) {
-      if (res.organizationId === orgId && res.status === "ACTIVE") {
-        if (new Date(res.expiresAt).getTime() <= now.getTime()) {
-          res.status = "EXPIRED";
-          res.updatedAt = now.toISOString();
-          dbStore.inventoryReservations.set(res.id, res);
-          expired.push(res);
-        }
-      }
-    }
-    return expired;
+    const res = await query(
+      "UPDATE inventory_reservations SET status = 'EXPIRED', updated_at = NOW() WHERE organization_id = $1 AND status = 'ACTIVE' AND expires_at <= NOW() RETURNING *",
+      [orgId]
+    );
+    return res.rows.map(mapRowToReservation);
   }
 
   /**
@@ -537,21 +667,16 @@ export class InventoryRepository implements IInventoryRepository {
   async getAllStockSummariesByOrg(orgId: string): Promise<Map<string, InventoryStockSummary>> {
     const summaries = new Map<string, InventoryStockSummary>();
     
-    const productIds = new Set<string>();
-    for (const bal of dbStore.inventoryBalances.values()) {
-      if (bal.organizationId === orgId) {
-        productIds.add(bal.productId);
-      }
-    }
-    for (const p of dbStore.products.values()) {
-      if (p.organizationId === orgId) {
-        productIds.add(p.id);
-      }
-    }
+    const res = await query(
+      `SELECT DISTINCT product_id FROM inventory_balances WHERE organization_id = $1
+       UNION
+       SELECT id as product_id FROM products WHERE organization_id = $1`,
+      [orgId]
+    );
 
-    for (const pId of productIds) {
-      const summary = await this.recalculateProductBalance(orgId, pId);
-      summaries.set(pId, summary);
+    for (const row of res.rows) {
+      const summary = await this.recalculateProductBalance(orgId, row.product_id);
+      summaries.set(row.product_id, summary);
     }
 
     return summaries;

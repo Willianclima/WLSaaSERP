@@ -54,12 +54,22 @@ export class ClientStorageService {
   ): Promise<StorageUploadResponse> {
     try {
       const base64Data = await this.fileToBase64(file);
+      const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
+      const tenantId = localStorage.getItem("aura_current_tenant_id") || options.organizationId || "org-lumina-01";
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      if (tenantId) {
+        headers["x-tenant-id"] = tenantId;
+      }
 
       const response = await fetch("/api/storage/upload", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           fileBase64: base64Data,
           fileName: file.name,
@@ -67,7 +77,6 @@ export class ClientStorageService {
           sku: options.sku || "sku-general",
           productId: options.productId,
           folder: options.folder || "products",
-          organizationId: options.organizationId || "org-lumina-01",
         }),
       });
 

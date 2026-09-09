@@ -64,6 +64,21 @@ export interface StoreBrandingConfig {
   lowStockThreshold?: number; // e.g. 3 pieces
   outOfStockCustomText?: string; // Custom CTA button label
   allowBackorders?: boolean;
+  launchDiscount?: LaunchDiscountConfig;
+}
+
+export interface LaunchDiscountConfig {
+  enabled: boolean;
+  discountType: "PERCENTAGE" | "FIXED_AMOUNT" | "FREE_SHIPPING";
+  discountValue: number; // e.g. 15 (for 15%) or 20 (for R$ 20)
+  couponCode: string; // e.g. "INAUGURACAO15"
+  maxFirstOrders: number; // e.g. 20
+  minOrderAmount: number; // e.g. 100
+  applyAutomatically: boolean;
+  bannerEnabled: boolean;
+  bannerHeadline: string;
+  presetName?: string;
+  expirationDays?: number;
 }
 
 export interface TenantStore {
@@ -94,6 +109,7 @@ export interface TenantStore {
     marketplaces: boolean;
     multiUserRBAC: boolean;
   };
+  launchDiscount?: LaunchDiscountConfig;
 }
 
 export type JewelryBath = "OURO_18K" | "RODIO_BRANCO" | "RODIO_NEGRO" | "PRATA_925" | "ROSE_GOLD";

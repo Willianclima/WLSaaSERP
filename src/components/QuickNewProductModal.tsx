@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   X,
   Package,
@@ -6,8 +6,12 @@ import {
   Camera,
   PlusCircle,
   CheckCircle2,
+  UploadCloud,
+  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { ProductItem } from "../types";
+import { ClientStorageService } from "../services/storageService";
 
 interface QuickNewProductModalProps {
   isOpen: boolean;
@@ -29,6 +33,9 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
   const [imageUrl, setImageUrl] = useState("");
   const [warrantyMonths, setWarrantyMonths] = useState(12);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -70,6 +77,41 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
     setCostPrice(sample.costPrice);
     setStock(sample.stock);
     setImageUrl(sample.imageUrl);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Por favor, selecione um arquivo de imagem (JPEG, PNG, WebP).");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert("A imagem selecionada excede o limite de 15MB.");
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const storageService = ClientStorageService.getInstance();
+      const uploadRes = await storageService.uploadFile(file, {
+        folder: "catalog-products",
+      });
+      if (uploadRes && (uploadRes.url || uploadRes.cdnUrl)) {
+        setImageUrl(uploadRes.cdnUrl || uploadRes.url);
+      }
+    } catch (err: any) {
+      console.error("Falha no upload da foto:", err);
+      alert("Não foi possível carregar a imagem. Você também pode colar o link direto abaixo.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -266,15 +308,92 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
 
           <div>
             <label className="block text-xs font-bold uppercase text-stone-700 mb-1">
-              Link da Imagem da Peça (URL)
+              Foto da Peça (Upload ou URL)
             </label>
-            <input
-              type="url"
-              placeholder="https://... (deixe em branco para usar foto padrão)"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-            />
+
+            {/* Drag and Drop Zone */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all ${
+                isDragOver
+                  ? "border-amber-500 bg-amber-50/80"
+                  : imageUrl
+                  ? "border-stone-200 bg-stone-50/50"
+                  : "border-stone-300 hover:border-amber-400 bg-stone-50/80"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                  }
+                }}
+              />
+
+              {isUploading ? (
+                <div className="flex flex-col items-center justify-center py-2 text-amber-700">
+                  <Loader2 className="w-7 h-7 animate-spin mb-1.5" />
+                  <span className="text-xs font-semibold">Enviando foto para o catálogo...</span>
+                </div>
+              ) : imageUrl ? (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={imageUrl}
+                    alt="Preview"
+                    className="w-16 h-16 rounded-xl object-cover border border-stone-200 shadow-2xs"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="text-left flex-1 min-w-0">
+                    <span className="text-xs font-bold text-stone-900 block truncate">
+                      Foto carregada com sucesso
+                    </span>
+                    <span className="text-[11px] text-stone-500 block truncate">
+                      Clique para trocar de foto ou editar o link
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImageUrl("");
+                    }}
+                    className="text-xs text-rose-600 hover:underline px-2 py-1 font-semibold"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-2 text-stone-600">
+                  <UploadCloud className="w-8 h-8 text-amber-600 mb-1" />
+                  <span className="text-xs font-bold text-stone-800">
+                    Clique para selecionar foto ou arraste aqui
+                  </span>
+                  <span className="text-[10px] text-stone-400 mt-0.5">
+                    PNG, JPG ou WebP até 15MB
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2">
+              <input
+                type="url"
+                placeholder="Ou cole aqui o link da imagem (URL direta)..."
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
+            </div>
           </div>
 
           <div className="pt-2">

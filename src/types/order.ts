@@ -193,6 +193,8 @@ export interface Order {
   ipAddress?: string;
   userAgent?: string;
   notes?: string;
+  paymentStatus?: PaymentStatus;
+  fulfillmentStatus?: "UNFULFILLED" | "PARTIALLY_FULFILLED" | "FULFILLED" | "DELIVERED";
   items?: OrderItem[];
   payments?: OrderPayment[];
   transitions?: OrderStateTransition[];

@@ -1,4 +1,4 @@
-import { dbStore } from "../../db/store";
+import { query, withTransaction } from "../../db/postgres";
 import {
   ProductEntity,
   ProductFilterQuery,
@@ -24,92 +24,191 @@ export interface IProductRepository {
   reorderMedia(orgId: string, productId: string, orderedMediaIds: string[]): Promise<ProductMediaEntity[]>;
 }
 
-export class ProductRepository implements IProductRepository {
-  private attachMedia(orgId: string, product: ProductEntity): ProductEntity {
-    const mediaList: ProductMediaEntity[] = [];
-    for (const m of dbStore.productMedia.values()) {
-      if (m.organizationId === orgId && m.productId === product.id) {
-        mediaList.push(m);
-      }
-    }
-    mediaList.sort((a, b) => a.sortOrder - b.sortOrder);
-    return {
-      ...product,
-      media: mediaList,
-      galleryUrls: mediaList.length > 0 ? mediaList.map((m) => m.url) : product.galleryUrls,
-    };
-  }
+function mapRowToProduct(row: any, media: ProductMediaEntity[] = []): ProductEntity {
+  const stones = Array.isArray(row.stones)
+    ? row.stones
+    : typeof row.stones === "string"
+    ? JSON.parse(row.stones)
+    : [];
 
+  const galleryUrls = media.length > 0 ? media.map((m) => m.url) : [row.image_url];
+
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    sku: row.sku,
+    name: row.name,
+    category: row.category,
+    collection: row.collection || "Linha Principal",
+    material: row.material || "Liga Nobre Hipoalergênica",
+    bath: row.bath,
+    stones,
+    price: parseFloat(row.price),
+    costPrice: parseFloat(row.cost_price),
+    promoPrice: row.promo_price ? parseFloat(row.promo_price) : undefined,
+    warrantyMonths: parseInt(row.warranty_months, 10) || 12,
+    isCustomizable: Boolean(row.is_customizable),
+    imageUrl: row.image_url,
+    galleryUrls,
+    media,
+    description: row.description || "",
+    status: row.status,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
+}
+
+function mapRowToMedia(row: any): ProductMediaEntity {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    productId: row.product_id,
+    storageKey: row.storage_key,
+    url: row.url,
+    cdnUrl: row.cdn_url || row.url,
+    mediaType: row.media_type,
+    mimeType: row.mime_type,
+    fileSizeBytes: parseInt(row.file_size_bytes, 10) || 0,
+    etag: row.etag || undefined,
+    isPrimary: Boolean(row.is_primary),
+    sortOrder: parseInt(row.sort_order, 10) || 0,
+    title: row.title || undefined,
+    altText: row.alt_text || undefined,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
+}
+
+export class ProductRepository implements IProductRepository {
   async findById(orgId: string, id: string): Promise<ProductEntity | null> {
-    const product = dbStore.products.get(id);
-    if (product && product.organizationId === orgId) {
-      return this.attachMedia(orgId, product);
-    }
-    return null;
+    const prodRes = await query(
+      "SELECT * FROM products WHERE organization_id = $1 AND id = $2",
+      [orgId, id]
+    );
+    if (prodRes.rows.length === 0) return null;
+
+    const mediaRes = await query(
+      "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = $2 ORDER BY sort_order ASC",
+      [orgId, id]
+    );
+    const media = mediaRes.rows.map(mapRowToMedia);
+    return mapRowToProduct(prodRes.rows[0], media);
   }
 
   async findBySku(orgId: string, sku: string): Promise<ProductEntity | null> {
     const normalized = sku.trim().toUpperCase();
-    for (const prod of dbStore.products.values()) {
-      if (prod.organizationId === orgId && prod.sku.toUpperCase() === normalized) {
-        return this.attachMedia(orgId, prod);
-      }
-    }
-    return null;
+    const prodRes = await query(
+      "SELECT * FROM products WHERE organization_id = $1 AND UPPER(sku) = $2",
+      [orgId, normalized]
+    );
+    if (prodRes.rows.length === 0) return null;
+
+    const row = prodRes.rows[0];
+    const mediaRes = await query(
+      "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = $2 ORDER BY sort_order ASC",
+      [orgId, row.id]
+    );
+    const media = mediaRes.rows.map(mapRowToMedia);
+    return mapRowToProduct(row, media);
   }
 
   async listByOrg(orgId: string, filter?: ProductFilterQuery): Promise<ProductEntity[]> {
-    let list: ProductEntity[] = [];
-
-    for (const prod of dbStore.products.values()) {
-      if (prod.organizationId === orgId) {
-        list.push(this.attachMedia(orgId, prod));
-      }
-    }
+    let sql = "SELECT * FROM products WHERE organization_id = $1";
+    const params: any[] = [orgId];
+    let idx = 2;
 
     if (filter) {
       if (filter.category && filter.category !== "TODOS") {
-        list = list.filter((p) => p.category === filter.category);
+        sql += ` AND category = $${idx++}`;
+        params.push(filter.category);
       }
       if (filter.bath && filter.bath !== "TODOS") {
-        list = list.filter((p) => p.bath === filter.bath);
+        sql += ` AND bath = $${idx++}`;
+        params.push(filter.bath);
       }
       if (filter.status && filter.status !== "TODOS") {
-        list = list.filter((p) => p.status === filter.status);
+        sql += ` AND status = $${idx++}`;
+        params.push(filter.status);
       }
       if (filter.search) {
-        const q = filter.search.toLowerCase();
-        list = list.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.sku.toLowerCase().includes(q) ||
-            p.collection.toLowerCase().includes(q) ||
-            p.material.toLowerCase().includes(q)
-        );
+        const q = `%${filter.search.toLowerCase()}%`;
+        sql += ` AND (LOWER(name) LIKE $${idx} OR LOWER(sku) LIKE $${idx} OR LOWER(collection) LIKE $${idx} OR LOWER(material) LIKE $${idx})`;
+        params.push(q);
+        idx++;
       }
       if (filter.minPrice !== undefined) {
-        list = list.filter((p) => p.price >= (filter.minPrice || 0));
+        sql += ` AND price >= $${idx++}`;
+        params.push(filter.minPrice);
       }
       if (filter.maxPrice !== undefined) {
-        list = list.filter((p) => p.price <= (filter.maxPrice || Infinity));
+        sql += ` AND price <= $${idx++}`;
+        params.push(filter.maxPrice);
       }
     }
 
-    // Sort by updatedAt desc
-    list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    sql += " ORDER BY updated_at DESC";
 
-    if (filter?.offset !== undefined || filter?.limit !== undefined) {
-      const offset = filter.offset || 0;
-      const limit = filter.limit || 50;
-      return list.slice(offset, offset + limit);
+    if (filter?.limit !== undefined) {
+      sql += ` LIMIT $${idx++}`;
+      params.push(filter.limit);
+      if (filter?.offset !== undefined) {
+        sql += ` OFFSET $${idx++}`;
+        params.push(filter.offset);
+      }
     }
 
-    return list;
+    const prodRes = await query(sql, params);
+    if (prodRes.rows.length === 0) return [];
+
+    // Fetch all media for these products in batch
+    const productIds = prodRes.rows.map((r) => r.id);
+    const mediaRes = await query(
+      "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = ANY($2) ORDER BY sort_order ASC",
+      [orgId, productIds]
+    );
+
+    const mediaMap = new Map<string, ProductMediaEntity[]>();
+    for (const mRow of mediaRes.rows) {
+      const mediaItem = mapRowToMedia(mRow);
+      if (!mediaMap.has(mediaItem.productId)) {
+        mediaMap.set(mediaItem.productId, []);
+      }
+      mediaMap.get(mediaItem.productId)!.push(mediaItem);
+    }
+
+    return prodRes.rows.map((row) => mapRowToProduct(row, mediaMap.get(row.id) || []));
   }
 
   async create(product: ProductEntity): Promise<ProductEntity> {
-    dbStore.products.set(product.id, product);
-    return product;
+    const res = await query(
+      `INSERT INTO products (
+        id, organization_id, sku, name, category, collection, material, bath,
+        stones, price, cost_price, promo_price, warranty_months, is_customizable,
+        image_url, description, status, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+      RETURNING *`,
+      [
+        product.id,
+        product.organizationId,
+        product.sku,
+        product.name,
+        product.category,
+        product.collection,
+        product.material,
+        product.bath,
+        JSON.stringify(product.stones || []),
+        product.price,
+        product.costPrice,
+        product.promoPrice || null,
+        product.warrantyMonths,
+        product.isCustomizable,
+        product.imageUrl,
+        product.description,
+        product.status,
+      ]
+    );
+
+    return mapRowToProduct(res.rows[0], []);
   }
 
   async update(
@@ -122,36 +221,92 @@ export class ProductRepository implements IProductRepository {
       throw new Error(`Produto ${id} não encontrado na organização.`);
     }
 
-    const updated: ProductEntity = {
-      ...existing,
-      ...partial,
-      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-    };
+    const setClauses: string[] = ["updated_at = NOW()"];
+    const params: any[] = [orgId, id];
+    let idx = 3;
 
-    dbStore.products.set(id, updated);
-    return this.attachMedia(orgId, updated);
+    if (partial.sku !== undefined) {
+      setClauses.push(`sku = $${idx++}`);
+      params.push(partial.sku);
+    }
+    if (partial.name !== undefined) {
+      setClauses.push(`name = $${idx++}`);
+      params.push(partial.name);
+    }
+    if (partial.category !== undefined) {
+      setClauses.push(`category = $${idx++}`);
+      params.push(partial.category);
+    }
+    if (partial.collection !== undefined) {
+      setClauses.push(`collection = $${idx++}`);
+      params.push(partial.collection);
+    }
+    if (partial.material !== undefined) {
+      setClauses.push(`material = $${idx++}`);
+      params.push(partial.material);
+    }
+    if (partial.bath !== undefined) {
+      setClauses.push(`bath = $${idx++}`);
+      params.push(partial.bath);
+    }
+    if (partial.stones !== undefined) {
+      setClauses.push(`stones = $${idx++}`);
+      params.push(JSON.stringify(partial.stones));
+    }
+    if (partial.price !== undefined) {
+      setClauses.push(`price = $${idx++}`);
+      params.push(partial.price);
+    }
+    if (partial.costPrice !== undefined) {
+      setClauses.push(`cost_price = $${idx++}`);
+      params.push(partial.costPrice);
+    }
+    if (partial.promoPrice !== undefined) {
+      setClauses.push(`promo_price = $${idx++}`);
+      params.push(partial.promoPrice);
+    }
+    if (partial.warrantyMonths !== undefined) {
+      setClauses.push(`warranty_months = $${idx++}`);
+      params.push(partial.warrantyMonths);
+    }
+    if (partial.isCustomizable !== undefined) {
+      setClauses.push(`is_customizable = $${idx++}`);
+      params.push(partial.isCustomizable);
+    }
+    if (partial.imageUrl !== undefined) {
+      setClauses.push(`image_url = $${idx++}`);
+      params.push(partial.imageUrl);
+    }
+    if (partial.description !== undefined) {
+      setClauses.push(`description = $${idx++}`);
+      params.push(partial.description);
+    }
+    if (partial.status !== undefined) {
+      setClauses.push(`status = $${idx++}`);
+      params.push(partial.status);
+    }
+
+    const sql = `UPDATE products SET ${setClauses.join(", ")} WHERE organization_id = $1 AND id = $2 RETURNING *`;
+    const res = await query(sql, params);
+
+    const mediaList = await this.listMediaByProduct(orgId, id);
+    return mapRowToProduct(res.rows[0], mediaList);
   }
 
   async delete(orgId: string, id: string): Promise<boolean> {
-    const existing = await this.findById(orgId, id);
-    if (!existing) return false;
-
-    // Delete associated media records from database
-    for (const [mId, m] of dbStore.productMedia.entries()) {
-      if (m.organizationId === orgId && m.productId === id) {
-        dbStore.productMedia.delete(mId);
-      }
-    }
-
-    return dbStore.products.delete(id);
+    const res = await query(
+      "DELETE FROM products WHERE organization_id = $1 AND id = $2",
+      [orgId, id]
+    );
+    return (res.rowCount || 0) > 0;
   }
 
   async countByOrg(orgId: string): Promise<number> {
-    let count = 0;
-    for (const prod of dbStore.products.values()) {
-      if (prod.organizationId === orgId) count++;
-    }
-    return count;
+    const res = await query(
+      "SELECT count(*) as count FROM products WHERE organization_id = $1",
+      [orgId]
+    );
+    return parseInt(res.rows[0]?.count || "0", 10);
   }
 
   // --- Product Media Implementation ---
@@ -162,135 +317,142 @@ export class ProductRepository implements IProductRepository {
     const isPrimary = dto.isPrimary !== undefined ? dto.isPrimary : isFirst;
     const sortOrder = dto.sortOrder !== undefined ? dto.sortOrder : existingMedia.length;
 
-    // If marked as primary, demote other primary media for this product
-    if (isPrimary) {
-      for (const m of existingMedia) {
-        if (m.isPrimary) {
-          m.isPrimary = false;
-          m.updatedAt = new Date().toISOString();
-          dbStore.productMedia.set(m.id, m);
-        }
+    return await withTransaction(async (client) => {
+      if (isPrimary) {
+        await client.query(
+          "UPDATE product_media SET is_primary = FALSE, updated_at = NOW() WHERE organization_id = $1 AND product_id = $2",
+          [orgId, productId]
+        );
       }
-    }
 
-    const mediaId = `media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newMedia: ProductMediaEntity = {
-      id: mediaId,
-      organizationId: orgId,
-      productId,
-      storageKey: dto.storageKey,
-      url: dto.url,
-      cdnUrl: dto.cdnUrl || dto.url,
-      mediaType: dto.mediaType || "IMAGE",
-      mimeType: dto.mimeType || "image/webp",
-      fileSizeBytes: dto.fileSizeBytes || 0,
-      etag: dto.etag,
-      isPrimary,
-      sortOrder,
-      title: dto.title,
-      altText: dto.altText,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const mediaId = `media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const res = await client.query(
+        `INSERT INTO product_media (
+          id, organization_id, product_id, storage_key, url, cdn_url,
+          media_type, mime_type, file_size_bytes, etag, is_primary,
+          sort_order, title, alt_text, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+        RETURNING *`,
+        [
+          mediaId,
+          orgId,
+          productId,
+          dto.storageKey,
+          dto.url,
+          dto.cdnUrl || dto.url,
+          dto.mediaType || "IMAGE",
+          dto.mimeType || "image/webp",
+          dto.fileSizeBytes || 0,
+          dto.etag || null,
+          isPrimary,
+          sortOrder,
+          dto.title || null,
+          dto.altText || null,
+        ]
+      );
 
-    dbStore.productMedia.set(mediaId, newMedia);
-
-    // If primary, also update product's main imageUrl in catalog
-    if (isPrimary) {
-      const prod = dbStore.products.get(productId);
-      if (prod && prod.organizationId === orgId) {
-        prod.imageUrl = dto.url;
-        prod.updatedAt = new Date().toISOString();
-        dbStore.products.set(productId, prod);
+      if (isPrimary) {
+        await client.query(
+          "UPDATE products SET image_url = $1, updated_at = NOW() WHERE organization_id = $2 AND id = $3",
+          [dto.url, orgId, productId]
+        );
       }
-    }
 
-    return newMedia;
+      return mapRowToMedia(res.rows[0]);
+    });
   }
 
   async listMediaByProduct(orgId: string, productId: string): Promise<ProductMediaEntity[]> {
-    const list: ProductMediaEntity[] = [];
-    for (const m of dbStore.productMedia.values()) {
-      if (m.organizationId === orgId && m.productId === productId) {
-        list.push(m);
-      }
-    }
-    return list.sort((a, b) => a.sortOrder - b.sortOrder);
+    const res = await query(
+      "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = $2 ORDER BY sort_order ASC",
+      [orgId, productId]
+    );
+    return res.rows.map(mapRowToMedia);
   }
 
   async findMediaById(orgId: string, mediaId: string): Promise<ProductMediaEntity | null> {
-    const m = dbStore.productMedia.get(mediaId);
-    if (m && m.organizationId === orgId) return m;
-    return null;
+    const res = await query(
+      "SELECT * FROM product_media WHERE organization_id = $1 AND id = $2",
+      [orgId, mediaId]
+    );
+    if (res.rows.length === 0) return null;
+    return mapRowToMedia(res.rows[0]);
   }
 
   async deleteMedia(orgId: string, productId: string, mediaId: string): Promise<boolean> {
-    const m = await this.findMediaById(orgId, mediaId);
-    if (!m || m.productId !== productId) return false;
+    const target = await this.findMediaById(orgId, mediaId);
+    if (!target) return false;
 
-    dbStore.productMedia.delete(mediaId);
+    await withTransaction(async (client) => {
+      await client.query(
+        "DELETE FROM product_media WHERE organization_id = $1 AND id = $2",
+        [orgId, mediaId]
+      );
 
-    // If deleted media was primary, promote next available media to primary
-    if (m.isPrimary) {
-      const remaining = await this.listMediaByProduct(orgId, productId);
-      if (remaining.length > 0) {
-        remaining[0].isPrimary = true;
-        remaining[0].updatedAt = new Date().toISOString();
-        dbStore.productMedia.set(remaining[0].id, remaining[0]);
-
-        const prod = dbStore.products.get(productId);
-        if (prod && prod.organizationId === orgId) {
-          prod.imageUrl = remaining[0].url;
-          prod.updatedAt = new Date().toISOString();
-          dbStore.products.set(productId, prod);
+      if (target.isPrimary) {
+        const remaining = await client.query(
+          "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = $2 ORDER BY sort_order ASC LIMIT 1",
+          [orgId, productId]
+        );
+        if (remaining.rows.length > 0) {
+          const nextPrimary = remaining.rows[0];
+          await client.query(
+            "UPDATE product_media SET is_primary = TRUE, updated_at = NOW() WHERE id = $1",
+            [nextPrimary.id]
+          );
+          await client.query(
+            "UPDATE products SET image_url = $1, updated_at = NOW() WHERE organization_id = $2 AND id = $3",
+            [nextPrimary.url, orgId, productId]
+          );
         }
       }
-    }
+    });
 
     return true;
   }
 
   async setPrimaryMedia(orgId: string, productId: string, mediaId: string): Promise<ProductMediaEntity> {
-    const media = await this.listMediaByProduct(orgId, productId);
-    const target = media.find((m) => m.id === mediaId);
-    if (!target) {
-      throw new Error("Mídia não encontrada para este produto.");
-    }
+    return await withTransaction(async (client) => {
+      await client.query(
+        "UPDATE product_media SET is_primary = FALSE, updated_at = NOW() WHERE organization_id = $1 AND product_id = $2",
+        [orgId, productId]
+      );
 
-    for (const m of media) {
-      m.isPrimary = m.id === mediaId;
-      m.updatedAt = new Date().toISOString();
-      dbStore.productMedia.set(m.id, m);
-    }
+      const res = await client.query(
+        "UPDATE product_media SET is_primary = TRUE, updated_at = NOW() WHERE organization_id = $1 AND id = $2 RETURNING *",
+        [orgId, mediaId]
+      );
 
-    // Update product's main image URL
-    const prod = dbStore.products.get(productId);
-    if (prod && prod.organizationId === orgId) {
-      prod.imageUrl = target.url;
-      prod.updatedAt = new Date().toISOString();
-      dbStore.products.set(productId, prod);
-    }
+      if (res.rows.length === 0) {
+        throw new Error(`Mídia ${mediaId} não encontrada.`);
+      }
 
-    return target;
+      const media = mapRowToMedia(res.rows[0]);
+      await client.query(
+        "UPDATE products SET image_url = $1, updated_at = NOW() WHERE organization_id = $2 AND id = $3",
+        [media.url, orgId, productId]
+      );
+
+      return media;
+    });
   }
 
   async reorderMedia(orgId: string, productId: string, orderedMediaIds: string[]): Promise<ProductMediaEntity[]> {
-    const media = await this.listMediaByProduct(orgId, productId);
-    const updatedList: ProductMediaEntity[] = [];
-
-    orderedMediaIds.forEach((id, index) => {
-      const item = media.find((m) => m.id === id);
-      if (item) {
-        item.sortOrder = index;
-        item.updatedAt = new Date().toISOString();
-        dbStore.productMedia.set(item.id, item);
-        updatedList.push(item);
+    return await withTransaction(async (client) => {
+      for (let i = 0; i < orderedMediaIds.length; i++) {
+        await client.query(
+          "UPDATE product_media SET sort_order = $1, updated_at = NOW() WHERE organization_id = $2 AND product_id = $3 AND id = $4",
+          [i, orgId, productId, orderedMediaIds[i]]
+        );
       }
-    });
 
-    return updatedList.sort((a, b) => a.sortOrder - b.sortOrder);
+      const res = await client.query(
+        "SELECT * FROM product_media WHERE organization_id = $1 AND product_id = $2 ORDER BY sort_order ASC",
+        [orgId, productId]
+      );
+      return res.rows.map(mapRowToMedia);
+    });
   }
 }
 
 export const productRepo = new ProductRepository();
-

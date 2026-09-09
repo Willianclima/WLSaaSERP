@@ -252,6 +252,7 @@ class WhatsAppOrderService {
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        "x-tenant-id": payload.organizationId || "org-lumina-01",
       };
       if (authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
@@ -263,91 +264,21 @@ class WhatsAppOrderService {
         body: JSON.stringify(orderDto),
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.warn("ERP backend order registration warning:", errData);
-        // Fallback gracefully without blocking the buyer's WhatsApp dispatch
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error || data.message || `Erro HTTP ${response.status} ao registrar pedido`;
+        console.error("ERP backend order registration failed:", errorMsg);
         return {
-          success: true,
-          order: {
-            id: `ord-wa-${Date.now()}`,
-            organizationId: payload.organizationId,
-            orderNumber: payload.orderNumber || `ORD-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-            customerId: payload.customerId || `cust-wa-${Date.now()}`,
-            customerSnapshot: {
-              id: payload.customerId || `cust-wa-${Date.now()}`,
-              personType: "PF",
-              name: payload.customerName,
-              document: "",
-              email: "",
-              phone: payload.customerPhone || "",
-            },
-            channel: "WHATSAPP",
-            status: payload.isInquiryOnly ? "DRAFT" : "INVENTORY_RESERVED",
-            shippingAddress: {
-              recipientName: payload.customerName,
-              street: "WhatsApp",
-              number: "S/N",
-              neighborhood: "Centro",
-              city: payload.customerCity || "Limeira",
-              state: "SP",
-              country: "BRA",
-              zipCode: "13480-000",
-            },
-            currency: "BRL",
-            subtotalAmount: payload.subtotal,
-            discountAmount: payload.discountAmount || 0,
-            shippingAmount: payload.shippingAmount || 0,
-            totalAmount: payload.totalAmount,
-            resellerId: payload.resellerId,
-            resellerName: payload.resellerName,
-            externalReference: payload.externalReference,
-            metadata: {
-              organization_id: payload.organizationId,
-              sales_channel: "WHATSAPP",
-              external_reference: payload.externalReference,
-              sku: payload.items[0]?.sku,
-            },
-            items: payload.items.map((it) => ({
-              id: `item-${Date.now()}`,
-              organizationId: payload.organizationId,
-              orderId: `ord-wa-${Date.now()}`,
-              productId: it.productId,
-              locationId: "loc-lumina-matriz",
-              productSnapshot: {
-                productId: it.productId,
-                sku: it.sku,
-                name: it.name,
-                category: "SEMIJOIAS",
-                material: "Liga Nobre",
-                bath: it.bath || "OURO_18K",
-                stones: [],
-                price: it.unitPrice,
-                costPrice: it.unitPrice * 0.3,
-                warrantyMonths: 12,
-                isCustomizable: !!it.customizationSpec,
-                imageUrl: "",
-                snapshotTimestamp: new Date().toISOString(),
-              },
-              quantity: it.quantity,
-              unitPrice: it.unitPrice,
-              costPriceSnapshot: it.unitPrice * 0.3,
-              discountAmount: 0,
-              totalAmount: it.totalAmount,
-              customizationSpec: it.customizationSpec,
-              createdAt: new Date().toISOString(),
-            })),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
+          success: false,
+          error: errorMsg,
         };
       }
 
-      const data = await response.json();
       return { success: true, order: data.data || data };
     } catch (err: any) {
-      console.warn("Failed to create order via API, continuing with client payload:", err);
-      return { success: true, error: err.message };
+      console.error("Failed to create order via API:", err);
+      return { success: false, error: err.message || "Erro de conexão com o servidor ERP" };
     }
   }
 }

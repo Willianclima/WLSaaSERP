@@ -1,6 +1,6 @@
 {
   "name": "Aura Semijoias SaaS & ERP",
-  "description": "Plataforma SaaS Omnichannel para Semijoias: Auditoria de Domínios & SSL Gerenciado, Segurança LGPD, Tela Inicial com Arte de Fundo Personalizável, Vitrine de Promoções, E-commerce do Comprador, Consignação com Ledger, Comissões, Garantia Digital QR, Personalizados e AI Gateway MCP.",
+  "description": "Sua loja de semijoias online + sistema de vendas e controle de estoque em um só lugar. Catálogo público no WhatsApp, vendas rápidas, baixa automática de estoque, gestão de clientes e emissão de garantias digitais.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

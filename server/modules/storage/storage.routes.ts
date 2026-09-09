@@ -11,7 +11,7 @@ router.get("/files/*", StorageController.getFile);
 router.get("/health", StorageController.health);
 
 // Authenticated upload and management routes
-router.post("/upload", StorageController.upload);
+router.post("/upload", authMiddleware, StorageController.upload);
 router.post("/presigned-url", authMiddleware, StorageController.getPresignedUrl);
 router.delete("/*", authMiddleware, StorageController.delete);
 
