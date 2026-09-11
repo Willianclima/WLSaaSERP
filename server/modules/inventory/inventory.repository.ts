@@ -9,6 +9,7 @@ import {
   InventoryReservationStatus,
   InventoryReferenceType,
   LocationBalanceDetail,
+  InsufficientStockError,
 } from "./inventory.types";
 
 function mapRowToMovement(row: any): InventoryMovementEntity {
@@ -239,7 +240,8 @@ export class InventoryRepository implements IInventoryRepository {
     if (tx && tx.stagedInventoryBalances.has(key)) {
       return tx.stagedInventoryBalances.get(key);
     }
-    const res = await query(
+    const queryFn = tx?.pgClient ? tx.pgClient.query.bind(tx.pgClient) : query;
+    const res = await queryFn(
       "SELECT * FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3",
       [orgId, productId, locationId]
     );
@@ -249,6 +251,32 @@ export class InventoryRepository implements IInventoryRepository {
 
   async getBalanceForUpdate(orgId: string, productId: string, locationId: string, tx?: TransactionContext): Promise<InventoryBalanceEntity | null> {
     const key = this.getBalanceKey(orgId, productId, locationId);
+
+    if (tx?.pgClient) {
+      // 1. Ensure the balance row physically exists in PostgreSQL so FOR UPDATE locks a concrete row
+      await tx.pgClient.query(
+        `INSERT INTO inventory_balances (
+          id, organization_id, product_id, location_id, on_hand_quantity, reserved_quantity, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, 0, 0, NOW(), NOW())
+        ON CONFLICT (organization_id, product_id, location_id) DO NOTHING`,
+        [`bal-${productId}-${locationId}`, orgId, productId, locationId]
+      );
+
+      // 2. Real PostgreSQL row-level lock (FOR UPDATE) within the active transaction
+      const res = await tx.pgClient.query(
+        "SELECT * FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3 FOR UPDATE",
+        [orgId, productId, locationId]
+      );
+      if (res.rows.length === 0) return null;
+      const dbBal = mapRowToBalance(res.rows[0]);
+
+      // If already modified in this transaction, return staged state with locked row
+      if (tx.stagedInventoryBalances.has(key)) {
+        return tx.stagedInventoryBalances.get(key);
+      }
+      return dbBal;
+    }
+
     if (tx && tx.stagedInventoryBalances.has(key)) {
       return tx.stagedInventoryBalances.get(key);
     }
@@ -303,6 +331,27 @@ export class InventoryRepository implements IInventoryRepository {
     const key = this.getBalanceKey(balance.organizationId, balance.productId, balance.locationId);
     if (tx) {
       tx.stagedInventoryBalances.set(key, balance);
+      if (tx.pgClient) {
+        const res = await tx.pgClient.query(
+          `INSERT INTO inventory_balances (
+            id, organization_id, product_id, location_id, on_hand_quantity, reserved_quantity, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          ON CONFLICT (organization_id, product_id, location_id) DO UPDATE SET
+            on_hand_quantity = EXCLUDED.on_hand_quantity,
+            reserved_quantity = EXCLUDED.reserved_quantity,
+            updated_at = NOW()
+          RETURNING *`,
+          [
+            balance.id,
+            balance.organizationId,
+            balance.productId,
+            balance.locationId,
+            balance.onHandQuantity,
+            balance.reservedQuantity,
+          ]
+        );
+        return mapRowToBalance(res.rows[0]);
+      }
       return balance;
     }
 
@@ -338,7 +387,8 @@ export class InventoryRepository implements IInventoryRepository {
       throw new Error("A quantidade de reserva deve ser maior que zero.");
     }
 
-    let bal = await this.getBalance(orgId, productId, locationId, tx);
+    // Acquire PostgreSQL row-level lock (FOR UPDATE) within active transaction
+    let bal = await this.getBalanceForUpdate(orgId, productId, locationId, tx);
     if (!bal) {
       bal = {
         id: `bal-${productId}-${locationId}`,
@@ -355,7 +405,7 @@ export class InventoryRepository implements IInventoryRepository {
 
     const available = bal.onHandQuantity - bal.reservedQuantity;
     if (available < quantity) {
-      throw new Error(
+      throw new InsufficientStockError(
         `Saldo insuficiente para reserva na localização ${locationId}. Disponível: ${available} un, Solicitado: ${quantity} un (Físico On-Hand: ${bal.onHandQuantity}, Já Reservado: ${bal.reservedQuantity}).`
       );
     }
@@ -382,7 +432,7 @@ export class InventoryRepository implements IInventoryRepository {
       throw new Error("A quantidade a liberar deve ser maior que zero.");
     }
 
-    const bal = await this.getBalance(orgId, productId, locationId, tx);
+    const bal = await this.getBalanceForUpdate(orgId, productId, locationId, tx);
     if (!bal || bal.reservedQuantity < quantity) {
       throw new Error(
         `Quantidade reservada insuficiente para liberação. Reservado atual: ${bal ? bal.reservedQuantity : 0} un, Solicitado para liberar: ${quantity} un.`
@@ -410,7 +460,7 @@ export class InventoryRepository implements IInventoryRepository {
       throw new Error("A quantidade a confirmar deve ser maior que zero.");
     }
 
-    const bal = await this.getBalance(orgId, productId, locationId, tx);
+    const bal = await this.getBalanceForUpdate(orgId, productId, locationId, tx);
     if (!bal) {
       throw new Error("Saldo não encontrado para confirmação de reserva.");
     }
@@ -439,7 +489,7 @@ export class InventoryRepository implements IInventoryRepository {
     delta: number,
     tx?: TransactionContext
   ): Promise<InventoryBalanceEntity> {
-    let bal = await this.getBalance(orgId, productId, locationId, tx);
+    let bal = await this.getBalanceForUpdate(orgId, productId, locationId, tx);
     if (!bal) {
       bal = {
         id: `bal-${productId}-${locationId}`,

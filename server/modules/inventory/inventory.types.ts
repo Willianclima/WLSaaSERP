@@ -284,3 +284,13 @@ export interface AtomicUpdateResult {
   errorMessage?: string;
 }
 
+export class InsufficientStockError extends Error {
+  public status: number = 409;
+  public code: string = "INSUFFICIENT_STOCK";
+  constructor(message: string) {
+    super(message);
+    this.name = "InsufficientStockError";
+    Object.setPrototypeOf(this, InsufficientStockError.prototype);
+  }
+}
+

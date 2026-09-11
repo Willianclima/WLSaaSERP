@@ -1,4 +1,5 @@
 import { ProductItem, StoreBrandingConfig } from "../types";
+import { apiClient } from "./apiClient";
 
 export interface StockAvailabilityResult {
   productId: string;
@@ -124,7 +125,11 @@ export class ClientInventoryService {
   public async fetchLiveBalances(orgId = "org-lumina-01"): Promise<Map<string, { onHand: number; reserved: number; available: number }>> {
     const map = new Map<string, { onHand: number; reserved: number; available: number }>();
     try {
-      const res = await fetch(`/api/inventory/balances?organizationId=${orgId}`);
+      const res = await apiClient.request(`/api/inventory/balances?organizationId=${orgId}`, {
+        headers: {
+          "x-tenant-id": orgId,
+        },
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.data && Array.isArray(json.data)) {

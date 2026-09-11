@@ -72,9 +72,18 @@ export class OrderController {
       });
     } catch (error: any) {
       console.error("Erro ao registrar pedido público:", error);
-      return res.status(400).json({
+      const isStockConflict =
+        error.status === 409 ||
+        error.name === "InsufficientStockError" ||
+        error.message?.includes("Saldo insuficiente") ||
+        error.message?.includes("INSUFFICIENT_STOCK") ||
+        error.message?.includes("check_reserved_within_on_hand") ||
+        error.message?.includes("CHECK");
+
+      return res.status(isStockConflict ? 409 : 400).json({
         success: false,
         error: error.message || "Falha ao processar pedido na vitrine.",
+        code: isStockConflict ? "INSUFFICIENT_STOCK" : "ORDER_CREATION_FAILED",
       });
     }
   }
@@ -168,9 +177,18 @@ export class OrderController {
         message: `Pedido ${order.orderNumber} registrado com sucesso!`,
       });
     } catch (error: any) {
-      return res.status(400).json({
+      const isStockConflict =
+        error.status === 409 ||
+        error.name === "InsufficientStockError" ||
+        error.message?.includes("Saldo insuficiente") ||
+        error.message?.includes("INSUFFICIENT_STOCK") ||
+        error.message?.includes("check_reserved_within_on_hand") ||
+        error.message?.includes("CHECK");
+
+      return res.status(isStockConflict ? 409 : 400).json({
         success: false,
         error: error.message || "Falha ao registrar pedido.",
+        code: isStockConflict ? "INSUFFICIENT_STOCK" : "ORDER_CREATION_FAILED",
       });
     }
   }

@@ -73,13 +73,14 @@ class AuditService {
 
     // Persist asynchronously in PostgreSQL
     try {
+      const validUserId = userId && typeof userId === "string" && userId.startsWith("usr-") ? userId : null;
       await query(
         `INSERT INTO audit_logs (id, organization_id, user_id, action, entity, entity_id, status, ip_address, user_agent, details, changes, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           id,
           organizationId,
-          userId || null,
+          validUserId,
           action,
           entity || null,
           entityId || null,

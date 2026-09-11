@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { MCPProposedAction, RBACUser } from "../types";
+import { apiClient } from "../services/apiClient";
 
 interface AIGatewayMCPCopilotProps {
   currentUser: RBACUser;
@@ -49,9 +50,8 @@ export const AIGatewayMCPCopilot: React.FC<AIGatewayMCPCopilotProps> = ({
     setLoading(true);
 
     try {
-      const res = await fetch("/api/ai/copilot", {
+      const res = await apiClient.request("/api/ai/copilot", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: userText,
           userRole: currentUser.role,

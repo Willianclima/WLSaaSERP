@@ -28,12 +28,22 @@ export class OrderService {
   /**
    * Helper to format sequential order numbers (e.g. ORD-2026-0001)
    */
-  private static async generateOrderNumber(organizationId: string): Promise<string> {
-    const existingOrgOrders = await OrderRepository.listAsync(organizationId);
-    const count = existingOrgOrders.length + 1;
+  private static async generateOrderNumber(organizationId: string, tx?: TransactionContext): Promise<string> {
     const year = new Date().getFullYear();
-    const padded = String(count).padStart(4, "0");
-    return `ORD-${year}-${padded}`;
+    const queryFn = tx?.pgClient ? tx.pgClient.query.bind(tx.pgClient) : query;
+    try {
+      const res = await queryFn(
+        "SELECT COUNT(*) as total FROM orders WHERE organization_id = $1",
+        [organizationId]
+      );
+      const count = parseInt(res.rows[0]?.total || "0", 10) + 1;
+      const padded = String(count).padStart(4, "0");
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      return `ORD-${year}-${padded}-${rand}`;
+    } catch {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      return `ORD-${year}-${Date.now().toString().slice(-4)}-${rand}`;
+    }
   }
 
   /**
@@ -286,7 +296,7 @@ export class OrderService {
 
       // 3. Resolve Order Items & Freeze Immutable Product Snapshots
       const orderId = `ord-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const orderNumber = await this.generateOrderNumber(organizationId);
+      const orderNumber = await this.generateOrderNumber(organizationId, tx);
       const nowIso = new Date().toISOString();
 
       let subtotalAmount = 0;

@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { useDropzone, FileRejection } from "react-dropzone";
 import { clientStorageService } from "../services/storageService";
 import { clientInventoryService } from "../services/inventoryService";
+import { apiClient } from "../services/apiClient";
 import {
   Sparkles,
   Search,
@@ -357,11 +358,9 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
   const fetchWorkerStatus = async () => {
     setWorkerLoading(true);
     try {
-      const res = await fetch("/api/inventory/reservations/worker/status", {
+      const res = await apiClient.request("/api/inventory/reservations/worker/status", {
         headers: {
           "x-tenant-id": "org-lumina-01",
-          Authorization: "Bearer mock-token-willian-owner",
-          "Content-Type": "application/json",
         },
       });
       const json = await res.json();
@@ -384,12 +383,10 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
     setWorkerTriggering(true);
     setWorkerFeedback(null);
     try {
-      const res = await fetch("/api/inventory/reservations/worker/trigger", {
+      const res = await apiClient.request("/api/inventory/reservations/worker/trigger", {
         method: "POST",
         headers: {
           "x-tenant-id": "org-lumina-01",
-          Authorization: "Bearer mock-token-willian-owner",
-          "Content-Type": "application/json",
         },
         body: JSON.stringify({ allOrganizations: false }),
       });
@@ -412,12 +409,10 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
   const handleSaveWorkerConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("/api/inventory/reservations/worker/config", {
+      const res = await apiClient.request("/api/inventory/reservations/worker/config", {
         method: "PUT",
         headers: {
           "x-tenant-id": "org-lumina-01",
-          Authorization: "Bearer mock-token-willian-owner",
-          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           defaultTtlMinutes: Number(configuredTtl),
@@ -440,13 +435,11 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
   const handleRunHardeningTests = async () => {
     setRunningTests(true);
     try {
-      const res = await fetch("/api/inventory/hardening/run-tests", {
+      const res = await apiClient.request("/api/inventory/hardening/run-tests", {
         method: "POST",
         headers: {
           "x-tenant-id": "org-lumina-01",
-          Authorization: "Bearer mock-token-willian-owner",
           "x-dev-test-runner": "enabled",
-          "Content-Type": "application/json",
         },
       });
       const json = await res.json();
@@ -492,10 +485,9 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
     setReconcileReport(null);
 
     try {
-      const res = await fetch(`/api/inventory/reconcile/${product.id}`, {
+      const res = await apiClient.request(`/api/inventory/reconcile/${product.id}`, {
         headers: {
           "x-tenant-id": "org-lumina-01",
-          Authorization: "Bearer mock-token-willian-owner",
         },
       });
       const json = await res.json();
@@ -673,9 +665,8 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
     setAiDescriptions(null);
 
     try {
-      const res = await fetch("/api/ai/description", {
+      const res = await apiClient.request("/api/ai/description", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product }),
       });
       const data = await res.json();

@@ -1,3 +1,4 @@
+import pg from "pg";
 import { withTransaction, query } from "./postgres";
 
 /**
@@ -15,6 +16,7 @@ export interface TransactionContext {
   startedAt: string;
   isCommitted: boolean;
   isRolledBack: boolean;
+  pgClient?: pg.PoolClient;
 
   // Staged records for transactional commit or rollback
   stagedOrders: Map<string, any>;
@@ -33,38 +35,41 @@ export interface TransactionContext {
 
 export class UnitOfWork {
   /**
-   * Executes a callback within an atomic transaction context.
-   * If any exception is thrown, all staged changes and ledger entries are rolled back.
+   * Executes a callback within an atomic transaction context directly on PostgreSQL.
+   * Begins a transaction on a dedicated client, provides tx.pgClient to operations for
+   * real row locks (SELECT ... FOR UPDATE), and atomically commits or rolls back.
    */
   static async transaction<T>(
     organizationId: string,
     callback: (tx: TransactionContext) => Promise<T>
   ): Promise<T> {
     const txId = `tx-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-    const tx: TransactionContext = {
-      id: txId,
-      organizationId,
-      startedAt: new Date().toISOString(),
-      isCommitted: false,
-      isRolledBack: false,
-      stagedOrders: new Map(),
-      stagedOrderItems: new Map(),
-      stagedOrderPayments: new Map(),
-      stagedOrderTransitions: new Map(),
-      stagedInventoryMovements: new Map(),
-      stagedInventoryBalances: new Map(),
-      stagedInventoryReservations: new Map(),
-      stagedAuditLogs: [],
-      originalInventoryBalances: new Map(),
-      originalOrders: new Map(),
-    };
 
-    try {
-      // Execute the business transaction logic
-      const result = await callback(tx);
+    return await withTransaction(async (client) => {
+      const tx: TransactionContext = {
+        id: txId,
+        organizationId,
+        startedAt: new Date().toISOString(),
+        isCommitted: false,
+        isRolledBack: false,
+        pgClient: client,
+        stagedOrders: new Map(),
+        stagedOrderItems: new Map(),
+        stagedOrderPayments: new Map(),
+        stagedOrderTransitions: new Map(),
+        stagedInventoryMovements: new Map(),
+        stagedInventoryBalances: new Map(),
+        stagedInventoryReservations: new Map(),
+        stagedAuditLogs: [],
+        originalInventoryBalances: new Map(),
+        originalOrders: new Map(),
+      };
 
-      // --- COMMIT PHASE: DUAL WRITE / POSTGRESQL ATOMIC COMMIT ---
-      await withTransaction(async (client) => {
+      try {
+        // 1. Execute the business transaction logic inside the active PostgreSQL transaction
+        const result = await callback(tx);
+
+        // 2. Commit all staged records to PostgreSQL using the SAME active connection
         // 1. Orders
         for (const order of tx.stagedOrders.values()) {
           await client.query(
@@ -257,14 +262,14 @@ export class UnitOfWork {
             ]
           );
         }
-      });
 
-      // Transaction committed atomically to PostgreSQL
-      tx.isCommitted = true;
-      return result;
-    } catch (error: any) {
-      tx.isRolledBack = true;
-      throw new Error(`[TRANSACTION_ROLLBACK] Transação ${txId} abortada e revertida: ${error.message}`);
-    }
+        // Transaction committed atomically to PostgreSQL
+        tx.isCommitted = true;
+        return result;
+      } catch (error: any) {
+        tx.isRolledBack = true;
+        throw error;
+      }
+    });
   }
 }

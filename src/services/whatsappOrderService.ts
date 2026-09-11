@@ -258,10 +258,18 @@ class WhatsAppOrderService {
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
-      const response = await fetch("/api/orders", {
+      const endpoint = authToken ? "/api/orders" : "/api/orders/public";
+      const requestPayload = authToken
+        ? orderDto
+        : {
+            ...orderDto,
+            organizationId: payload.organizationId || "org-lumina-01",
+          };
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers,
-        body: JSON.stringify(orderDto),
+        body: JSON.stringify(requestPayload),
       });
 
       const data = await response.json().catch(() => ({}));

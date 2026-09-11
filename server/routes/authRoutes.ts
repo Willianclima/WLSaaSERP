@@ -42,7 +42,20 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password, organizationId } = req.body;
-    const session = await AuthService.login(email || "willianCLima@gmail.com", password, organizationId);
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction && !email) {
+      return res.status(400).json({
+        success: false,
+        error: "O endereço de e-mail é obrigatório para autenticação em produção.",
+      });
+    }
+
+    const session = await AuthService.login(
+      email || (isProduction ? "" : "willianCLima@gmail.com"),
+      password,
+      organizationId
+    );
 
     return res.json({
       success: true,
@@ -50,7 +63,7 @@ router.post("/login", async (req, res) => {
       session,
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(401).json({ success: false, error: error.message });
   }
 });
 

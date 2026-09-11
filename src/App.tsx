@@ -148,11 +148,17 @@ export default function App() {
     return unsub;
   }, []);
 
+  // Centralized tenant and authenticated header helper
+  const getAuthHeaders = async (customTenantId?: string) => {
+    const tenantId = customTenantId || (selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id);
+    return apiClient.getAuthHeaders(tenantId);
+  };
+
   // Check onboarding status and trial info
   const checkOnboardingStatus = async () => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      const res = await fetch("/api/onboarding/status", { headers: { "x-tenant-id": tenantId } });
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/onboarding/status", { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.data) {
@@ -171,13 +177,10 @@ export default function App() {
   };
 
   const handleCompleteOnboarding = async (payload: any) => {
-    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+    const headers = await getAuthHeaders();
     const res = await fetch("/api/onboarding/save", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-tenant-id": tenantId,
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 
@@ -222,8 +225,7 @@ export default function App() {
   // Sync Products, Ledger, Customers and Orders from Real ERP API
   const refreshBackendData = async () => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      const headers = { "x-tenant-id": tenantId };
+      const headers = await getAuthHeaders();
 
       const [resProds, resLedger, resCusts, resOrders] = await Promise.all([
         fetch("/api/products", { headers }),
@@ -317,13 +319,10 @@ export default function App() {
   // Add Product handler (Persisted to Backend API)
   const handleAddProduct = async (newProd: ProductItem) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/products", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify({
           sku: newProd.sku,
           name: newProd.name,
@@ -375,13 +374,10 @@ export default function App() {
   // Update existing product details (Photos, Prices, Bath, Status)
   const handleUpdateProduct = async (updatedProd: ProductItem): Promise<{ success: boolean; message?: string }> => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/products/${updatedProd.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify(updatedProd),
       });
 
@@ -403,13 +399,10 @@ export default function App() {
   // Update Stock manual (Persisted to Backend API)
   const handleUpdateStock = async (productId: string, qty: number, reason: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/inventory/movement", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify({
           productId,
           type: "ADJUSTMENT",
@@ -447,13 +440,10 @@ export default function App() {
   // Reverse Ledger Movement (Immutable Reversal)
   const handleReverseMovement = async (originalMovementId: string, reason: string) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/inventory/reverse", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify({
           originalMovementId,
           reason: reason || "Estorno/Reversão de lançamento incorreto",
@@ -736,13 +726,10 @@ export default function App() {
   // Add Customer (Persisted to Backend API)
   const handleAddCustomer = async (dto: CreateCustomerDTO) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/customers", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify(dto),
       });
 
@@ -836,13 +823,10 @@ export default function App() {
   // Update Customer
   const handleUpdateCustomer = async (id: string, dto: UpdateCustomerDTO) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/customers/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify(dto),
       });
 
@@ -865,12 +849,10 @@ export default function App() {
   // Soft-Delete / Archive Customer
   const handleDeleteCustomer = async (id: string) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch(`/api/customers/${id}`, {
         method: "DELETE",
-        headers: {
-          "x-tenant-id": tenantId,
-        },
+        headers,
       });
 
       if (res.ok) {
@@ -1211,13 +1193,10 @@ export default function App() {
     notes?: string;
   }) => {
     try {
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-id": tenantId,
-        },
+        headers,
         body: JSON.stringify({
           channel: "DIRECT_SALE",
           customer: {

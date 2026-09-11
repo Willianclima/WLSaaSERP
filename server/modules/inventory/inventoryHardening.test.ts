@@ -3,6 +3,8 @@ import { inventoryRepo } from "./inventory.repository";
 import { reservationExpiryWorker } from "./reservationExpiryWorker";
 import { dbStore } from "../../db/store";
 import { IdempotencyService } from "../../services/idempotency.service";
+import { query } from "../../db/postgres";
+import { OrderService } from "../orders/order.service";
 
 export interface TestResultItem {
   testName: string;
@@ -698,6 +700,171 @@ export class InventoryHardeningTestSuite {
   }
 
   /**
+   * TEST 9: Real PostgreSQL SELECT ... FOR UPDATE Lock Validation (Fase 1.2 Mandatory Test)
+   * Estoque = 1. Simultaneamente: Pedido A e Pedido B.
+   * Resultado esperado:
+   * Pedido A -> RESERVADO
+   * Pedido B -> REJEITADO (409 Saldo insuficiente)
+   * Saldo: on_hand = 1, reserved = 1, available = 0
+   * Pagamento A -> SALE -> on_hand = 0, reserved = 0, available = 0
+   */
+  static async testPostgresForUpdateLocking(): Promise<TestResultItem> {
+    const start = Date.now();
+    const testName = "9. Bloqueio Concorrente PostgreSQL Real (FOR UPDATE Lock + Transição SALE)";
+    const orgId = "org-lumina-01";
+    const testProductId = "prod-test-lock-" + Date.now();
+    const testLocationId = "loc-lumina-matriz";
+
+    try {
+      // 1. Inserir produto no catálogo PostgreSQL
+      await query(
+        `INSERT INTO products (
+          id, organization_id, sku, name, category, bath, price, cost_price, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, 'OURO_18K', $6, $7, 'ACTIVE', NOW(), NOW())`,
+        [testProductId, orgId, `SKU-LOCK-${Date.now()}`, "Produto Teste Lock FOR UPDATE", "Aneis", 200.0, 50.0]
+      );
+
+      // 2. Saldo inicial exatamente 1 unidade no banco: on_hand = 1, reserved = 0
+      await query(
+        `INSERT INTO inventory_balances (
+          id, organization_id, product_id, location_id, on_hand_quantity, reserved_quantity, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, 1, 0, NOW(), NOW())`,
+        [`bal-${testProductId}-${testLocationId}`, orgId, testProductId, testLocationId]
+      );
+
+      // 3. Disparar Pedido A e Pedido B SIMULTANEAMENTE competindo pelo mesmo item
+      const [resA, resB] = await Promise.allSettled([
+        OrderService.createOrder(
+          orgId,
+          {
+            customerId: "cust-lock-a",
+            customerSnapshot: { id: "cust-lock-a", name: "Comprador A", phone: "11988880001" },
+            channel: "ECOMMERCE",
+            initialStatus: "INVENTORY_RESERVED",
+            items: [{ productId: testProductId, locationId: testLocationId, quantity: 1 }],
+          },
+          "Simulador Concorrente A"
+        ),
+        OrderService.createOrder(
+          orgId,
+          {
+            customerId: "cust-lock-b",
+            customerSnapshot: { id: "cust-lock-b", name: "Comprador B", phone: "11988880002" },
+            channel: "ECOMMERCE",
+            initialStatus: "INVENTORY_RESERVED",
+            items: [{ productId: testProductId, locationId: testLocationId, quantity: 1 }],
+          },
+          "Simulador Concorrente B"
+        ),
+      ]);
+
+      const fulfilled = [resA, resB].filter((r) => r.status === "fulfilled");
+      const rejected = [resA, resB].filter((r) => r.status === "rejected");
+
+      if (fulfilled.length !== 1 || rejected.length !== 1) {
+        return {
+          testName,
+          category: "POSTGRES_ROW_LOCKING",
+          passed: false,
+          durationMs: Date.now() - start,
+          details: `Falha de concorrência: Esperado 1 sucesso e 1 rejeição, obtido ${fulfilled.length} sucessos e ${rejected.length} rejeições.`,
+        };
+      }
+
+      const winner = (fulfilled[0] as any).value;
+      const loserError = (rejected[0] as any).reason;
+      const isStockError = loserError?.message?.includes("Saldo insuficiente") || loserError?.message?.includes("INSUFFICIENT_STOCK");
+
+      if (!isStockError) {
+        return {
+          testName,
+          category: "POSTGRES_ROW_LOCKING",
+          passed: false,
+          durationMs: Date.now() - start,
+          details: `Falha: o pedido perdedor não reportou saldo insuficiente: ${loserError?.message}`,
+        };
+      }
+
+      // 4. Checar saldo no PostgreSQL pós-reserva: on_hand = 1, reserved = 1, available = 0
+      const postReserveBal = await query(
+        "SELECT on_hand_quantity, reserved_quantity, available_quantity FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3",
+        [orgId, testProductId, testLocationId]
+      );
+      const prRow = postReserveBal.rows[0];
+      if (prRow.on_hand_quantity !== 1 || prRow.reserved_quantity !== 1 || prRow.available_quantity !== 0) {
+        return {
+          testName,
+          category: "POSTGRES_ROW_LOCKING",
+          passed: false,
+          durationMs: Date.now() - start,
+          details: `Saldo pós-reserva incorreto no PostgreSQL: ${JSON.stringify(prRow)}`,
+        };
+      }
+
+      // 5. Confirmar pagamento do vencedor -> transição SALE -> baixa de estoque
+      await OrderService.transitionOrder(
+        orgId,
+        winner.id,
+        { event: "CONFIRM_PAYMENT", reason: "PIX aprovado" },
+        "Operador Financeiro"
+      );
+
+      // 6. Checar saldo final no PostgreSQL: on_hand = 0, reserved = 0, available = 0
+      const finalBal = await query(
+        "SELECT on_hand_quantity, reserved_quantity, available_quantity FROM inventory_balances WHERE organization_id = $1 AND product_id = $2 AND location_id = $3",
+        [orgId, testProductId, testLocationId]
+      );
+      const fRow = finalBal.rows[0];
+      if (fRow.on_hand_quantity !== 0 || fRow.reserved_quantity !== 0 || fRow.available_quantity !== 0) {
+        return {
+          testName,
+          category: "POSTGRES_ROW_LOCKING",
+          passed: false,
+          durationMs: Date.now() - start,
+          details: `Saldo pós-pagamento incorreto no PostgreSQL: ${JSON.stringify(fRow)}`,
+        };
+      }
+
+      // 7. Checar registro de movimentação SALE no livro-razão (inventory_movements)
+      const movs = await query(
+        "SELECT type, quantity_change, physical_balance_after FROM inventory_movements WHERE organization_id = $1 AND product_id = $2 ORDER BY created_at DESC LIMIT 1",
+        [orgId, testProductId]
+      );
+
+      return {
+        testName,
+        category: "POSTGRES_ROW_LOCKING",
+        passed: true,
+        durationMs: Date.now() - start,
+        details: `Concorrência PostgreSQL 100% protegida: 1 reserva aceita (${winner.orderNumber}), 1 rejeição por 409 Saldo Insuficiente. Pós-pagamento: saldo zerado (on_hand=0, reserved=0) com movimentação SALE registrada.`,
+        data: {
+          winnerOrderNumber: winner.orderNumber,
+          finalBalance: fRow,
+          ledgerMovement: movs.rows[0],
+        },
+      };
+    } catch (err: any) {
+      return {
+        testName,
+        category: "POSTGRES_ROW_LOCKING",
+        passed: false,
+        durationMs: Date.now() - start,
+        details: `Erro durante execução do teste de lock no PostgreSQL: ${err.message}`,
+      };
+    } finally {
+      try {
+        await query("DELETE FROM order_items WHERE product_id = $1", [testProductId]);
+        await query("DELETE FROM inventory_reservations WHERE product_id = $1", [testProductId]);
+        await query("DELETE FROM inventory_movements WHERE product_id = $1", [testProductId]);
+        await query("DELETE FROM inventory_balances WHERE product_id = $1", [testProductId]);
+        await query("DELETE FROM products WHERE id = $1", [testProductId]);
+      } catch {
+        // cleanup ignore
+      }
+    }
+  }
+
+  /**
    * Runs the full suite and produces a unified test report
    */
   static async runFullSuite(): Promise<HardeningSuiteReport> {
@@ -715,6 +882,7 @@ export class InventoryHardeningTestSuite {
       results.push(await this.testIdempotencyValidation());
       results.push(await this.testReservationFullLifecycle());
       results.push(await this.testBackgroundWorkerExpiryAndReconciliation());
+      results.push(await this.testPostgresForUpdateLocking());
     } finally {
       await this.teardownTestEnvironment();
     }

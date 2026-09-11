@@ -15,6 +15,7 @@ import {
   Layers,
   Sparkles,
 } from "lucide-react";
+import { apiClient } from "../services/apiClient";
 
 interface SaaSControlPanelProps {
   onNotify?: (message: string) => void;
@@ -46,13 +47,13 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
   const fetchSession = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/auth/me");
+      const res = await apiClient.request("/api/auth/me");
       const data = await res.json();
       if (data.success && data.session) {
         setSession(data.session);
       }
 
-      const plansRes = await fetch("/api/subscriptions/plans");
+      const plansRes = await apiClient.request("/api/subscriptions/plans");
       const plansData = await plansRes.json();
       if (plansData.success && plansData.plans) {
         setPlans(plansData.plans);
@@ -89,8 +90,10 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.session) {
         setSession(data.session);
+        apiClient.setToken(data.session.token);
+        apiClient.setTenantId(data.session.organization.id);
         if (onNotify) onNotify(data.message);
         setOrgName("");
         setUserName("");
@@ -110,14 +113,15 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
   const handleSwitchTenant = async (targetOrgId: string) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/auth/switch-tenant", {
+      const res = await apiClient.request("/api/auth/switch-tenant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetOrganizationId: targetOrgId }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.session) {
         setSession(data.session);
+        apiClient.setToken(data.session.token);
+        apiClient.setTenantId(data.session.organization.id);
         if (onNotify) onNotify(`Contexto alternado para: ${data.session.organization.name}`);
       }
     } catch (err) {
@@ -131,10 +135,9 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
     if (!selectedPlanId) return;
     try {
       setIsSubmitting(true);
-      const res = await fetch("/api/subscriptions/simulate-payment", {
+      const res = await apiClient.request("/api/subscriptions/simulate-payment", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "x-tenant-id": session?.organization?.id,
         },
         body: JSON.stringify({
@@ -164,9 +167,8 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
   const handleRunDiagnostic = async () => {
     try {
       setDiagnosticRunning(true);
-      const res = await fetch("/api/diagnostics/core-flow", {
+      const res = await apiClient.request("/api/diagnostics/core-flow", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
       setDiagnosticResults(data);

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getSessionSecret } from "../config/authConfig";
 import {
   orgRepo,
   userRepo,
@@ -23,7 +24,7 @@ export class AuthService {
   static generateSessionToken(userId: string, orgId: string): string {
     const timestamp = Date.now();
     const payload = `${userId}_${orgId}_${timestamp}`;
-    const secret = process.env.SESSION_SECRET || "aura-semijoias-session-secret-change-in-production";
+    const secret = getSessionSecret();
     const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex").substring(0, 16);
     return `sess_aura_${payload}_${signature}`;
   }
@@ -133,21 +134,45 @@ export class AuthService {
    * Authenticates user via email and returns organization context.
    */
   static async login(email: string, _password?: string, targetOrgId?: string): Promise<AuthSessionResponse> {
-    const emailNormalized = email.trim().toLowerCase();
-    let user = await userRepo.findByEmail(emailNormalized);
+    const isProduction = process.env.NODE_ENV === "production";
+    const allowDevDemoFallback = !isProduction && process.env.ENABLE_DEV_AUTH_DEMO_FALLBACK !== "false";
+
+    const emailNormalized = (email || "").trim().toLowerCase();
+    let user: UserEntity | null = null;
+    if (emailNormalized) {
+      user = await userRepo.findByEmail(emailNormalized);
+    }
 
     if (!user) {
+      if (isProduction || !allowDevDemoFallback) {
+        throw new Error("Credenciais inválidas: usuário não encontrado.");
+      }
+      // DEVELOPMENT ONLY: Fallback demo user
       const allUsers = await userRepo.listAll();
-      user = allUsers[0];
+      user = allUsers.find((u) => u.status === "ACTIVE") || allUsers[0] || null;
+      if (!user) {
+        throw new Error("Nenhum usuário cadastrado no sistema.");
+      }
+    }
+
+    if (user.status !== "ACTIVE") {
+      throw new Error("Usuário inativo ou suspenso. Entre em contato com o suporte.");
     }
 
     // Find memberships
     const userMemberships = await memberRepo.listByUser(user.id);
-    let selectedMembership: OrganizationMemberEntity;
+    let selectedMembership: OrganizationMemberEntity | undefined;
 
     if (userMemberships.length === 0) {
+      if (isProduction || !allowDevDemoFallback) {
+        throw new Error("Acesso negado: o usuário não possui vínculo ativo com nenhuma organização.");
+      }
+      // DEVELOPMENT ONLY: Auto-link to default seed tenant
       const allOrgs = await orgRepo.listAll();
       const lumina = allOrgs[0];
+      if (!lumina) {
+        throw new Error("Nenhuma organização disponível para associação.");
+      }
       selectedMembership = {
         id: `mem-fallback-${user.id}`,
         organizationId: lumina.id,
@@ -158,12 +183,27 @@ export class AuthService {
       };
       await memberRepo.create(selectedMembership);
     } else {
-      selectedMembership = targetOrgId
-        ? userMemberships.find((m) => m.organizationId === targetOrgId) || userMemberships[0]
-        : userMemberships[0];
+      if (targetOrgId) {
+        selectedMembership = userMemberships.find((m) => m.organizationId === targetOrgId);
+        if (!selectedMembership) {
+          if ((isProduction || !allowDevDemoFallback) && !user.isPlatformSuperAdmin) {
+            throw new Error(`Acesso não autorizado: o usuário não é membro da organização informada (${targetOrgId}).`);
+          }
+          selectedMembership = userMemberships[0];
+        }
+      } else {
+        selectedMembership = userMemberships.find((m) => m.status === "ACTIVE") || userMemberships[0];
+      }
     }
 
-    const organization = (await orgRepo.findById(selectedMembership.organizationId))!;
+    if (!selectedMembership || (selectedMembership.status !== "ACTIVE" && !user.isPlatformSuperAdmin)) {
+      throw new Error("Vínculo do usuário com a organização está suspenso ou inativo.");
+    }
+
+    const organization = await orgRepo.findById(selectedMembership.organizationId);
+    if (!organization || (isProduction && organization.status !== "ACTIVE")) {
+      throw new Error("Organização vinculada não encontrada ou inativa.");
+    }
     let subscription = await subRepo.findByOrgId(organization.id);
 
     if (!subscription) {

@@ -94,18 +94,35 @@ export class ApiClient {
   }
 
   /**
+   * Retrieves authorization headers with guaranteed active token and tenant.
+   */
+  static async getAuthHeaders(targetTenantId?: string): Promise<Record<string, string>> {
+    const tenantId = targetTenantId || this.getTenantId();
+    let token = this.getToken();
+    if (!token) {
+      token = await this.ensureSession(tenantId);
+    }
+    return {
+      "Authorization": `Bearer ${token}`,
+      "x-tenant-id": tenantId,
+      "Content-Type": "application/json",
+    };
+  }
+
+  /**
    * Authenticated fetch with automatic Bearer token and tenant injection.
    */
   static async request(path: string, init: RequestInit = {}): Promise<Response> {
+    const passedHeaders = (init.headers as Record<string, string>) || {};
+    const tenantId = passedHeaders["x-tenant-id"] || this.getTenantId();
     let token = this.getToken();
-    const tenantId = this.getTenantId();
 
     if (!token) {
       token = await this.ensureSession(tenantId);
     }
 
     const headers: Record<string, string> = {
-      ...(init.headers as Record<string, string> || {}),
+      ...passedHeaders,
       "x-tenant-id": tenantId,
     };
 
