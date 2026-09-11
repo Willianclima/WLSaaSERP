@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
   orgRepo,
   userRepo,
@@ -16,6 +17,16 @@ import {
 } from "../types/saas";
 
 export class AuthService {
+  /**
+   * Generates a tamper-proof session token signed with HMAC-SHA256 using SESSION_SECRET.
+   */
+  static generateSessionToken(userId: string, orgId: string): string {
+    const timestamp = Date.now();
+    const payload = `${userId}_${orgId}_${timestamp}`;
+    const secret = process.env.SESSION_SECRET || "aura-semijoias-session-secret-change-in-production";
+    const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex").substring(0, 16);
+    return `sess_aura_${payload}_${signature}`;
+  }
   /**
    * Registers a new company + admin user and automatically creates a 30-day trial subscription in the persistence layer.
    */
@@ -211,7 +222,7 @@ export class AuthService {
     }
 
     return {
-      token: `sess_aura_${user.id}_${organization.id}_${Date.now()}`,
+      token: AuthService.generateSessionToken(user.id, organization.id),
       user: {
         id: user.id,
         name: user.name,

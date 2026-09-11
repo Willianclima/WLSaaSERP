@@ -1718,10 +1718,14 @@ export const INITIAL_MCP_ACTIONS: MCPProposedAction[] = [
 
 export const mockCurrentUser: RBACUser = {
   id: "usr-admin-1",
-  name: "Willian (Fundador & Admin)",
-  email: "willian@lumina.com.br",
+  name: "Willian Lima",
+  email: "willianCLima@gmail.com",
   role: "SUPER_ADMIN",
   tenantId: "tenant-lumina",
+  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+  phone: "(11) 98765-4321",
+  title: "Fundador & Proprietário",
+  bio: "Gestor geral da marca e curador de coleções de alta semijoia.",
 };
 
 // Aliases for convenient importing

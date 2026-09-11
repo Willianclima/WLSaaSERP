@@ -22,7 +22,7 @@ import {
   Edit3,
   DollarSign,
 } from "lucide-react";
-import { TenantStore, StoreBrandingConfig } from "../types";
+import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 
 interface HeaderNavbarProps {
   activeTab: string;
@@ -31,6 +31,7 @@ interface HeaderNavbarProps {
   selectedTenant?: TenantStore;
   currentTenant?: TenantStore;
   branding?: StoreBrandingConfig;
+  currentUser?: RBACUser;
   onTenantChange?: (tenant: TenantStore) => void;
   onSelectTenant?: (tenant: TenantStore) => void;
   tenants?: TenantStore[];
@@ -46,6 +47,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   selectedTenant,
   currentTenant,
   branding,
+  currentUser,
   onOpenShareModal,
   onOpenNewSale,
   onOpenHelp,
@@ -100,9 +102,19 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                 className="text-left flex items-center gap-2.5 group cursor-pointer"
                 title="Voltar ao início"
               >
-                <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
-                  💎
-                </div>
+                {branding?.logoType === "IMAGE" && branding?.logoUrl ? (
+                  <div className="w-9 h-9 rounded-xl bg-stone-900 border border-stone-800 p-1 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform overflow-hidden">
+                    <img
+                      src={branding.logoUrl}
+                      alt={storeName}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-serif italic font-bold text-sm shadow-xs group-hover:scale-105 transition-transform">
+                    💎
+                  </div>
+                )}
                 <div>
                   <h1 className="text-lg sm:text-xl font-serif font-bold text-stone-900 group-hover:text-amber-800 transition-colors leading-tight">
                     {storeName}
@@ -170,6 +182,30 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               <span className="hidden sm:inline">Ver Vitrine</span>
               <ExternalLink className="w-3 h-3 text-stone-400" />
             </button>
+
+            {/* User Profile Button */}
+            {currentUser && (
+              <button
+                onClick={() => handleTabChange("profile")}
+                className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1 rounded-full hover:bg-amber-50/60 border border-stone-200 hover:border-amber-300 transition-all cursor-pointer group"
+                title={`Perfil de ${currentUser.name} (clique para alterar foto e dados)`}
+              >
+                {currentUser.avatar || currentUser.photoUrl ? (
+                  <img
+                    src={currentUser.avatar || currentUser.photoUrl}
+                    alt={currentUser.name}
+                    className="w-7 h-7 rounded-full object-cover border border-amber-300"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-stone-900 text-amber-400 font-bold text-xs flex items-center justify-center border border-stone-800">
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                )}
+                <span className="hidden sm:inline text-xs font-semibold text-stone-700 group-hover:text-amber-900 truncate max-w-[100px]">
+                  {currentUser.name.split(" ")[0]}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

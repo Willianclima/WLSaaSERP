@@ -6,6 +6,7 @@ import {
   Plus,
   Heart,
   MoreVertical,
+  Edit,
   Edit2,
   Package,
   Eye,
@@ -30,12 +31,15 @@ import {
   XCircle,
 } from "lucide-react";
 import { ProductItem } from "../types";
+import { ProductQuickEditDrawer } from "./ProductQuickEditDrawer";
 
 interface WireframeProductsCatalogProps {
   products: ProductItem[];
   onOpenNewProduct: () => void;
   onEditProduct?: (product: ProductItem) => void;
   onOpenStockModal?: (product: ProductItem) => void;
+  onUpdateProduct?: (product: ProductItem) => void;
+  onUpdateStock?: (productId: string, qty: number, reason: string) => void;
 }
 
 export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> = ({
@@ -43,12 +47,18 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
   onOpenNewProduct,
   onEditProduct,
   onOpenStockModal,
+  onUpdateProduct,
+  onUpdateStock,
 }) => {
   const [activeTab, setActiveTab] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("TODOS");
   const [sortBy, setSortBy] = useState<"featured" | "price-asc" | "price-desc" | "stock-desc" | "stock-asc" | "name">("featured");
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
+
+  // Quick-edit drawer state
+  const [quickEditProduct, setQuickEditProduct] = useState<ProductItem | null>(null);
+  const [showQuickEditDrawer, setShowQuickEditDrawer] = useState(false);
 
   // Default wireframe jewelry items if products list is empty
   const defaultWireframeProducts: Partial<ProductItem>[] = [
@@ -682,8 +692,12 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
             return (
               <div
                 key={product.id}
-                className="product-card-container bg-white rounded-2xl sm:rounded-3xl border border-stone-200/90 shadow-xs hover:shadow-lg hover:scale-105 hover:border-amber-300 transition-all duration-300 ease-out flex flex-col justify-between overflow-hidden group cursor-pointer"
-                onClick={() => onEditProduct && onEditProduct(product)}
+                id={`catalog-product-row-${product.id}`}
+                className="product-card-container product-list-item-row bg-white rounded-2xl sm:rounded-3xl border border-stone-200/90 shadow-xs hover:shadow-lg hover:scale-105 hover:border-amber-300 transition-all duration-300 ease-out flex flex-col justify-between overflow-hidden group cursor-pointer"
+                onClick={() => {
+                  setQuickEditProduct(product);
+                  setShowQuickEditDrawer(true);
+                }}
               >
                 <div>
                   {/* Image & Top Badges Container */}
@@ -707,6 +721,22 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
 
                     {/* Top Right: Heart & Action */}
                     <div className="absolute top-2 sm:top-3 right-2 sm:right-3 flex items-center gap-1 sm:gap-1.5 z-10">
+                      {/* 'Edit' icon button that triggers the quick-edit drawer */}
+                      <button
+                        type="button"
+                        id={`catalog-quick-edit-${product.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickEditProduct(product);
+                          setShowQuickEditDrawer(true);
+                        }}
+                        className="edit-product-btn p-1.5 sm:p-2 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 backdrop-blur-xs transition-all shadow-2xs cursor-pointer"
+                        title="Editar preço e estoque"
+                        aria-label="Edit"
+                      >
+                        <Edit className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-800" />
+                      </button>
+
                       <button
                         onClick={(e) => toggleFavorite(product.id, e)}
                         className={`p-1.5 sm:p-2 rounded-full backdrop-blur-xs transition-all shadow-2xs cursor-pointer ${
@@ -724,9 +754,10 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
                           if (onEditProduct) onEditProduct(product);
                         }}
                         className="p-1.5 sm:p-2 rounded-full bg-white/90 hover:bg-white text-stone-400 hover:text-stone-700 backdrop-blur-xs transition-all shadow-2xs border border-stone-200/50 cursor-pointer"
-                        title="Editar peça"
+                        title="Editar produto completo"
+                        aria-label="Edição Completa"
                       >
-                        <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       </button>
                     </div>
 
@@ -835,6 +866,21 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
           })}
         </div>
       )}
+
+      {/* Quick-Edit Drawer for selected product row */}
+      <ProductQuickEditDrawer
+        isOpen={showQuickEditDrawer}
+        product={quickEditProduct ? products.find((p) => p.id === quickEditProduct.id) || quickEditProduct : null}
+        onClose={() => {
+          setShowQuickEditDrawer(false);
+          setQuickEditProduct(null);
+        }}
+        onUpdateProduct={onUpdateProduct}
+        onUpdateStock={onUpdateStock}
+        onOpenFullEdit={(prod) => {
+          if (onEditProduct) onEditProduct(prod);
+        }}
+      />
     </div>
   );
 };

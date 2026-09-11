@@ -54,10 +54,12 @@ import {
   Film,
   AlertTriangle,
   FileVideo,
+  Zap,
 } from "lucide-react";
 import { ProductItem, InventoryLedgerEntry, PublicationStatus, ProductMedia } from "../types";
 import { ProductFormModal } from "./ProductFormModal";
 import { ProductReadinessModal } from "./ProductReadinessModal";
+import { ProductQuickEditDrawer } from "./ProductQuickEditDrawer";
 
 interface CatalogInventoryLedgerProps {
   products: ProductItem[];
@@ -328,6 +330,15 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
   const [showProductModal, setShowProductModal] = useState(false);
   const [showReadinessModal, setShowReadinessModal] = useState(false);
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<ProductItem | null>(null);
+
+  // Quick Edit Drawer State (Price & Stock without opening full modal)
+  const [quickEditProduct, setQuickEditProduct] = useState<ProductItem | null>(null);
+  const [showQuickEditDrawer, setShowQuickEditDrawer] = useState(false);
+
+  const handleOpenQuickEdit = (product: ProductItem) => {
+    setQuickEditProduct(product);
+    setShowQuickEditDrawer(true);
+  };
 
   // Concurrency & Hardening test runner state
   const [testReport, setTestReport] = useState<any | null>(null);
@@ -1678,7 +1689,8 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                 return (
                   <div
                     key={p.id}
-                    className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-xs hover:border-stone-300 transition-all flex flex-col justify-between group"
+                    id={`product-card-${p.id}`}
+                    className="product-list-item-row bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-xs hover:border-stone-300 transition-all flex flex-col justify-between group"
                   >
                     <div>
                       {/* Product Image & Badges */}
@@ -1828,15 +1840,31 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
+                          id={`card-quick-edit-${p.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenQuickEdit(p);
+                          }}
+                          className="edit-product-btn flex items-center gap-1 text-[11px] font-bold text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1.5 rounded-xl border border-amber-300 transition-colors shadow-2xs cursor-pointer"
+                          title="Editar preço e estoque"
+                          aria-label="Edit"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-amber-800" />
+                          <span>Editar</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => {
                             setSelectedProductForEdit(p);
                             setShowProductModal(true);
                           }}
-                          className="flex items-center gap-1 text-[11px] font-bold text-stone-800 hover:text-stone-950 bg-stone-100 hover:bg-stone-200 px-2.5 py-1.5 rounded-xl transition-colors border border-stone-200 cursor-pointer"
-                          title="Editar foto, galeria, preço, categoria e detalhes deste produto"
+                          className="flex items-center gap-1 text-[11px] font-medium text-stone-700 hover:text-stone-950 bg-stone-100 hover:bg-stone-200 px-2 py-1.5 rounded-xl transition-colors border border-stone-200 cursor-pointer"
+                          title="Editar foto, galeria, materiais e detalhes completos"
+                          aria-label="Edição Completa"
                         >
-                          <Edit className="w-3 h-3 text-stone-700" />
-                          <span>Editar</span>
+                          <ExternalLink className="w-3 h-3 text-stone-600" />
+                          <span className="hidden sm:inline">Completo</span>
                         </button>
 
                         <button
@@ -1919,7 +1947,12 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                       const margin = Math.round(((p.price - p.costPrice) / p.price) * 100);
 
                       return (
-                        <tr key={p.id} className="hover:bg-stone-50/80 transition-colors">
+                        <tr
+                          key={p.id}
+                          id={`product-row-${p.id}`}
+                          className="product-list-item-row hover:bg-amber-50/40 transition-colors group cursor-pointer"
+                          onClick={() => handleOpenQuickEdit(p)}
+                        >
                           {/* Semijoia Photo & Name */}
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
@@ -2002,12 +2035,13 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                           <td className="py-3 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() =>
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleTogglePublicationStatus(
                                   p,
                                   isPublished ? "DRAFT" : "PUBLISHED"
-                                )
-                              }
+                                );
+                              }}
                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
                                 isPublished
                                   ? "bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200"
@@ -2021,22 +2055,43 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                           {/* Ações */}
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* 'Edit' icon button that triggers quick-edit drawer */}
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setSelectedProductForEdit(p);
-                                  setShowProductModal(true);
+                                id={`btn-quick-edit-${p.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenQuickEdit(p);
                                 }}
-                                className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors"
-                                title="Editar produto"
+                                className="edit-product-btn p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-2xs cursor-pointer"
+                                title="Editar preço e estoque"
+                                aria-label="Edit"
                               >
-                                <Edit className="w-3.5 h-3.5" />
+                                <Edit className="w-3.5 h-3.5 text-amber-800" />
+                                <span className="hidden sm:inline">Editar</span>
                               </button>
 
                               <button
                                 type="button"
-                                onClick={() => handleCopyProductLink(p)}
-                                className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedProductForEdit(p);
+                                  setShowProductModal(true);
+                                }}
+                                className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+                                title="Editar produto completo (fotos, galeria, materiais)"
+                                aria-label="Edição Completa"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyProductLink(p);
+                                }}
+                                className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
                                 title="Copiar link público do produto"
                               >
                                 {copiedProductId === p.id ? (
@@ -2049,8 +2104,11 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
                               {onOpenStorefront && (
                                 <button
                                   type="button"
-                                  onClick={onOpenStorefront}
-                                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenStorefront();
+                                  }}
+                                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
                                   title="Ver na loja"
                                 >
                                   <ExternalLink className="w-3.5 h-3.5" />
@@ -2705,6 +2763,22 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Product Quick-Edit Drawer (Fast Price & Stock updates) */}
+      <ProductQuickEditDrawer
+        isOpen={showQuickEditDrawer}
+        product={quickEditProduct ? products.find((p) => p.id === quickEditProduct.id) || quickEditProduct : null}
+        onClose={() => {
+          setShowQuickEditDrawer(false);
+          setQuickEditProduct(null);
+        }}
+        onUpdateProduct={onUpdateProduct}
+        onUpdateStock={onUpdateStock}
+        onOpenFullEdit={(prod) => {
+          setSelectedProductForEdit(prod);
+          setShowProductModal(true);
+        }}
+      />
 
       {/* Product Create / Edit Modal */}
       <ProductFormModal

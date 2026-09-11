@@ -24,13 +24,15 @@ import {
   Bot,
   Lock,
 } from "lucide-react";
-import { TenantStore, StoreBrandingConfig } from "../types";
+import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
+import { mockCurrentUser } from "../data/mockData";
 
 interface SidebarNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   tenant?: TenantStore;
   branding?: StoreBrandingConfig;
+  currentUser?: RBACUser;
   onOpenHelp?: () => void;
   onOpenNewSale?: () => void;
   onOpenNewProduct?: () => void;
@@ -43,6 +45,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   onTabChange,
   tenant,
   branding,
+  currentUser = mockCurrentUser,
   onOpenHelp,
   onOpenNewSale,
   onOpenNewProduct,
@@ -95,17 +98,27 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
       {/* Scrollable Navigation Area */}
       <div className="flex flex-col flex-1 overflow-y-auto scrollbar-none py-3">
         {/* ========================================================================= */}
-        {/* HEADER: LUMINA (Store Brand & Edit)                                      */}
+        {/* HEADER: STORE BRAND & EDIT                                                */}
         {/* ========================================================================= */}
         <div
           onClick={() => onTabChange("storeSettings")}
           className="px-4 py-3 mx-2.5 rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer group hover:bg-stone-50 transition-all border border-transparent hover:border-stone-200/70"
-          title="Clique para configurar o nome e visual da sua loja"
+          title="Clique para configurar o nome e logotipo da sua loja"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-bold shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-              <Gem className="w-4.5 h-4.5 text-amber-400" />
-            </div>
+            {branding?.logoType === "IMAGE" && branding?.logoUrl ? (
+              <div className="w-9 h-9 rounded-xl bg-stone-900 border border-stone-800 p-1 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform overflow-hidden">
+                <img
+                  src={branding.logoUrl}
+                  alt={storeName}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 flex items-center justify-center font-bold shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <Gem className="w-4.5 h-4.5 text-amber-400" />
+              </div>
+            )}
             <div className="min-w-0">
               <span className="font-serif font-extrabold text-sm tracking-widest text-stone-900 uppercase block leading-tight truncate group-hover:text-amber-800 transition-colors">
                 {storeName}
@@ -506,23 +519,33 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
 
       {/* Footer Profile */}
       <div className="p-3 border-t border-stone-100 bg-stone-50/50">
-        <div className="p-2 rounded-xl bg-white border border-stone-200/80 flex items-center gap-2.5 shadow-2xs">
-          <img
-            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80"
-            alt="Juliana Silva"
-            className="w-7 h-7 rounded-full object-cover border border-amber-200 shrink-0"
-            referrerPolicy="no-referrer"
-          />
+        <button
+          onClick={() => onTabChange("profile")}
+          className="w-full text-left p-2 rounded-xl bg-white hover:bg-amber-50/60 border border-stone-200/80 hover:border-amber-300/80 flex items-center gap-2.5 shadow-2xs transition-all cursor-pointer group"
+          title="Clique para editar seu perfil e foto"
+        >
+          {currentUser?.avatar || currentUser?.photoUrl ? (
+            <img
+              src={currentUser.avatar || currentUser.photoUrl}
+              alt={currentUser.name}
+              className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0 shadow-2xs"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-stone-900 text-amber-400 font-bold text-xs flex items-center justify-center shrink-0 border border-stone-800">
+              {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-stone-900 truncate leading-tight">
-              Juliana Silva
+            <div className="text-xs font-bold text-stone-900 truncate leading-tight group-hover:text-amber-900 transition-colors">
+              {currentUser?.name || "Minha Conta"}
             </div>
             <div className="text-[10px] text-stone-500 truncate flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Vendedora Ativa
+              <span>{currentUser?.title || "Administradora"}</span>
             </div>
           </div>
-        </div>
+          <span className="text-[10px] text-stone-400 group-hover:text-amber-600 font-bold">⚙️</span>
+        </button>
       </div>
     </aside>
   );

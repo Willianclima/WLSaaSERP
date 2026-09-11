@@ -348,6 +348,11 @@ export interface RBACUser {
   email: string;
   role: "SUPER_ADMIN" | "LOJA_ADMIN" | "GERENTE_COMERCIAL" | "REVENDEDORA_PORTAL" | "AI_GATEWAY";
   tenantId: string;
+  avatar?: string;
+  photoUrl?: string;
+  phone?: string;
+  bio?: string;
+  title?: string;
 }
 
 export interface AuditTrailLog {

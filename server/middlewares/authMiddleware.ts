@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Response, NextFunction } from "express";
 import { userRepo, orgRepo, memberRepo } from "../repositories";
 import { UserEntity, OrganizationEntity, OrganizationRole } from "../types/saas";
@@ -20,10 +21,30 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
 
     if (authHeader) {
       const token = authHeader.replace(/^Bearer\s+/i, "");
-      // Format: sess_aura_{userId}_{orgId}_{timestamp}
+      // Format: sess_aura_{userId}_{orgId}_{timestamp}_{signature?}
       if (token.startsWith("sess_aura_")) {
         const parts = token.split("_");
         const userId = parts[2];
+        const orgId = parts[3];
+        const timestamp = parts[4];
+        const signature = parts[5];
+
+        // If signature is present, verify against SESSION_SECRET
+        if (signature && process.env.SESSION_SECRET) {
+          const expectedSig = crypto
+            .createHmac("sha256", process.env.SESSION_SECRET)
+            .update(`${userId}_${orgId}_${timestamp}`)
+            .digest("hex")
+            .substring(0, 16);
+
+          if (signature !== expectedSig) {
+            return res.status(401).json({
+              success: false,
+              error: "Token de sessão adulterado ou inválido.",
+            });
+          }
+        }
+
         user = await userRepo.findById(userId);
       }
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Sliders,
   Palette,
@@ -31,21 +31,31 @@ import {
   Copy,
   Shield,
   CreditCard,
+  User,
+  Upload,
+  UploadCloud,
+  Trash2,
+  Link as LinkIcon,
 } from "lucide-react";
-import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings } from "../types";
-import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS } from "../data/mockData";
+import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings, RBACUser } from "../types";
+import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS, mockCurrentUser } from "../data/mockData";
 import { SocialQRCodeCollageManager } from "./SocialQRCodeCollageManager";
 import { CustomDomainSSLManager } from "./CustomDomainSSLManager";
 import { PaymentPricingSettingsManager } from "./PaymentPricingSettingsManager";
+import { UserProfileSettings } from "./UserProfileSettings";
+import { ClientStorageService } from "../services/storageService";
 import confetti from "canvas-confetti";
 
 interface StoreSettingsPanelProps {
   tenant: TenantStore;
   branding: StoreBrandingConfig;
   paymentSettings?: OrganizationPaymentSettings;
+  currentUser?: RBACUser;
   onUpdateBranding: (newBranding: StoreBrandingConfig) => void;
   onUpdatePaymentSettings?: (newSettings: OrganizationPaymentSettings) => void;
+  onUpdateUser?: (updated: Partial<RBACUser>) => void;
   onNavigateTab: (tab: string) => void;
+  initialSubTab?: "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile";
 }
 
 
@@ -155,16 +165,105 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
   tenant,
   branding,
   paymentSettings = DEFAULT_PAYMENT_SETTINGS,
+  currentUser = mockCurrentUser,
   onUpdateBranding,
   onUpdatePaymentSettings,
+  onUpdateUser,
   onNavigateTab,
+  initialSubTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview"
-  >("branding");
+    "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile"
+  >(initialSubTab || "branding");
   const [formConfig, setFormConfig] = useState<StoreBrandingConfig>({ ...branding });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isAutoValidatingDNS, setIsAutoValidatingDNS] = useState<boolean>(false);
+
+  // Logo Direct File Upload States (no link required!)
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const [isProcessingLogo, setIsProcessingLogo] = useState(false);
+  const [logoUploadMessage, setLogoUploadMessage] = useState<string | null>(null);
+  const [showExternalUrlInput, setShowExternalUrlInput] = useState(false);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
+  const processLogoFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Por favor selecione um arquivo de imagem válido (PNG, SVG, JPG ou WebP).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert("O arquivo excede o limite máximo de 10MB. Por favor escolha uma imagem menor.");
+      return;
+    }
+
+    setIsProcessingLogo(true);
+    setLogoUploadMessage("Processando logotipo do dispositivo...");
+
+    try {
+      const storage = ClientStorageService.getInstance();
+      const base64Data = await storage.fileToBase64(file);
+
+      // Seta imediatamente como imagem com a data URI local
+      setFormConfig((prev) => ({
+        ...prev,
+        logoType: "IMAGE",
+        logoUrl: base64Data,
+      }));
+
+      // Tenta upload no backend storage se disponível
+      try {
+        const uploadRes = await storage.uploadFile(file, {
+          folder: "branding",
+          sku: "store-logo",
+        });
+        if (uploadRes && uploadRes.url) {
+          setFormConfig((prev) => ({
+            ...prev,
+            logoType: "IMAGE",
+            logoUrl: uploadRes.url,
+          }));
+        }
+      } catch (err) {
+        console.info("Using local dataUrl for store logo (offline resilient)");
+      }
+
+      setLogoUploadMessage(`Logotipo "${file.name}" carregado com sucesso do seu dispositivo!`);
+      setTimeout(() => setLogoUploadMessage(null), 4000);
+    } catch (error) {
+      console.error("Erro ao carregar logotipo:", error);
+      alert("Erro ao ler o arquivo de logotipo. Tente novamente.");
+    } finally {
+      setIsProcessingLogo(false);
+    }
+  };
+
+  const handleLogoFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processLogoFile(file);
+    }
+    if (logoFileInputRef.current) {
+      logoFileInputRef.current.value = "";
+    }
+  };
+
+  const handleLogoDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingLogo(true);
+  };
+
+  const handleLogoDragLeave = () => {
+    setIsDraggingLogo(false);
+  };
+
+  const handleLogoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingLogo(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processLogoFile(file);
+    }
+  };
 
   const [dnsAutoValidationResult, setDnsAutoValidationResult] = useState<{
     valid: boolean;
@@ -446,6 +545,18 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab("profile")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeSubTab === "profile"
+              ? "bg-stone-900 text-amber-300 shadow-md border border-amber-400/50 ring-2 ring-amber-400/20"
+              : "bg-white text-stone-700 hover:bg-stone-100 border border-stone-200"
+          }`}
+        >
+          <User className="w-3.5 h-3.5 text-amber-400" />
+          <span>👤 8. Meu Perfil & Foto</span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab("preview")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeSubTab === "preview"
@@ -454,7 +565,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" />
-          <span>4. Pré-visualização</span>
+          <span>9. Pré-visualização</span>
         </button>
       </div>
 
@@ -912,12 +1023,12 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5" />
-                      <span>Imagem / Emblema URL</span>
+                      <span>Logotipo em Imagem (Upload Direto)</span>
                     </span>
                     {formConfig.logoType === "IMAGE" && <Check className="w-3.5 h-3.5 text-amber-400" />}
                   </div>
                   <span className={`text-[11px] ${formConfig.logoType === "IMAGE" ? "text-stone-300" : "text-stone-500"}`}>
-                    Exibe a imagem do logo ou brasão de sua marca
+                    Envie arquivo PNG transparente, SVG ou JPG sem precisar de link externo
                   </span>
                 </button>
               </div>
@@ -979,35 +1090,197 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block mb-1">
-                    URL da Imagem do Logotipo:
-                  </label>
-                  <input
-                    type="url"
-                    value={formConfig.logoUrl}
-                    onChange={(e) => setFormConfig((prev) => ({ ...prev, logoUrl: e.target.value }))}
-                    placeholder="https://exemplo.com/logo-joalheria.png"
-                    className="w-full bg-stone-50 border border-stone-300 rounded-2xl px-4 py-2.5 text-xs text-stone-900 focus:outline-none focus:border-stone-900 focus:bg-white font-mono transition-all"
-                  />
+                {/* Hidden File Input for direct file selection */}
+                <input
+                  type="file"
+                  ref={logoFileInputRef}
+                  onChange={handleLogoFileInputChange}
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                />
+
+                {/* Feedback Message */}
+                {logoUploadMessage && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-2 text-xs font-medium animate-fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{logoUploadMessage}</span>
+                  </div>
+                )}
+
+                {/* Direct Upload Drop Zone */}
+                <div
+                  onDragOver={handleLogoDragOver}
+                  onDragLeave={handleLogoDragLeave}
+                  onDrop={handleLogoDrop}
+                  onClick={() => logoFileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-center gap-3 ${
+                    isDraggingLogo
+                      ? "border-amber-500 bg-amber-50/50 scale-[0.99]"
+                      : "border-stone-300 hover:border-amber-500 bg-stone-50 hover:bg-amber-50/20"
+                  }`}
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-xs">
+                    {isProcessingLogo ? (
+                      <RefreshCw className="w-6 h-6 animate-spin text-amber-600" />
+                    ) : (
+                      <UploadCloud className="w-6 h-6" />
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-stone-900">
+                      {isProcessingLogo
+                        ? "Processando imagem do logotipo..."
+                        : "Clique para selecionar ou arraste o arquivo do logotipo"}
+                    </p>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      PNG com fundo transparente, SVG, WebP ou JPG até 10MB
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      logoFileInputRef.current?.click();
+                    }}
+                    disabled={isProcessingLogo}
+                    className="mt-1 px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-xs font-bold tracking-wider uppercase transition-all shadow-xs flex items-center gap-2"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>📁 Escolher Arquivo do Computador / Celular</span>
+                  </button>
+                  <p className="text-[11px] text-emerald-700 font-medium">
+                    ✨ Salvo direto no sistema — sem precisar de link da internet!
+                  </p>
                 </div>
 
-                {/* Image Preview Box */}
-                <div className="p-4 rounded-2xl bg-stone-950 flex items-center justify-between border border-stone-800">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={formConfig.logoUrl}
-                      alt="Logo Preview"
-                      className="h-10 w-auto max-w-[140px] object-contain rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=150&auto=format&fit=crop&q=80";
-                      }}
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-white">Visualização em Fundo Escuro</p>
-                      <p className="text-[10px] text-stone-400">Recomendado PNG com fundo transparente</p>
+                {/* Double Background Verification Cards (Dark vs Light) */}
+                {formConfig.logoUrl ? (
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block">
+                      Conferência do Logotipo Carregado:
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Dark Preview */}
+                      <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 flex flex-col justify-between items-center text-center min-h-[130px]">
+                        <div className="flex-1 flex items-center justify-center p-2 w-full">
+                          <img
+                            src={formConfig.logoUrl}
+                            alt="Logotipo Loja (Dark)"
+                            className="max-h-12 max-w-[170px] w-auto object-contain rounded"
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mt-2">
+                          Visualização em Fundo Escuro (Barra do Topo)
+                        </span>
+                      </div>
+
+                      {/* Light Preview */}
+                      <div className="p-4 rounded-2xl bg-stone-100 border border-stone-300 flex flex-col justify-between items-center text-center min-h-[130px]">
+                        <div className="flex-1 flex items-center justify-center p-2 w-full">
+                          <img
+                            src={formConfig.logoUrl}
+                            alt="Logotipo Loja (Light)"
+                            className="max-h-12 max-w-[170px] w-auto object-contain rounded"
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-600 mt-2">
+                          Visualização em Fundo Claro (Sacola & Vitrine)
+                        </span>
+                      </div>
                     </div>
+
+                    {/* Action buttons for loaded logo */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => logoFileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-stone-200 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Substituir Arquivo de Logo</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            logoUrl: "",
+                            logoType: "TEXT",
+                          }))
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-red-200 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remover Logotipo</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Optional Fallback / External URL toggle */}
+                <div className="pt-2 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowExternalUrlInput(!showExternalUrlInput)}
+                    className="text-xs text-stone-500 hover:text-stone-800 flex items-center gap-1.5 font-medium transition-colors"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>
+                      {showExternalUrlInput
+                        ? "Ocultar campo de link externo"
+                        : "Prefere colar um link de imagem externo? (Opcional)"}
+                    </span>
+                  </button>
+
+                  {showExternalUrlInput && (
+                    <div className="mt-2 animate-fade-in">
+                      <input
+                        type="url"
+                        value={formConfig.logoUrl}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            logoUrl: e.target.value,
+                            logoType: "IMAGE",
+                          }))
+                        }
+                        placeholder="https://exemplo.com/meu-logo.png"
+                        className="w-full bg-stone-50 border border-stone-300 rounded-2xl px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900 focus:bg-white font-mono transition-all"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Subtitle / Brand Name backup */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block mb-1">
+                      Nome da Marca (Alt Text):
+                    </label>
+                    <input
+                      type="text"
+                      value={formConfig.logoText}
+                      onChange={(e) => setFormConfig((prev) => ({ ...prev, logoText: e.target.value }))}
+                      placeholder="Ex: Lumina"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900 focus:bg-white transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-stone-600 block mb-1">
+                      Slogan / Subtítulo:
+                    </label>
+                    <input
+                      type="text"
+                      value={formConfig.logoSubtext}
+                      onChange={(e) => setFormConfig((prev) => ({ ...prev, logoSubtext: e.target.value }))}
+                      placeholder="Ex: Alta Semijoias"
+                      className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900 focus:bg-white transition-all"
+                    />
                   </div>
                 </div>
               </div>
@@ -1499,8 +1772,16 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
         </div>
       )}
 
-      {/* TAB 4: PRÉ-VISUALIZAÇÃO INTERATIVA EM TEMPO REAL */}
-      {(activeSubTab === "preview" || true) && (
+      {/* TAB 8: MEU PERFIL & FOTO DE PERFIL */}
+      {activeSubTab === "profile" && (
+        <UserProfileSettings
+          currentUser={currentUser}
+          onUpdateUser={onUpdateUser || (() => {})}
+        />
+      )}
+
+      {/* TAB PRÉ-VISUALIZAÇÃO INTERATIVA EM TEMPO REAL */}
+      {(activeSubTab === "preview" || activeSubTab === "branding" || activeSubTab === "welcome" || activeSubTab === "contact") && (
         <div className="bg-stone-950 rounded-3xl border border-stone-800 p-6 sm:p-8 text-white space-y-6 shadow-xl relative overflow-hidden">
           {/* Subtle glow with active primary color */}
           <div

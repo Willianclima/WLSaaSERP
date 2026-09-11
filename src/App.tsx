@@ -90,7 +90,25 @@ export default function App() {
     } catch (e) {}
     return base;
   });
-  const [currentUser] = useState<RBACUser>(mockCurrentUser);
+  const [currentUser, setCurrentUser] = useState<RBACUser>(() => {
+    try {
+      const saved = localStorage.getItem("aura_user_profile");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return mockCurrentUser;
+  });
+
+  const handleUpdateUser = (updated: Partial<RBACUser>) => {
+    setCurrentUser((prev) => {
+      const next = { ...prev, ...updated };
+      try {
+        localStorage.setItem("aura_user_profile", JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast("Perfil e foto atualizados com sucesso!");
+  };
+
   const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
 
   // Dynamic state
@@ -355,7 +373,7 @@ export default function App() {
   };
 
   // Update existing product details (Photos, Prices, Bath, Status)
-  const handleUpdateProduct = async (updatedProd: ProductItem) => {
+  const handleUpdateProduct = async (updatedProd: ProductItem): Promise<{ success: boolean; message?: string }> => {
     try {
       const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
       const res = await fetch(`/api/products/${updatedProd.id}`, {
@@ -370,7 +388,7 @@ export default function App() {
       if (res.ok) {
         await refreshBackendData();
         showToast(`Produto "${updatedProd.name}" atualizado com sucesso!`);
-        return;
+        return { success: true, message: "Gravado com sucesso no PostgreSQL" };
       }
     } catch (e) {
       console.error("API error updating product:", e);
@@ -379,10 +397,11 @@ export default function App() {
     // Local fallback
     setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
     showToast(`Produto "${updatedProd.name}" atualizado no catálogo!`);
+    return { success: true, message: "Atualizado no catálogo" };
   };
 
   // Update Stock manual (Persisted to Backend API)
-  const handleUpdateStock = async (productId: string, qty: number, reason: string) => {
+  const handleUpdateStock = async (productId: string, qty: number, reason: string): Promise<{ success: boolean; message?: string }> => {
     try {
       const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
       const res = await fetch("/api/inventory/movement", {
@@ -404,7 +423,7 @@ export default function App() {
       if (data.success) {
         await refreshBackendData();
         showToast(`Ajuste de estoque (${qty > 0 ? "+" : ""}${qty} un) persistido no Ledger!`);
-        return;
+        return { success: true, message: "Movimentação persistida no PostgreSQL Ledger!" };
       }
     } catch (e) {
       console.error("API error updating stock:", e);
@@ -422,6 +441,7 @@ export default function App() {
           : p
       )
     );
+    return { success: true, message: "Estoque atualizado" };
   };
 
   // Reverse Ledger Movement (Immutable Reversal)
@@ -1452,6 +1472,7 @@ export default function App() {
             onTabChange={setActiveTab}
             tenant={selectedTenant}
             branding={brandingConfig}
+            currentUser={currentUser}
             onOpenHelp={() => setShowAssistantHelpModal(true)}
             onOpenNewSale={() => setShowQuickSaleModal(true)}
             onOpenNewProduct={() => setShowQuickProductModal(true)}
@@ -1469,6 +1490,7 @@ export default function App() {
               onTabChange={setActiveTab}
               selectedTenant={selectedTenant}
               branding={brandingConfig}
+              currentUser={currentUser}
               onTenantChange={setSelectedTenant}
               onOpenShareModal={() => setShowShareModal(true)}
               onOpenNewSale={() => setShowQuickSaleModal(true)}
@@ -1502,6 +1524,8 @@ export default function App() {
                 onEditProduct={(p) => {
                   setShowQuickProductModal(true);
                 }}
+                onUpdateProduct={handleUpdateProduct}
+                onUpdateStock={handleUpdateStock}
               />
             )}
 
@@ -1522,11 +1546,14 @@ export default function App() {
               <SaaSControlPanel onNotify={showToast} />
             )}
 
-            {activeTab === "storeSettings" && (
+            {(activeTab === "storeSettings" || activeTab === "profile") && (
               <StoreSettingsPanel
                 tenant={selectedTenant}
                 branding={brandingConfig}
                 paymentSettings={paymentSettings}
+                currentUser={currentUser}
+                onUpdateUser={handleUpdateUser}
+                initialSubTab={activeTab === "profile" ? "profile" : undefined}
                 onUpdateBranding={handleUpdateBranding}
                 onUpdatePaymentSettings={(newSettings) => {
                   setPaymentSettings(newSettings);
