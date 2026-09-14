@@ -412,24 +412,52 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 ${
+          branding?.logoPlacement === "CENTER" ? "relative" : ""
+        }`}>
           {/* Brand Identity */}
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${
+            branding?.logoPlacement === "CENTER"
+              ? "sm:absolute sm:left-1/2 sm:-translate-x-1/2"
+              : branding?.logoPlacement === "RIGHT"
+              ? "order-last"
+              : ""
+          }`}>
             <div
               onClick={onNavigateToHome}
-              className="flex flex-col cursor-pointer group"
+              className={`flex cursor-pointer group ${
+                branding?.logoPlacement === "CENTER" ? "items-center text-center flex-col" : "flex-col"
+              }`}
             >
-              <h1 className="text-xl sm:text-2xl font-serif italic font-bold tracking-tight text-stone-900 group-hover:text-amber-800 transition-colors">
-                {branding?.logoText || tenant?.name || "Lumina"}
-              </h1>
-              <span className="text-[9px] font-bold tracking-[0.25em] uppercase text-amber-800">
-                {branding?.logoSubtext || "Semijoias Nobres"}
-              </span>
+              {branding?.logoType === "IMAGE" && branding.logoUrl ? (
+                <img
+                  src={branding.logoUrl}
+                  alt={branding?.logoText || tenant?.name || "Lumina"}
+                  className="h-10 max-w-[170px] object-contain group-hover:scale-105 transition-transform"
+                />
+              ) : (
+                <>
+                  <h1
+                    className="text-xl sm:text-2xl font-serif italic font-bold tracking-tight text-stone-900 group-hover:text-amber-800 transition-colors leading-tight"
+                    style={{ color: branding?.secondaryColor || undefined }}
+                  >
+                    {branding?.logoText || tenant?.name || "Lumina"}
+                  </h1>
+                  <span
+                    className="text-[9px] font-bold tracking-[0.25em] uppercase"
+                    style={{ color: branding?.primaryColor || "#B45309" }}
+                  >
+                    {branding?.logoSubtext || "Semijoias Nobres"}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Center: Search input */}
-          <div className="flex-1 max-w-md relative hidden sm:block">
+          {/* Center / Left: Search input */}
+          <div className={`flex-1 max-w-md relative hidden sm:block ${
+            branding?.logoPlacement === "CENTER" ? "max-w-xs" : ""
+          }`}>
             <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
@@ -449,8 +477,10 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
             )}
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2.5">
+          {/* Right / Actions */}
+          <div className={`flex items-center gap-2.5 ${
+            branding?.logoPlacement === "RIGHT" ? "order-first" : ""
+          }`}>
             {/* Share Catalog button */}
             <button
               onClick={() => setIsShareModalOpen(true)}
@@ -461,14 +491,15 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
               <span className="hidden md:inline">Compartilhar</span>
             </button>
 
-            {/* Quick ERP link */}
+            {/* Quick ERP / Minha Loja link */}
             <button
-              onClick={() => onNavigateToERP("dashboard")}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-stone-100/90 hover:bg-stone-200 text-stone-700 border border-stone-200/70 rounded-full text-xs font-bold transition-all cursor-pointer"
-              title="Acessar Painel de Gestão ERP"
+              onClick={() => onNavigateToERP("myStore")}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-stone-100/90 hover:bg-stone-200 text-stone-700 border border-stone-200/70 rounded-full text-xs font-bold transition-all cursor-pointer"
+              title="Voltar ao Painel da Minha Loja"
             >
               <Layers className="w-3.5 h-3.5 text-amber-700" />
-              <span>Painel ERP</span>
+              <span className="hidden sm:inline">Minha Loja</span>
+              <span className="sm:hidden">Painel</span>
             </button>
 
             {/* 🛍 Minha sacola Button */}
@@ -480,10 +511,16 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
               className="relative flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all shadow-xs cursor-pointer shrink-0"
               title="Abrir Minha sacola"
             >
-              <ShoppingBag className="w-4 h-4 text-amber-400" />
+              <ShoppingBag
+                className="w-4 h-4"
+                style={{ color: branding?.primaryColor || "#FBBF24" }}
+              />
               <span>Minha sacola</span>
               {totalItemCount > 0 && (
-                <span className="w-5 h-5 bg-amber-400 text-stone-950 font-extrabold rounded-full text-[11px] flex items-center justify-center -mr-1 shadow-xs">
+                <span
+                  className="w-5 h-5 text-stone-950 font-extrabold rounded-full text-[11px] flex items-center justify-center -mr-1 shadow-xs"
+                  style={{ backgroundColor: branding?.primaryColor || "#FBBF24" }}
+                >
                   {totalItemCount}
                 </span>
               )}

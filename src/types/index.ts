@@ -9,8 +9,10 @@ export interface StoreBrandingConfig {
   logoUrl: string;
   logoText: string;
   logoSubtext: string;
+  logoPlacement?: "LEFT" | "CENTER" | "RIGHT";
   paletteId: "GOLD_18K" | "ROSE_GOLD" | "RHODIUM_SILVER" | "EMERALD_NOBLE" | "RUBY_ROYAL" | "ONYX_NOIR";
   primaryColor: string; // e.g. #F59E0B
+  secondaryColor?: string; // e.g. #1C1917 or #451A03
   accentColor: string; // e.g. #FEF3C7
   fontPairing: "CLASSIC_SERIF" | "ROMAN_IMPERIAL" | "MODERN_MINIMAL" | "EDITORIAL_VOGUE";
   heroPillBadge: string;

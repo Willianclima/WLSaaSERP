@@ -26,6 +26,7 @@ import { ShareCatalogModal } from "./components/ShareCatalogModal";
 import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
+import { MyStoreShowcase } from "./components/MyStoreShowcase";
 import { apiClient } from "./services/apiClient";
 import { toast } from "./utils/toast";
 
@@ -1348,6 +1349,8 @@ export default function App() {
 
   // Direct Payment Confirmation Handler
   const handleConfirmOrderPayment = async (orderId: string) => {
+    let targetOrder = orders.find((o) => o.id === orderId);
+
     try {
       const res = await apiClient.authenticatedFetch(`/api/orders/${orderId}/transition`, {
         method: "POST",
@@ -1369,16 +1372,80 @@ export default function App() {
       console.warn("Transition API fallback:", e);
     }
 
+    const today = new Date().toISOString().split("T")[0];
+    const expDate = new Date();
+    expDate.setFullYear(expDate.getFullYear() + 1);
+    const generatedWarrantyCode = `GRT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Update orders state
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: "PAID", updatedAt: new Date().toISOString() } : o))
+      prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              status: "PAID",
+              paymentStatus: "PAID",
+              warrantyCode: o.warrantyCode || generatedWarrantyCode,
+              updatedAt: new Date().toISOString(),
+            }
+          : o
+      )
     );
+
+    // If target order has items, deduct stock and register warranty
+    if (targetOrder) {
+      // Deduct stock for items in order
+      if (targetOrder.items && targetOrder.items.length > 0) {
+        targetOrder.items.forEach((item: any) => {
+          const qty = item.quantity || 1;
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === item.productId || p.sku === item.sku
+                ? {
+                    ...p,
+                    stockPhysical: Math.max(0, p.stockPhysical - qty),
+                    stockAvailable: Math.max(0, p.stockAvailable - qty),
+                    availableStock: Math.max(0, (p.availableStock ?? p.currentStock ?? 1) - qty),
+                  }
+                : p
+            )
+          );
+        });
+      }
+
+      // Create and save Digital Warranty
+      const customerName = targetOrder.customerSnapshot?.name || targetOrder.customerName || "Cliente";
+      const customerPhone = targetOrder.customerSnapshot?.phone || targetOrder.customerPhone || "";
+      const piecesNames = targetOrder.items?.map((i: any) => i.productSnapshot?.name || i.name).filter(Boolean).join(", ") || "Semijoia Nobre";
+
+      const newWarranty: DigitalWarranty = {
+        id: `warr-${Date.now()}`,
+        code: targetOrder.warrantyCode || generatedWarrantyCode,
+        customerName,
+        customerPhone,
+        customerDocument: "",
+        customerEmail: "",
+        orderNumber: targetOrder.orderNumber,
+        sku: targetOrder.items?.[0]?.sku || targetOrder.items?.[0]?.productId || "SEM-LUMINA",
+        productName: piecesNames,
+        bathType: "Ouro 18K / Ródio",
+        issueDate: today,
+        expirationDate: expDate.toISOString().split("T")[0],
+        status: "VALIDA",
+        channel: "WHATSAPP",
+        terms: "Garantia de 12 meses cobrindo banho nobre e integridade das pedras.",
+        claimsCount: 0,
+      };
+
+      setWarranties((prev) => [newWarranty, ...prev.filter((w) => w.orderId !== orderId && w.orderNumber !== targetOrder?.orderNumber)]);
+    }
 
     confetti({
       particleCount: 50,
       spread: 50,
       origin: { y: 0.6 },
     });
-    showToast("Pagamento confirmado com sucesso! Pedido liberado.");
+    showToast("Pagamento confirmado com sucesso! Estoque atualizado (SALE) e garantia emitida.");
   };
 
   // Open consumer storefront with category & optional coupon from landing page
@@ -1415,7 +1482,7 @@ export default function App() {
         initialCategory={storefrontCategory}
         initialCoupon={storefrontCoupon}
         onPlaceOrder={handlePlaceBuyerOrder}
-        onNavigateToERP={(tab) => setActiveTab(tab || "dashboard")}
+        onNavigateToERP={(tab) => setActiveTab(tab || "myStore")}
         onNavigateToHome={() => setActiveTab("home")}
       />
     );
@@ -1437,7 +1504,7 @@ export default function App() {
         trialEndsAt={trialEndsAt}
         storeName={selectedTenant.name}
         onOpenOnboarding={() => setShowOnboardingModal(true)}
-        onOpenStorefront={() => setActiveTab("storefront")}
+        onOpenStorefront={() => setActiveTab("myStore")}
         onOpenShareModal={() => setShowShareModal(true)}
         onOpenSettings={() => setActiveTab("storeSettings")}
       />
@@ -1493,6 +1560,24 @@ export default function App() {
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenNewCustomer={() => setActiveTab("customers")}
                 onConfirmOrderPayment={handleConfirmOrderPayment}
+              />
+            )}
+
+            {activeTab === "myStore" && (
+              <MyStoreShowcase
+                tenant={selectedTenant}
+                branding={brandingConfig}
+                products={products}
+                onOpenStorefront={() => setActiveTab("storefront")}
+                onNavigateTab={setActiveTab}
+                onOpenShareModal={() => setShowShareModal(true)}
+                onUpdateInstagram={(newHandle) => {
+                  setBrandingConfig((prev) => ({
+                    ...prev,
+                    instagramHandle: newHandle,
+                  }));
+                  showToast(`Instagram atualizado para ${newHandle}!`);
+                }}
               />
             )}
 

@@ -269,6 +269,7 @@ export interface CreateOrderPaymentDTO {
 
 export interface CreateOrderDTO {
   customerId: string;
+  customerSnapshot?: Partial<OrderCustomerSnapshot>;
   channel: OrderChannel;
   items: CreateOrderItemDTO[];
   payments?: CreateOrderPaymentDTO[];

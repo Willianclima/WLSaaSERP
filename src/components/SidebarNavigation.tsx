@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Crown,
+  Sparkles,
   BarChart3,
   Building2,
   Bot,
@@ -410,25 +411,25 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
             Canal de Vendas
           </div>
           <button
-            onClick={() => onTabChange("storefront")}
+            onClick={() => onTabChange("myStore")}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group ${
-              activeTab === "storefront"
+              activeTab === "myStore" || activeTab === "storefront"
                 ? "bg-amber-500 text-white shadow-xs"
                 : "bg-amber-50/70 hover:bg-amber-100/80 text-amber-950 border border-amber-200/80"
             }`}
-            title="Abrir o catálogo online que a cliente acessa no celular"
+            title="Sua loja está pronta! Veja o link, compartilhe no WhatsApp e venda"
           >
             <div className="flex items-center gap-2.5">
               <Globe
                 className={`w-4 h-4 ${
-                  activeTab === "storefront" ? "text-white" : "text-amber-700"
+                  activeTab === "myStore" || activeTab === "storefront" ? "text-white" : "text-amber-700"
                 }`}
               />
               <span>Minha Loja</span>
             </div>
-            <div className="flex items-center gap-1 text-[10px] font-semibold opacity-80 group-hover:opacity-100 transition-opacity">
-              <span>Vitrine</span>
-              <ExternalLink className="w-3 h-3" />
+            <div className="flex items-center gap-1 text-[10px] font-semibold opacity-90 group-hover:opacity-100 transition-opacity">
+              <span>Pronta!</span>
+              <Sparkles className="w-3 h-3" />
             </div>
           </button>
         </div>

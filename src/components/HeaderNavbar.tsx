@@ -70,7 +70,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
     { id: "vender", label: "Vender", icon: ShoppingBag },
     { id: "catalog", label: "Produtos", icon: Package },
     { id: "customers", label: "Clientes", icon: Users },
-    { id: "storefront", label: "Minha Loja", icon: Store },
+    { id: "myStore", label: "Minha Loja", icon: Store },
     { id: "storeSettings", label: "Configurações", icon: Sliders },
   ];
 
@@ -218,7 +218,8 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                 activeTab === tab.id ||
                 (tab.id === "ownerHome" && (activeTab === "dashboard" || activeTab === "home")) ||
                 (tab.id === "vender" && (activeTab === "vender" || activeTab === "orders" || activeTab === "sales" || activeTab === "financial" || activeTab === "commissions" || activeTab === "payments")) ||
-                (tab.id === "catalog" && (activeTab === "inventory" || activeTab === "products" || activeTab === "stock" || activeTab === "adjustments"));
+                (tab.id === "catalog" && (activeTab === "inventory" || activeTab === "products" || activeTab === "stock" || activeTab === "adjustments")) ||
+                (tab.id === "myStore" && (activeTab === "myStore" || activeTab === "storefront"));
               return (
                 <button
                   key={tab.id}

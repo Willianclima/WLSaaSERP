@@ -18,9 +18,12 @@ import {
   X,
   ExternalLink,
   Copy,
+  MessageSquare,
+  Phone,
 } from "lucide-react";
 import { UnifiedOrder, ProductItem, Customer, DigitalWarranty } from "../types";
 import { toast } from "../utils/toast";
+import { whatsappOrderService } from "../services/whatsappOrderService";
 
 interface UnifiedSalesOrdersProps {
   orders: UnifiedOrder[];
@@ -192,7 +195,10 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
     };
   });
 
-  const allOrders = [...normalizedRuntimeOrders, ...wireframeOrders];
+  // Prioritize real database/runtime orders.
+  // If the merchant has actual orders (such as Cliente 1), show real orders.
+  // Only display initial wireframe sample orders when there are zero orders in the tenant.
+  const allOrders = normalizedRuntimeOrders.length > 0 ? normalizedRuntimeOrders : wireframeOrders;
 
   const countAll = allOrders.length;
   const countPending = allOrders.filter((o) => o.statusColor === "amber").length;
@@ -333,9 +339,107 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* DATA TABLE (EXACT WIREFRAME DESIGN)                                       */}
+      {/* MOBILE LIST (CARDS) & DESKTOP TABLE                                       */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
+      {/* Mobile Card Layout */}
+      <div className="md:hidden space-y-3">
+        {filteredOrders.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center text-stone-500 text-xs">
+            Nenhum pedido encontrado.
+          </div>
+        ) : (
+          filteredOrders.map((order) => {
+            const isPaid = order.statusColor === "emerald";
+            const isAmber = order.statusColor === "amber";
+            const cleanPhone = (order.customerPhone || "").replace(/\D/g, "");
+
+            return (
+              <div
+                key={order.id}
+                onClick={() => setSelectedOrderForDrawer(order)}
+                className="bg-white rounded-2xl border border-stone-200/90 p-4 shadow-2xs space-y-3 cursor-pointer active:scale-[0.99] transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-stone-900 text-sm">{order.orderNumber}</span>
+                    <span className="text-[10px] text-stone-400">• {order.date}</span>
+                  </div>
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
+                      isPaid
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : isAmber
+                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                        : "bg-stone-100 text-stone-700 border border-stone-200"
+                    }`}
+                  >
+                    {order.statusLabel}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-stone-800">{order.customerName}</p>
+                    <p className="text-[11px] text-stone-400">{order.customerPhone || "Sem WhatsApp"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-extrabold text-stone-900">
+                      R$ {Number(order.totalAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-stone-500 uppercase tracking-wide">{order.paymentMethod}</p>
+                  </div>
+                </div>
+
+                {/* Mobile Actions Toolbar */}
+                <div className="pt-2 border-t border-stone-100 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5">
+                    {cleanPhone && (
+                      <a
+                        href={`https://wa.me/55${cleanPhone}?text=Ol%C3%A1+${encodeURIComponent(order.customerName)}%2C+aqui+%C3%A9+da+loja!+Sobre+o+seu+pedido+${encodeURIComponent(order.orderNumber)}...`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors"
+                        title="Abrir conversa no WhatsApp"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {isAmber && onConfirmOrderPayment && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await onConfirmOrderPayment(order.id);
+                            toast.success(`Pagamento do pedido ${order.orderNumber} confirmado!`);
+                          } catch (err: any) {
+                            toast.error(err.message || "Erro ao confirmar pagamento");
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Confirmar PIX</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedOrderForDrawer(order)}
+                      className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop Data Table */}
+      <div className="hidden md:block bg-white rounded-2xl border border-stone-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             {/* Table Header */}
@@ -358,6 +462,7 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                 const isAmber = order.statusColor === "amber";
                 const isBlue = order.statusColor === "blue";
                 const isRose = order.statusColor === "rose";
+                const cleanPhone = (order.customerPhone || "").replace(/\D/g, "");
 
                 return (
                   <tr
@@ -372,7 +477,10 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
 
                     {/* Cliente */}
                     <td className="px-5 py-4 font-medium text-stone-800">
-                      {order.customerName}
+                      <div>{order.customerName}</div>
+                      {order.customerPhone && (
+                        <span className="text-[11px] text-stone-400 font-normal">{order.customerPhone}</span>
+                      )}
                     </td>
 
                     {/* Data */}
@@ -410,6 +518,18 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                     {/* Ações */}
                     <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
+                        {cleanPhone && (
+                          <a
+                            href={`https://wa.me/55${cleanPhone}?text=Ol%C3%A1+${encodeURIComponent(order.customerName)}%2C+aqui+%C3%A9+da+loja!+Sobre+o+seu+pedido+${encodeURIComponent(order.orderNumber)}...`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors"
+                            title="Conversar no WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+
                         {isAmber && onConfirmOrderPayment && (
                           <button
                             onClick={async (e) => {
@@ -428,6 +548,7 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                             <span>Confirmar PIX</span>
                           </button>
                         )}
+
                         <button
                           onClick={() => setSelectedOrderForDrawer(order)}
                           className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
@@ -571,15 +692,35 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
                 </button>
               )}
 
-              <a
-                href={`https://wa.me/55${(selectedOrderForDrawer.customerPhone || "").replace(/\D/g, "")}?text=Ol%C3%A1+${encodeURIComponent(selectedOrderForDrawer.customerName)}%2C+aqui+%C3%A9+da+Lumina+Semijoias!+Seu+pedido+${selectedOrderForDrawer.orderNumber}+est%C3%A1+confirmado.`}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
-              >
-                <Send className="w-4 h-4" />
-                <span>Enviar no WhatsApp</span>
-              </a>
+              {(() => {
+                const phone = (selectedOrderForDrawer.customerPhone || "").replace(/\D/g, "");
+                const isPaid = selectedOrderForDrawer.statusColor === "emerald" || selectedOrderForDrawer.status === "PAID";
+                const message = isPaid
+                  ? whatsappOrderService.formatPaymentConfirmationMessage({
+                      orderNumber: selectedOrderForDrawer.orderNumber,
+                      customerName: selectedOrderForDrawer.customerName,
+                      totalAmount: selectedOrderForDrawer.totalAmount,
+                      warrantyCode: selectedOrderForDrawer.warrantyCode,
+                      items: selectedOrderForDrawer.items,
+                    })
+                  : `Olá ${selectedOrderForDrawer.customerName}! ✨ Passando para confirmar o seu pedido ${selectedOrderForDrawer.orderNumber} no valor de R$ ${Number(selectedOrderForDrawer.totalAmount).toFixed(2).replace(".", ",")}. Segue nossa chave PIX para validação da sua reserva.`;
+
+                const waUrl = phone ? whatsappOrderService.generateWhatsAppUrl(phone, message) : "#";
+
+                return (
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 text-white text-xs font-bold rounded-xl shadow-xs transition-colors ${
+                      phone ? "bg-emerald-600 hover:bg-emerald-700" : "bg-stone-300 pointer-events-none"
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>{isPaid ? "Enviar Comprovante & Garantia no WhatsApp" : "Enviar Cobrança / Detalhes no WhatsApp"}</span>
+                  </a>
+                );
+              })()}
 
               <button
                 onClick={() => setSelectedOrderForDrawer(null)}

@@ -36,6 +36,12 @@ import {
   UploadCloud,
   Trash2,
   Link as LinkIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  MessageCircle,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings, RBACUser } from "../types";
 import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS, mockCurrentUser } from "../data/mockData";
@@ -134,6 +140,51 @@ export const BRANDING_PALETTES = [
   },
 ];
 
+export const SECONDARY_COLOR_PRESETS = [
+  {
+    id: "ONYX",
+    name: "Preto Ônix Profundo",
+    color: "#1C1917",
+    textColor: "#FFFFFF",
+    description: "Contraste clássico e sofisticado de passarela de alta joalheria",
+  },
+  {
+    id: "AMBER_DEEP",
+    name: "Âmbar & Ouro Velho",
+    color: "#451A03",
+    textColor: "#FFFFFF",
+    description: "Tom terroso nobre e acolhedor, ideal para coleções 18K",
+  },
+  {
+    id: "SAPPHIRE_NIGHT",
+    name: "Safira Noturna",
+    color: "#0F172A",
+    textColor: "#FFFFFF",
+    description: "Profundidade marinha gélida e refinada para peças de ródio",
+  },
+  {
+    id: "EMERALD_FOREST",
+    name: "Esmeralda Floresta",
+    color: "#064E3B",
+    textColor: "#FFFFFF",
+    description: "Riqueza botânica e sofisticação verde esmeralda nobre",
+  },
+  {
+    id: "RUBY_BURGUNDY",
+    name: "Rubi Borgonha Real",
+    color: "#4C0519",
+    textColor: "#FFFFFF",
+    description: "Intensidade régia e elegância marcante em tons de vinho",
+  },
+  {
+    id: "PLATINUM_SLATE",
+    name: "Grafite Platina",
+    color: "#334155",
+    textColor: "#FFFFFF",
+    description: "Minimalismo contemporâneo neutro para design moderno",
+  },
+];
+
 export const SAMPLE_LOGO_PRESETS = [
   {
     name: "Lumina",
@@ -178,6 +229,27 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
   const [formConfig, setFormConfig] = useState<StoreBrandingConfig>({ ...branding });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isAutoValidatingDNS, setIsAutoValidatingDNS] = useState<boolean>(false);
+
+  // Real-Time Live Branding Preview States
+  const [livePreviewMode, setLivePreviewMode] = useState<"NAVBAR" | "PRODUCT_CARD" | "WHATSAPP_CHECKOUT">("NAVBAR");
+  const [livePreviewTheme, setLivePreviewTheme] = useState<"light" | "dark">("light");
+
+  const isDirty = React.useMemo(() => {
+    return (
+      (formConfig.logoPlacement || "LEFT") !== (branding.logoPlacement || "LEFT") ||
+      (formConfig.primaryColor || "") !== (branding.primaryColor || "") ||
+      (formConfig.secondaryColor || "#1C1917") !== (branding.secondaryColor || "#1C1917") ||
+      formConfig.paletteId !== branding.paletteId ||
+      formConfig.logoType !== branding.logoType ||
+      formConfig.logoText !== branding.logoText ||
+      formConfig.logoSubtext !== branding.logoSubtext ||
+      formConfig.logoUrl !== branding.logoUrl ||
+      formConfig.heroHeadline !== branding.heroHeadline ||
+      formConfig.heroSubtitle !== branding.heroSubtitle ||
+      formConfig.ctaPrimaryText !== branding.ctaPrimaryText ||
+      formConfig.ctaSecondaryText !== branding.ctaSecondaryText
+    );
+  }, [formConfig, branding]);
 
   // Logo Direct File Upload States (no link required!)
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
@@ -454,6 +526,48 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
             <span>Ver Resultado</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Real-time Uncommitted Branding Alert Banner */}
+      {isDirty && (
+        <div className="bg-gradient-to-r from-amber-50 via-amber-100/60 to-amber-50 border-2 border-amber-400/90 text-stone-900 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-sm animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-amber-400 text-stone-950 flex items-center justify-center font-bold shadow-sm shrink-0 mt-0.5 sm:mt-0 ring-4 ring-amber-300/40">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-950 bg-amber-200/90 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                  ⚡ Pré-Visualização Ativa em Tempo Real
+                </span>
+                <span className="text-xs font-semibold text-amber-900">
+                  Alterações visuais ativas nesta tela, mas AINDA NÃO gravadas no navegador
+                </span>
+              </div>
+              <p className="text-xs text-stone-700 mt-1 max-w-2xl leading-relaxed">
+                Você está pré-visualizando as novas cores (primária/secundária), alinhamento de logo e identidade visual antes de persistir no armazenamento. Clique em <strong>Salvar Alterações</strong> para efetivar em todo o sistema.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 pt-2 md:pt-0">
+            <button
+              type="button"
+              onClick={() => setFormConfig({ ...branding })}
+              className="flex-1 md:flex-none px-4 py-2.5 rounded-2xl border border-stone-300 bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-stone-500" />
+              <span>Descartar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave()}
+              className="flex-1 md:flex-none px-6 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 text-xs font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 ring-2 ring-stone-900/10"
+            >
+              <Save className="w-4 h-4 text-amber-400" />
+              <span>Salvar Alterações</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -1283,15 +1397,79 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* Logo Placement in Store Header (LEFT, CENTER, RIGHT) */}
+                <div className="pt-3 border-t border-stone-100">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-stone-700 block mb-2 flex items-center justify-between">
+                    <span>Posicionamento do Logotipo no Cabeçalho:</span>
+                    <span className="text-[10px] text-stone-400 font-normal">
+                      (reflete imediatamente na vitrine)
+                    </span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormConfig((prev) => ({ ...prev, logoPlacement: "LEFT" }))}
+                      className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        (formConfig.logoPlacement || "LEFT") === "LEFT"
+                          ? "border-stone-900 bg-stone-900 text-amber-300 shadow-xs ring-2 ring-stone-900/20"
+                          : "border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700"
+                      }`}
+                    >
+                      <AlignLeft className="w-3.5 h-3.5" />
+                      <span>Esquerda</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormConfig((prev) => ({ ...prev, logoPlacement: "CENTER" }))}
+                      className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        formConfig.logoPlacement === "CENTER"
+                          ? "border-stone-900 bg-stone-900 text-amber-300 shadow-xs ring-2 ring-stone-900/20"
+                          : "border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700"
+                      }`}
+                    >
+                      <AlignCenter className="w-3.5 h-3.5" />
+                      <span>Centro</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormConfig((prev) => ({ ...prev, logoPlacement: "RIGHT" }))}
+                      className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        formConfig.logoPlacement === "RIGHT"
+                          ? "border-stone-900 bg-stone-900 text-amber-300 shadow-xs ring-2 ring-stone-900/20"
+                          : "border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700"
+                      }`}
+                    >
+                      <AlignRight className="w-3.5 h-3.5" />
+                      <span>Direita</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-1.5 leading-tight">
+                    {(formConfig.logoPlacement || "LEFT") === "LEFT" && "• Padrão e-commerce: logotipo à esquerda, barra de pesquisa no meio e sacola à direita."}
+                    {formConfig.logoPlacement === "CENTER" && "• Estilo Ateliê / Alta Joalheria: marca centralizada em destaque luxuoso no topo da página."}
+                    {formConfig.logoPlacement === "RIGHT" && "• Editorial contemporâneo: menu à esquerda e assinatura da marca no canto superior direito."}
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* Real-time Header Box Preview */}
+            {/* Header Box Preview */}
             <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 space-y-2">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 block">
-                Visualização no Topo da Landing Home:
-              </span>
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 block">
+                  Prévia Rápida do Logotipo:
+                </span>
+                <span className="text-[9px] font-mono uppercase text-amber-400 font-bold">
+                  Alinhamento: {formConfig.logoPlacement || "LEFT"}
+                </span>
+              </div>
+              <div className={`flex items-baseline gap-3 ${
+                formConfig.logoPlacement === "CENTER"
+                  ? "justify-center"
+                  : formConfig.logoPlacement === "RIGHT"
+                  ? "justify-end"
+                  : "justify-start"
+              }`}>
                 {formConfig.logoType === "IMAGE" ? (
                   <img
                     src={formConfig.logoUrl}
@@ -1383,7 +1561,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
               </div>
             </div>
 
-            {/* Custom Color Override */}
+              {/* Custom Color Override */}
             <div className="pt-4 border-t border-stone-100 space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block">
                 Ou selecione uma Cor Primária personalizada (Hex):
@@ -1414,6 +1592,79 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
               </div>
             </div>
 
+            {/* Secondary Color Palette & Custom Selector */}
+            <div className="pt-4 border-t border-stone-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-700 block">
+                  Cor Secundária & Contrastes Nobres:
+                </label>
+                <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">
+                  Bordas, Textos & Acentos Escuros
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {SECONDARY_COLOR_PRESETS.map((sec) => {
+                  const isSelected =
+                    (formConfig.secondaryColor || "#1C1917").toUpperCase() === sec.color.toUpperCase();
+                  return (
+                    <button
+                      key={sec.id}
+                      type="button"
+                      onClick={() =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          secondaryColor: sec.color,
+                        }))
+                      }
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? "border-stone-900 bg-stone-900 text-white shadow-xs ring-2 ring-stone-900/20"
+                          : "border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-800"
+                      }`}
+                      title={sec.description}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shrink-0 border border-white/30 shadow-xs"
+                          style={{ backgroundColor: sec.color }}
+                        />
+                        <span className="text-[11px] font-bold truncate">{sec.name.split(" ")[0]}</span>
+                      </div>
+                      {isSelected && <Check className="w-3 h-3 text-amber-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Secondary Hex Input */}
+              <div className="flex items-center gap-3 pt-1">
+                <input
+                  type="color"
+                  value={formConfig.secondaryColor || "#1C1917"}
+                  onChange={(e) =>
+                    setFormConfig((prev) => ({
+                      ...prev,
+                      secondaryColor: e.target.value,
+                    }))
+                  }
+                  className="w-12 h-9 rounded-xl cursor-pointer border border-stone-300 p-1 bg-white"
+                />
+                <input
+                  type="text"
+                  value={formConfig.secondaryColor || "#1C1917"}
+                  onChange={(e) =>
+                    setFormConfig((prev) => ({
+                      ...prev,
+                      secondaryColor: e.target.value,
+                    }))
+                  }
+                  placeholder="#1C1917"
+                  className="flex-1 bg-stone-50 border border-stone-300 rounded-xl px-3.5 py-1.5 text-xs font-mono font-bold text-stone-900 uppercase"
+                />
+              </div>
+            </div>
+
             {/* Color preview buttons */}
             <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 space-y-3">
               <span className="text-[10px] uppercase font-bold tracking-wider text-stone-400 block">
@@ -1422,7 +1673,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider shadow-sm flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer"
                   style={{
                     backgroundColor: formConfig.primaryColor,
                     color: "#0c0a09",
@@ -1434,12 +1685,474 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
 
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider border border-stone-700 bg-stone-900 text-stone-200"
+                  className="px-4 py-2 rounded-full font-bold text-xs uppercase tracking-wider border cursor-pointer flex items-center gap-1.5"
+                  style={{
+                    backgroundColor: formConfig.secondaryColor || "#1C1917",
+                    color: "#FFFFFF",
+                    borderColor: formConfig.primaryColor,
+                  }}
                 >
                   <Crown className="w-3.5 h-3.5" style={{ color: formConfig.primaryColor }} />
-                  <span>Personalizados</span>
+                  <span>Coleção Exclusiva</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* REAL-TIME LIVE BRANDING PREVIEW STUDIO (Before Committing to localStorage) */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-12 bg-white rounded-3xl border-2 border-stone-200 p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 shadow-xs">
+                    <Eye className="w-4 h-4 text-amber-700" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-serif italic font-bold text-lg sm:text-xl text-stone-900">
+                        Estúdio de Pré-Visualização da Marca em Tempo Real
+                      </h3>
+                      {isDirty ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full animate-pulse">
+                          Não Salvo
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-700" />
+                          Gravado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-stone-600 mt-0.5">
+                      Veja exatamente como seu logotipo, alinhamento ({formConfig.logoPlacement || "LEFT"}) e cores ({formConfig.primaryColor} / {formConfig.secondaryColor || "#1C1917"}) aparecem para seus clientes antes de salvar.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Controls: Modes & Dark/Light Toggle */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="bg-stone-100 p-1 rounded-2xl flex items-center gap-1 border border-stone-200">
+                  <button
+                    type="button"
+                    onClick={() => setLivePreviewMode("NAVBAR")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      livePreviewMode === "NAVBAR"
+                        ? "bg-white text-stone-900 shadow-xs"
+                        : "text-stone-600 hover:text-stone-950"
+                    }`}
+                  >
+                    Cabeçalho
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLivePreviewMode("PRODUCT_CARD")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      livePreviewMode === "PRODUCT_CARD"
+                        ? "bg-white text-stone-900 shadow-xs"
+                        : "text-stone-600 hover:text-stone-950"
+                    }`}
+                  >
+                    Cartão Vitrine
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLivePreviewMode("WHATSAPP_CHECKOUT")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      livePreviewMode === "WHATSAPP_CHECKOUT"
+                        ? "bg-white text-stone-900 shadow-xs"
+                        : "text-stone-600 hover:text-stone-950"
+                    }`}
+                  >
+                    WhatsApp
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setLivePreviewTheme((t) => (t === "light" ? "dark" : "light"))}
+                  className="p-2 rounded-2xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 transition-all cursor-pointer shadow-xs"
+                  title={livePreviewTheme === "light" ? "Alternar para fundo escuro" : "Alternar para fundo claro"}
+                >
+                  {livePreviewTheme === "light" ? (
+                    <Moon className="w-4 h-4 text-stone-700" />
+                  ) : (
+                    <Sun className="w-4 h-4 text-amber-500" />
+                  )}
+                </button>
+
+                {isDirty && (
+                  <button
+                    type="button"
+                    onClick={() => handleSave()}
+                    className="px-4 py-2 rounded-2xl bg-stone-900 hover:bg-stone-800 text-amber-300 hover:text-amber-200 text-xs font-bold uppercase tracking-wider transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Salvar Agora</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Preview Viewport Container */}
+            <div
+              className={`rounded-3xl border transition-all p-6 sm:p-8 overflow-hidden shadow-inner ${
+                livePreviewTheme === "dark"
+                  ? "bg-stone-950 border-stone-800 text-white"
+                  : "bg-stone-50/80 border-stone-200/90 text-stone-900"
+              }`}
+            >
+              {/* MODE 1: NAVBAR / CABEÇALHO */}
+              {livePreviewMode === "NAVBAR" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                    <span>Simulação do Topo da Vitrine (Alinhamento: {formConfig.logoPlacement || "LEFT"})</span>
+                    <span>100% Responsivo</span>
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 sm:p-5 transition-all shadow-sm ${
+                      livePreviewTheme === "dark"
+                        ? "bg-stone-900 border-stone-800"
+                        : "bg-white border-stone-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Left Block */}
+                      {(formConfig.logoPlacement || "LEFT") === "LEFT" ? (
+                        <div className="flex items-center gap-2.5">
+                          {formConfig.logoType === "IMAGE" && formConfig.logoUrl ? (
+                            <img
+                              src={formConfig.logoUrl}
+                              alt="Logo"
+                              className="h-9 max-w-[140px] object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col">
+                              <span
+                                className="text-xl sm:text-2xl font-serif italic font-bold leading-none"
+                                style={{
+                                  color:
+                                    livePreviewTheme === "dark"
+                                      ? "#FFFFFF"
+                                      : formConfig.secondaryColor || "#1C1917",
+                                }}
+                              >
+                                {formConfig.logoText || "Lumina"}
+                              </span>
+                              <span
+                                className="text-[9px] font-bold tracking-[0.25em] uppercase mt-1"
+                                style={{ color: formConfig.primaryColor }}
+                              >
+                                {formConfig.logoSubtext || "Semijoias Nobres"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs font-semibold opacity-70">
+                          <span className="cursor-pointer hover:underline">Coleções</span>
+                          <span>•</span>
+                          <span className="cursor-pointer hover:underline">Lançamentos</span>
+                        </div>
+                      )}
+
+                      {/* Center Block */}
+                      {formConfig.logoPlacement === "CENTER" ? (
+                        <div className="flex flex-col items-center text-center">
+                          {formConfig.logoType === "IMAGE" && formConfig.logoUrl ? (
+                            <img
+                              src={formConfig.logoUrl}
+                              alt="Logo"
+                              className="h-10 max-w-[160px] object-contain"
+                            />
+                          ) : (
+                            <>
+                              <span
+                                className="text-2xl sm:text-3xl font-serif italic font-bold tracking-tight leading-none"
+                                style={{
+                                  color:
+                                    livePreviewTheme === "dark"
+                                      ? "#FFFFFF"
+                                      : formConfig.secondaryColor || "#1C1917",
+                                }}
+                              >
+                                {formConfig.logoText || "Lumina"}
+                              </span>
+                              <span
+                                className="text-[9px] font-bold tracking-[0.3em] uppercase mt-1"
+                                style={{ color: formConfig.primaryColor }}
+                              >
+                                {formConfig.logoSubtext || "Semijoias Nobres"}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="hidden sm:flex items-center flex-1 max-w-xs mx-4">
+                          <div
+                            className={`w-full py-2 px-3.5 rounded-full text-xs border flex items-center gap-2 ${
+                              livePreviewTheme === "dark"
+                                ? "bg-stone-800 border-stone-700 text-stone-400"
+                                : "bg-stone-100 border-stone-200 text-stone-500"
+                            }`}
+                          >
+                            <span>🔍 Buscar peças, anéis, colares...</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Right Block */}
+                      {formConfig.logoPlacement === "RIGHT" ? (
+                        <div className="flex items-center gap-2.5">
+                          {formConfig.logoType === "IMAGE" && formConfig.logoUrl ? (
+                            <img
+                              src={formConfig.logoUrl}
+                              alt="Logo"
+                              className="h-9 max-w-[140px] object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col text-right">
+                              <span
+                                className="text-xl sm:text-2xl font-serif italic font-bold leading-none"
+                                style={{
+                                  color:
+                                    livePreviewTheme === "dark"
+                                      ? "#FFFFFF"
+                                      : formConfig.secondaryColor || "#1C1917",
+                                }}
+                              >
+                                {formConfig.logoText || "Lumina"}
+                              </span>
+                              <span
+                                className="text-[9px] font-bold tracking-[0.25em] uppercase mt-1"
+                                style={{ color: formConfig.primaryColor }}
+                              >
+                                {formConfig.logoSubtext || "Semijoias Nobres"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <button
+                            type="button"
+                            className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                            style={{
+                              backgroundColor: formConfig.primaryColor,
+                              color: "#0c0a09",
+                            }}
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Sacola (3)</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODE 2: PRODUCT CARD */}
+              {livePreviewMode === "PRODUCT_CARD" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                    <span>Simulação do Cartão do Catálogo com a Paleta Ativa</span>
+                    <span>Visualização do Cliente</span>
+                  </div>
+
+                  <div className="max-w-sm mx-auto">
+                    <div
+                      className={`rounded-3xl border overflow-hidden transition-all shadow-md ${
+                        livePreviewTheme === "dark"
+                          ? "bg-stone-900 border-stone-800"
+                          : "bg-white border-stone-200"
+                      }`}
+                    >
+                      <div className="relative aspect-square bg-stone-100 flex items-center justify-center p-4">
+                        <img
+                          src="https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=600&q=80"
+                          alt="Joia Exemplo"
+                          className="w-full h-full object-cover rounded-2xl"
+                        />
+                        <span
+                          className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-xs"
+                          style={{
+                            backgroundColor: formConfig.primaryColor,
+                            color: "#0c0a09",
+                          }}
+                        >
+                          Destaque 18K
+                        </span>
+                        <div
+                          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center shadow-xs"
+                          style={{
+                            backgroundColor: formConfig.secondaryColor || "#1C1917",
+                            color: "#FFFFFF",
+                          }}
+                        >
+                          💎
+                        </div>
+                      </div>
+
+                      <div className="p-5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-stone-400">
+                            {formConfig.logoText || "Lumina"} • Coleção 2026
+                          </span>
+                          <span
+                            className="text-xs font-bold"
+                            style={{ color: formConfig.primaryColor }}
+                          >
+                            ★★★★★
+                          </span>
+                        </div>
+
+                        <h4
+                          className="font-serif italic font-bold text-base line-clamp-1"
+                          style={{
+                            color:
+                              livePreviewTheme === "dark"
+                                ? "#FFFFFF"
+                                : formConfig.secondaryColor || "#1C1917",
+                          }}
+                        >
+                          Colar Ponto de Luz Zircônia Premium Ouro 18k
+                        </h4>
+
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className="text-xl font-bold font-serif"
+                            style={{
+                              color:
+                                livePreviewTheme === "dark"
+                                  ? "#FFFFFF"
+                                  : formConfig.secondaryColor || "#1C1917",
+                            }}
+                          >
+                            R$ 189,90
+                          </span>
+                          <span className="text-xs text-stone-400 line-through">R$ 249,00</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            className="flex-1 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm transition-transform hover:scale-[1.02] cursor-pointer flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: formConfig.primaryColor,
+                              color: "#0c0a09",
+                            }}
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Comprar Peça</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="px-3.5 py-2.5 rounded-xl border font-bold text-xs transition-colors cursor-pointer"
+                            style={{
+                              borderColor: formConfig.secondaryColor || "#1C1917",
+                              color:
+                                livePreviewTheme === "dark"
+                                  ? "#FFFFFF"
+                                  : formConfig.secondaryColor || "#1C1917",
+                            }}
+                          >
+                            Detalhes
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MODE 3: WHATSAPP CHECKOUT */}
+              {livePreviewMode === "WHATSAPP_CHECKOUT" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                    <span>Simulação da Conversão WhatsApp com a Identidade da Loja</span>
+                    <span>Fechamento de Vendas</span>
+                  </div>
+
+                  <div className="max-w-md mx-auto">
+                    <div
+                      className={`rounded-3xl border p-6 transition-all shadow-md space-y-4 ${
+                        livePreviewTheme === "dark"
+                          ? "bg-stone-900 border-stone-800"
+                          : "bg-white border-stone-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 pb-3 border-b border-stone-200/50">
+                        <div
+                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-bold shadow-xs"
+                          style={{
+                            backgroundColor: formConfig.primaryColor,
+                            color: "#0c0a09",
+                          }}
+                        >
+                          💎
+                        </div>
+                        <div>
+                          <h4
+                            className="font-serif italic font-bold text-base leading-tight"
+                            style={{
+                              color:
+                                livePreviewTheme === "dark"
+                                  ? "#FFFFFF"
+                                  : formConfig.secondaryColor || "#1C1917",
+                            }}
+                          >
+                            {formConfig.logoText || "Lumina"} — Atendimento Oficial
+                          </h4>
+                          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            WhatsApp Comercial Conectado
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 text-stone-800 text-xs leading-relaxed">
+                        <p className="font-semibold text-emerald-950 mb-1">
+                          💬 Mensagem Automática Formatada:
+                        </p>
+                        <p className="italic text-emerald-900 font-mono text-[11px]">
+                          "Olá, equipe {formConfig.logoText || "Lumina"}! Gostaria de encomendar 1x Colar Ponto de Luz no valor de R$ 189,90 via PIX..."
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="w-full py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        style={{
+                          backgroundColor: "#25D366",
+                          color: "#FFFFFF",
+                        }}
+                      >
+                        <MessageCircle className="w-4 h-4 fill-white" />
+                        <span>Enviar Pedido pelo WhatsApp</span>
+                      </button>
+
+                      <div className="text-center">
+                        <span
+                          className="text-[10px] font-bold uppercase tracking-wider"
+                          style={{
+                            color:
+                              livePreviewTheme === "dark"
+                                ? "#A8A29E"
+                                : formConfig.secondaryColor || "#1C1917",
+                          }}
+                        >
+                          Garantia Oficial & Suporte Exclusivo
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
