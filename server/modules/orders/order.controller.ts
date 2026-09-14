@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { OrderService } from "./order.service";
 import { OrderRepository } from "./order.repository";
 import { orgRepo } from "../../repositories";
+import { TenantContext } from "../../db/tenantContext";
 import {
   OrderFilterQuery,
   CreateOrderDTO,
@@ -55,14 +56,18 @@ export class OrderController {
       }
 
       // Enforce channel, initialStatus (atomically reserves stock) and operator
-      const order = await OrderService.createOrder(
-        org.id,
-        {
-          ...dto,
-          channel: dto.channel || "ECOMMERCE",
-          initialStatus: dto.initialStatus || "INVENTORY_RESERVED",
-        },
-        "Cliente Vitrine (WhatsApp Storefront)"
+      const order = await TenantContext.run(
+        { tenantId: org.id, isPublicStorefront: true },
+        async () =>
+          await OrderService.createOrder(
+            org.id,
+            {
+              ...dto,
+              channel: dto.channel || "ECOMMERCE",
+              initialStatus: dto.initialStatus || "INVENTORY_RESERVED",
+            },
+            "Cliente Vitrine (WhatsApp Storefront)"
+          )
       );
 
       return res.status(201).json({

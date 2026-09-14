@@ -486,6 +486,250 @@ CREATE TABLE IF NOT EXISTS order_state_transitions (
 
 CREATE INDEX IF NOT EXISTS idx_order_transitions_org_order ON order_state_transitions (organization_id, order_id);
 
+-- ============================================================================
+-- 21. ROW LEVEL SECURITY (RLS) POLICIES & MULTI-TENANT ISOLATION
+-- ============================================================================
+
+-- Enable and Force RLS on all tenant-specific tables
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON products;
+CREATE POLICY tenant_isolation_policy ON products
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE product_media ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_media FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON product_media;
+CREATE POLICY tenant_isolation_policy ON product_media
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON customers;
+CREATE POLICY tenant_isolation_policy ON customers
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE customer_addresses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_addresses FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON customer_addresses;
+CREATE POLICY tenant_isolation_policy ON customer_addresses
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE customer_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_contacts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON customer_contacts;
+CREATE POLICY tenant_isolation_policy ON customer_contacts
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON orders;
+CREATE POLICY tenant_isolation_policy ON orders
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON order_items;
+CREATE POLICY tenant_isolation_policy ON order_items
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE order_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_payments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON order_payments;
+CREATE POLICY tenant_isolation_policy ON order_payments
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE order_state_transitions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_state_transitions FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON order_state_transitions;
+CREATE POLICY tenant_isolation_policy ON order_state_transitions
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE inventory_balances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_balances FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON inventory_balances;
+CREATE POLICY tenant_isolation_policy ON inventory_balances
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_movements FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON inventory_movements;
+CREATE POLICY tenant_isolation_policy ON inventory_movements
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE inventory_reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_reservations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON inventory_reservations;
+CREATE POLICY tenant_isolation_policy ON inventory_reservations
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE inventory_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_locations FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON inventory_locations;
+CREATE POLICY tenant_isolation_policy ON inventory_locations
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE idempotency_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE idempotency_keys FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON idempotency_keys;
+CREATE POLICY tenant_isolation_policy ON idempotency_keys
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON audit_logs;
+CREATE POLICY tenant_isolation_policy ON audit_logs
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization_members FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON organization_members;
+CREATE POLICY tenant_isolation_policy ON organization_members
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+ALTER TABLE organization_modules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization_modules FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation_policy ON organization_modules;
+CREATE POLICY tenant_isolation_policy ON organization_modules
+  FOR ALL
+  USING (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  )
+  WITH CHECK (
+    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+  );
+
+
 
 
 

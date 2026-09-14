@@ -4,6 +4,7 @@ import { ProductService } from "./product.service";
 import { CreateProductDTO, UpdateProductDTO, ProductFilterQuery } from "./product.types";
 import { auditService } from "../../services/auditService";
 import { orgRepo } from "../../repositories";
+import { TenantContext } from "../../db/tenantContext";
 
 export class ProductController {
   /**
@@ -47,7 +48,10 @@ export class ProductController {
         offset: req.query.offset ? Number(req.query.offset) : 0,
       };
 
-      const result = await ProductService.listProducts(org.id, filter);
+      const result = await TenantContext.run(
+        { tenantId: org.id, isPublicStorefront: true },
+        async () => await ProductService.listProducts(org.id, filter)
+      );
 
       return res.json({
         success: true,

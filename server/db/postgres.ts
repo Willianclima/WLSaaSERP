@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import pg from "pg";
+import { TenantContext } from "./tenantContext";
 const { Pool } = pg;
 
 // Singleton connection pool adhering to lazy connection pattern
@@ -90,7 +91,37 @@ export const pool = new Proxy({} as pg.Pool, {
   },
 });
 
+/**
+ * Helper to apply RLS session variables to a PostgreSQL client or pool connection.
+ */
+export async function applyRlsContext(client: pg.PoolClient | pg.Pool): Promise<void> {
+  const context = TenantContext.get();
+  const tenantId = context?.tenantId;
+  const isSuperAdmin = context?.isSuperAdmin ? "true" : "false";
+
+  if (tenantId) {
+    await client.query("SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_super_admin', $2, false)", [
+      tenantId,
+      isSuperAdmin,
+    ]);
+  } else if (context?.isSuperAdmin) {
+    await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'true', false)");
+  }
+}
+
 export async function query<T = any>(text: string, params?: any[]): Promise<pg.QueryResult<T>> {
+  const context = TenantContext.get();
+  // If a tenant context is active, acquire a dedicated client from pool to set session config safely
+  if (context?.tenantId || context?.isSuperAdmin) {
+    const client = await getPostgresPool().connect();
+    try {
+      await applyRlsContext(client);
+      return await client.query<T>(text, params);
+    } finally {
+      client.release();
+    }
+  }
+
   return getPostgresPool().query<T>(text, params);
 }
 
@@ -100,6 +131,7 @@ export async function withTransaction<T>(
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    await applyRlsContext(client);
     const result = await callback(client);
     await client.query("COMMIT");
     return result;

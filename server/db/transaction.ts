@@ -1,5 +1,6 @@
 import pg from "pg";
 import { withTransaction, query } from "./postgres";
+import { TenantContext } from "./tenantContext";
 
 /**
  * Transaction Context and Unit-of-Work for Atomic Operations across Modules
@@ -45,29 +46,33 @@ export class UnitOfWork {
   ): Promise<T> {
     const txId = `tx-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
-    return await withTransaction(async (client) => {
-      const tx: TransactionContext = {
-        id: txId,
-        organizationId,
-        startedAt: new Date().toISOString(),
-        isCommitted: false,
-        isRolledBack: false,
-        pgClient: client,
-        stagedOrders: new Map(),
-        stagedOrderItems: new Map(),
-        stagedOrderPayments: new Map(),
-        stagedOrderTransitions: new Map(),
-        stagedInventoryMovements: new Map(),
-        stagedInventoryBalances: new Map(),
-        stagedInventoryReservations: new Map(),
-        stagedAuditLogs: [],
-        originalInventoryBalances: new Map(),
-        originalOrders: new Map(),
-      };
+    return await TenantContext.run({ tenantId: organizationId }, async () => {
+      return await withTransaction(async (client) => {
+        // Explicitly set RLS config for the active transaction client
+        await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [organizationId]);
 
-      try {
-        // 1. Execute the business transaction logic inside the active PostgreSQL transaction
-        const result = await callback(tx);
+        const tx: TransactionContext = {
+          id: txId,
+          organizationId,
+          startedAt: new Date().toISOString(),
+          isCommitted: false,
+          isRolledBack: false,
+          pgClient: client,
+          stagedOrders: new Map(),
+          stagedOrderItems: new Map(),
+          stagedOrderPayments: new Map(),
+          stagedOrderTransitions: new Map(),
+          stagedInventoryMovements: new Map(),
+          stagedInventoryBalances: new Map(),
+          stagedInventoryReservations: new Map(),
+          stagedAuditLogs: [],
+          originalInventoryBalances: new Map(),
+          originalOrders: new Map(),
+        };
+
+        try {
+          // 1. Execute the business transaction logic inside the active PostgreSQL transaction
+          const result = await callback(tx);
 
         // 2. Commit all staged records to PostgreSQL using the SAME active connection
         // 1. Orders
@@ -271,5 +276,6 @@ export class UnitOfWork {
         throw error;
       }
     });
+  });
   }
 }

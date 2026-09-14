@@ -4,6 +4,7 @@ import { getSessionSecret } from "../config/authConfig";
 import { userRepo, orgRepo, memberRepo } from "../repositories";
 import { UserEntity, OrganizationEntity, OrganizationRole } from "../types/saas";
 import { Request } from "express";
+import { TenantContext } from "../db/tenantContext";
 
 export interface AuthenticatedRequest extends Request {
   user?: UserEntity;
@@ -227,7 +228,15 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     }
 
     req.userRole = role;
-    next();
+    TenantContext.run(
+      {
+        tenantId: tenant.id,
+        isSuperAdmin: Boolean(user.isPlatformSuperAdmin),
+      },
+      () => {
+        next();
+      }
+    );
   } catch (error: any) {
     return res.status(500).json({
       success: false,
