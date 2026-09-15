@@ -22,7 +22,7 @@ import { inventoryRepo } from "../inventory/inventory.repository";
 import { auditService } from "../../services/auditService";
 import { productRepo } from "../products/product.repository";
 import { CustomerService } from "../customers/customer.service";
-import { userRepo } from "../../repositories";
+import { userRepo, orgRepo } from "../../repositories";
 
 export class OrderService {
   /**
@@ -57,8 +57,10 @@ export class OrderService {
   /**
    * Helper to generate simulated PIX payload and QR Code
    */
-  private static generatePixPayload(amount: number, orderNumber: string) {
-    const pixCode = `00020126580014br.gov.bcb.pix0136lumina-pix-${orderNumber}5204000053039865802BR5925Lumina+Semijoias+Limeira6009SAO+PAULO62070503***6304${Math.random().toString(16).substring(2, 6).toUpperCase()}`;
+  private static generatePixPayload(amount: number, orderNumber: string, orgName?: string, city?: string) {
+    const sanitizedOrg = (orgName || "Loja Semijoias").substring(0, 25).replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "+");
+    const sanitizedCity = (city || "SAO PAULO").toUpperCase().substring(0, 15).replace(/[^A-Z ]/g, "");
+    const pixCode = `00020126580014br.gov.bcb.pix0136pix-${orderNumber}5204000053039865802BR5925${sanitizedOrg}6009${sanitizedCity}62070503***6304${Math.random().toString(16).substring(2, 6).toUpperCase()}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`;
     return { pixCode, qrUrl };
   }
@@ -145,6 +147,9 @@ export class OrderService {
     }
 
     return await UnitOfWork.transaction(organizationId, async (tx: TransactionContext) => {
+      // Fetch organization details to ensure tenant-accurate defaults
+      const org = await orgRepo.findById(organizationId);
+
       // 1. Resolve Customer Snapshot (Frozen at order time)
       let customerId = dto.customerId;
       let existingCustomer: any = null;
@@ -188,8 +193,9 @@ export class OrderService {
         customerId = customerId || `cust-buyer-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
         const custName = inputSnap?.name || "Cliente Storefront";
         const custDoc = inputSnap?.document || inputSnap?.cpf || null;
-        const custEmail = inputSnap?.email || `${customerId}@cliente.lumina.com.br`;
-        const custPhone = inputSnap?.phone || inputSnap?.whatsapp || "+55 (19) 99999-0000";
+        const orgSlug = org?.slug || organizationId.toLowerCase().replace(/[^a-z0-9]/g, "-");
+        const custEmail = inputSnap?.email || `${customerId}@cliente.${orgSlug}.com.br`;
+        const custPhone = inputSnap?.phone || inputSnap?.whatsapp || org?.contactWhatsapp || "";
 
         try {
           await query(
@@ -244,26 +250,27 @@ export class OrderService {
         }
       }
 
+      const orgSlug = org?.slug || organizationId.toLowerCase().replace(/[^a-z0-9]/g, "-");
       const customerSnapshot: OrderCustomerSnapshot = {
         id: customerId!,
         personType: (existingCustomer.personType || "PF") as "PF" | "PJ",
         name: existingCustomer.fullName || existingCustomer.tradeName || existingCustomer.companyName || inputSnap?.name || "Cliente Storefront",
         document: existingCustomer.cpf || existingCustomer.cnpj || existingCustomer.document || inputSnap?.document || "***.***.***-**",
-        email: existingCustomer.primaryEmail || inputSnap?.email || "cliente@lumina.com.br",
-        phone: existingCustomer.primaryPhone || existingCustomer.whatsapp || inputSnap?.phone || "+55 (19) 99999-0000",
+        email: existingCustomer.primaryEmail || inputSnap?.email || `contato@cliente.${orgSlug}.com.br`,
+        phone: existingCustomer.primaryPhone || existingCustomer.whatsapp || inputSnap?.phone || org?.contactWhatsapp || "",
         stateRegistration: existingCustomer.stateRegistration,
       };
 
-      // 2. Resolve Shipping Address
+      // 2. Resolve Shipping Address (Derived dynamically from customer or tenant organization)
       let shippingAddress = {
         recipientName: customerSnapshot.name,
-        zipCode: "13480-000",
-        street: "Rua do Comércio",
-        number: "100",
+        zipCode: "",
+        street: "Endereço de Entrega",
+        number: "S/N",
         complement: "",
         neighborhood: "Centro",
-        city: "Limeira",
-        state: "SP",
+        city: org?.city || "São Paulo",
+        state: org?.state || "SP",
         country: "BRA",
         phone: customerSnapshot.phone,
         referencePoint: "",
@@ -301,6 +308,28 @@ export class OrderService {
 
       let subtotalAmount = 0;
       const itemsEntities: OrderItemEntity[] = [];
+
+      // Resolve default inventory location dynamically for tenant
+      const orgLocations = await inventoryRepo.listLocations(organizationId);
+      let defaultLoc = orgLocations.find((l) => l.type === "HEADQUARTERS" || l.code === "MATRIZ") || orgLocations[0];
+      if (!defaultLoc) {
+        try {
+          defaultLoc = await inventoryRepo.createLocation({
+            id: `loc-${organizationId}-matriz`,
+            organizationId,
+            name: "Estoque Matriz",
+            code: "MATRIZ",
+            type: "HEADQUARTERS",
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          });
+        } catch {
+          // If already exists or error, fetch again
+          const refetched = await inventoryRepo.listLocations(organizationId);
+          defaultLoc = refetched[0];
+        }
+      }
+      const defaultLocationId = defaultLoc?.id || `loc-${organizationId}-default`;
 
       for (const itemDto of dto.items) {
         let prod = await productRepo.findById(organizationId, itemDto.productId);
@@ -350,7 +379,7 @@ export class OrderService {
           organizationId,
           orderId,
           productId: prod.id,
-          locationId: itemDto.locationId || "loc-lumina-matriz",
+          locationId: itemDto.locationId || defaultLocationId,
           productSnapshot,
           quantity: itemDto.quantity,
           returnedQuantity: 0,
@@ -385,7 +414,7 @@ export class OrderService {
         resellerCommissionAmount = (totalAmount * resellerCommissionRate) / 100;
       }
 
-      const initialStatus: OrderStatus = dto.initialStatus || "DRAFT";
+      const initialStatus: OrderStatus = dto.initialStatus || (dto as any).status || "DRAFT";
 
       // 5. Stage Main Order Entity
       const orderEntity: OrderEntity = {
@@ -512,7 +541,8 @@ export class OrderService {
     let pixExpiration: string | undefined;
 
     if (dto.paymentMethod === "PIX") {
-      const pix = this.generatePixPayload(dto.amount, order.orderNumber);
+      const org = await orgRepo.findById(organizationId);
+      const pix = this.generatePixPayload(dto.amount, order.orderNumber, org?.name, org?.city);
       pixQrCodeUrl = pix.qrUrl;
       pixCopyPaste = dto.pixCopyPaste || pix.pixCode;
       const exp = new Date();

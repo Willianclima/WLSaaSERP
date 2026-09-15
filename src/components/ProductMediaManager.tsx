@@ -16,6 +16,7 @@ import {
   Eye,
   Camera,
   Layers,
+  Loader2,
 } from "lucide-react";
 import { ProductMedia } from "../types";
 
@@ -79,6 +80,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [inputUrl, setInputUrl] = useState("");
   const [mediaType, setMediaType] = useState<"IMAGE" | "VIDEO">("IMAGE");
   const [showPresets, setShowPresets] = useState(false);
@@ -116,9 +118,28 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
   };
 
   // Remove item
-  const handleRemove = (index: number) => {
+  const handleRemove = async (index: number) => {
+    const itemToRemove = media[index];
     const newItems = media.filter((_, i) => i !== index);
     onChange(reorderAndNormalize(newItems));
+
+    // If item has a real id in product_media and product exists in DB, delete from DB
+    if (itemToRemove && productId && !productId.startsWith("prod-new") && itemToRemove.id && !itemToRemove.id.startsWith("med-")) {
+      try {
+        const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
+        const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
+        await fetch(`/api/products/${productId}/media/${itemToRemove.id}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            "x-tenant-id": tenantId,
+          },
+        });
+      } catch (err) {
+        console.warn("Could not delete media record from database:", err);
+      }
+    }
   };
 
   // Drag & drop sorting handlers
@@ -141,25 +162,110 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
     setDragOverIndex(null);
   };
 
-  // File Upload Handling (Drag & Drop or Manual Selection)
-  const handleFiles = (files: FileList | null) => {
+  // File Upload Handling (Upload -> Storage -> Persistent URL -> product_media -> Catalog)
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    setIsUploading(true);
 
-    Array.from(files).forEach((file) => {
-      const isVideo = file.type.startsWith("video/");
-      const cleanName = file.name.toLowerCase().replace(/[^a-z0-9_.-]/g, "_");
-      const reader = new FileReader();
+    const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
+    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
 
-      reader.onload = (e) => {
-        const url = e.target?.result as string;
-        if (url) {
-          const newMediaItem: ProductMedia = {
+    const uploadPromises = Array.from(files).map((file) => {
+      return new Promise<ProductMedia | null>((resolve) => {
+        const isVideo = file.type.startsWith("video/");
+        const cleanName = file.name.toLowerCase().replace(/[^a-z0-9_.-]/g, "_");
+        const reader = new FileReader();
+
+        reader.onload = async (e) => {
+          const base64Data = e.target?.result as string;
+          if (!base64Data) {
+            resolve(null);
+            return;
+          }
+
+          try {
+            // Real upload to backend Storage API
+            const res = await fetch("/api/storage/upload", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                "x-tenant-id": tenantId,
+              },
+              body: JSON.stringify({
+                fileBase64: base64Data,
+                fileName: file.name,
+                mimeType: file.type,
+                productId: productId.startsWith("prod-new") ? undefined : productId,
+              }),
+            });
+
+            const json = await res.json().catch(() => ({}));
+            if (res.ok && json.success && json.data) {
+              const persistentUrl = json.data.url || json.data.cdnUrl;
+              const storageKey = json.data.storageKey;
+
+              // If product already exists in DB, persist immediately to product_media table
+              let mediaId = `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+              if (productId && !productId.startsWith("prod-new")) {
+                try {
+                  const mediaRes = await fetch(`/api/products/${productId}/media`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                      "x-tenant-id": tenantId,
+                    },
+                    body: JSON.stringify({
+                      storageKey,
+                      url: persistentUrl,
+                      mediaType: isVideo ? "VIDEO" : "IMAGE",
+                      mimeType: file.type,
+                      fileSizeBytes: file.size,
+                      isPrimary: media.length === 0,
+                      sortOrder: media.length + 1,
+                      title: productName,
+                      altText: `${productName} - ${isVideo ? "Vídeo" : "Foto"}`,
+                    }),
+                  });
+                  const mediaData = await mediaRes.json().catch(() => ({}));
+                  if (mediaData.success && mediaData.data?.id) {
+                    mediaId = mediaData.data.id;
+                  }
+                } catch (dbErr) {
+                  console.warn("Could not immediately link media to product:", dbErr);
+                }
+              }
+
+              const newMediaItem: ProductMedia = {
+                id: mediaId,
+                organization_id: tenantId,
+                product_id: productId,
+                storage_key: storageKey,
+                type: isVideo ? "VIDEO" : "IMAGE",
+                url: persistentUrl,
+                sort_order: media.length + 1,
+                is_primary: media.length === 0,
+                alt_text: `${productName} - ${isVideo ? "Vídeo" : "Foto"} ${media.length + 1}`,
+                created_at: new Date().toISOString(),
+                file_size_bytes: file.size,
+                mime_type: file.type,
+              };
+              resolve(newMediaItem);
+              return;
+            }
+          } catch (uploadErr) {
+            console.error("Storage upload error, using local data uri:", uploadErr);
+          }
+
+          // Fallback if offline/failed
+          const fallbackItem: ProductMedia = {
             id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            organization_id: "org-lumina-01",
+            organization_id: tenantId,
             product_id: productId,
-            storage_key: `org-lumina-01/products/${productId}/${Date.now()}_${cleanName}`,
+            storage_key: `${tenantId}/products/${productId}/${Date.now()}_${cleanName}`,
             type: isVideo ? "VIDEO" : "IMAGE",
-            url: url,
+            url: base64Data,
             sort_order: media.length + 1,
             is_primary: media.length === 0,
             alt_text: `${productName} - ${isVideo ? "Vídeo" : "Foto"} ${media.length + 1}`,
@@ -167,23 +273,34 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
             file_size_bytes: file.size,
             mime_type: file.type,
           };
-          onChange(reorderAndNormalize([...media, newMediaItem]));
-        }
-      };
+          resolve(fallbackItem);
+        };
 
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      });
     });
+
+    try {
+      const results = await Promise.all(uploadPromises);
+      const newItems = results.filter(Boolean) as ProductMedia[];
+      if (newItems.length > 0) {
+        onChange(reorderAndNormalize([...media, ...newItems]));
+      }
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Add media via URL
   const handleAddUrl = () => {
     if (!inputUrl.trim()) return;
+    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
 
     const newMediaItem: ProductMedia = {
       id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      organization_id: "org-lumina-01",
+      organization_id: tenantId,
       product_id: productId,
-      storage_key: `org-lumina-01/products/${productId}/cdn_${Date.now()}.webp`,
+      storage_key: `${tenantId}/products/${productId}/cdn_${Date.now()}.webp`,
       type: mediaType,
       url: inputUrl.trim(),
       sort_order: media.length + 1,
@@ -198,9 +315,10 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
 
   // Add from curated bank
   const handleSelectPreset = (url: string, label: string) => {
+    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
     const newMediaItem: ProductMedia = {
       id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      organization_id: "org-lumina-01",
+      organization_id: tenantId,
       product_id: productId,
       storage_key: `org-lumina-01/products/${productId}/preset_${Date.now()}.webp`,
       type: "IMAGE",
@@ -321,14 +439,22 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
         />
         <div className="flex flex-col items-center justify-center gap-2">
           <div className="w-10 h-10 rounded-full bg-white shadow-xs border border-stone-200 flex items-center justify-center text-amber-700">
-            <Upload className="w-5 h-5" />
+            {isUploading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+            ) : (
+              <Upload className="w-5 h-5" />
+            )}
           </div>
           <div>
             <p className="text-xs font-bold text-stone-800">
-              Clique para selecionar ou arraste fotos e vídeos aqui
+              {isUploading
+                ? "Enviando para Object Storage seguro..."
+                : "Clique para selecionar ou arraste fotos e vídeos aqui"}
             </p>
             <p className="text-[11px] text-stone-500 mt-0.5">
-              Suporta JPG, PNG, WEBP e MP4 (vídeos de demonstração)
+              {isUploading
+                ? "Armazenando em CDN e gerando URL permanente"
+                : "Suporta JPG, PNG, WEBP e MP4 (vídeos de demonstração)"}
             </p>
           </div>
         </div>

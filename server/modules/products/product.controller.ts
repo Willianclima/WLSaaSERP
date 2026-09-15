@@ -21,26 +21,9 @@ export class ProductController {
         (req.headers["x-tenant-id"] as string) ||
         "org-lumina-01";
 
-      let org = await orgRepo.findById(targetIdentifier);
-      if (!org) {
-        org = await orgRepo.findBySlug(targetIdentifier);
-      }
-      if (!org) {
-        const all = await orgRepo.listAll();
-        org = all[0] || null;
-      }
-
-      if (!org) {
-        return res.status(404).json({
-          success: false,
-          error: "Loja / Catálogo não encontrado.",
-        });
-      }
-
       const filter: ProductFilterQuery = {
         category: req.query.category as string,
         bath: req.query.bath as string,
-        status: "ACTIVE",
         search: req.query.search as string,
         minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
         maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
@@ -48,29 +31,16 @@ export class ProductController {
         offset: req.query.offset ? Number(req.query.offset) : 0,
       };
 
-      const result = await TenantContext.run(
-        { tenantId: org.id, isPublicStorefront: true },
-        async () => await ProductService.listProducts(org.id, filter)
-      );
+      const result = await ProductService.listPublicProducts(targetIdentifier, filter);
 
       return res.json({
         success: true,
         data: result.products,
         total: result.total,
-        organization: {
-          id: org.id,
-          name: org.name,
-          slug: org.slug,
-          segment: org.segment,
-          contactWhatsapp: org.contactWhatsapp,
-          contactEmail: org.contactEmail,
-          city: org.city,
-          state: org.state,
-          logoUrl: org.logoUrl,
-        },
+        organization: result.organization,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(error.message?.includes("não encontrado") ? 404 : 500).json({
         success: false,
         error: error.message || "Erro ao carregar catálogo público.",
       });

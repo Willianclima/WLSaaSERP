@@ -15,6 +15,7 @@ import {
   Share2,
   ArrowRight,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 import {
   ProductItem,
@@ -90,7 +91,10 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   // Reseller selection (defaults to first or matrix)
   const defaultReseller = resellers.length > 0 ? resellers[0] : null;
   const storePhone =
-    defaultReseller?.phone?.replace(/\D/g, "") || "5519998765432";
+    branding?.contactWhatsapp?.replace(/\D/g, "") ||
+    tenant?.contactWhatsapp?.replace(/\D/g, "") ||
+    defaultReseller?.phone?.replace(/\D/g, "") ||
+    "";
 
   // Filter products: Published and matching search/category
   const filteredProducts = useMemo(() => {
@@ -240,26 +244,31 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
     const extRef = whatsappOrderService.generateExternalReference();
 
+    const tenantSlug = tenant?.slug || tenant?.id?.toLowerCase().replace(/[^a-z0-9]/g, "-") || "loja";
+    const storeDisplayName = branding?.logoText || tenant?.name || "Loja de Semijoias";
+    const storeCity = tenant?.city || "São Paulo";
+    const storeState = tenant?.state || "SP";
+
     // Prepare ERP order intent
     const orderIntent: any = {
-      organizationId: tenant.id || "org-lumina-01",
+      organizationId: tenant.id,
       customerSnapshot: {
         personType: "PF",
         name: customerName?.trim() || "Cliente Loja Virtual",
         phone: customerPhone?.trim() || "",
-        email: "cliente.loja@lumina.com.br",
-        document: "000.000.000-00",
+        email: customerPhone ? `${customerPhone.replace(/\D/g, "")}@cliente.${tenantSlug}.com.br` : `cliente@${tenantSlug}.com.br`,
+        document: "",
       },
       channel: "WHATSAPP",
       status: "INVENTORY_RESERVED",
       shippingAddress: {
         recipientName: customerName?.trim() || "Cliente",
-        zipCode: "13480-000",
+        zipCode: "",
         street: customerCity?.trim() || "Entrega via WhatsApp",
         number: "S/N",
         neighborhood: "Centro",
-        city: customerCity ? customerCity.split("-")[0].trim() : "Limeira",
-        state: "SP",
+        city: customerCity ? customerCity.split(/[-/]/)[0].trim() : storeCity,
+        state: storeState,
         country: "BRA",
       },
       currency: "BRL",
@@ -275,7 +284,7 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
         : 0,
       notes: `Pedido da sacola via WhatsApp no catálogo. Ref: ${extRef}.`,
       metadata: {
-        organization_id: tenant.id || "org-lumina-01",
+        organization_id: tenant.id,
         sales_channel: "WHATSAPP",
         external_reference: extRef,
         consultant_name: defaultReseller?.name,
@@ -284,9 +293,9 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       },
       items: cartItems.map((item, idx) => ({
         id: `intent-item-${idx}`,
-        organizationId: tenant.id || "org-lumina-01",
+        organizationId: tenant.id,
         productId: item.product.id,
-        locationId: "loc-lumina-matriz",
+        locationId: item.product.locationId || "loc-matriz",
         productSnapshot: {
           productId: item.product.id,
           sku: item.product.sku,
@@ -328,16 +337,16 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       }
 
       const waPayload: TraceableWhatsAppOrderPayload = {
-        organizationId: tenant.id || "org-lumina-01",
-        organizationName: tenant.name || "Lumina Semijoias Nobres",
+        organizationId: tenant.id,
+        organizationName: storeDisplayName,
         salesChannel: "WHATSAPP",
         externalReference: extRef,
         orderNumber: officialOrderNum,
         resellerId: defaultReseller?.id,
-        resellerName: defaultReseller?.name || "Consultora Lumina",
-        resellerPhone: defaultReseller?.phone,
+        resellerName: defaultReseller?.name || storeDisplayName,
+        resellerPhone: defaultReseller?.phone || storePhone,
         customerName: customerName?.trim() || "Cliente",
-        customerCity: customerCity?.trim() || "Limeira/SP",
+        customerCity: customerCity?.trim() || `${storeCity}/${storeState}`,
         items: cartItems.map((it) => ({
           productId: it.product.id,
           sku: it.product.sku,
@@ -374,8 +383,8 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       console.error("Erro ao registrar pedido no ERP:", err);
       // Fallback: Generate the WhatsApp link regardless so the sale is never blocked
       const waPayload: TraceableWhatsAppOrderPayload = {
-        organizationId: tenant.id || "org-lumina-01",
-        organizationName: tenant.name || "Lumina Semijoias Nobres",
+        organizationId: tenant.id,
+        organizationName: storeDisplayName,
         salesChannel: "WHATSAPP",
         externalReference: extRef,
         customerName: customerName?.trim() || "Cliente",
@@ -491,15 +500,15 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
               <span className="hidden md:inline">Compartilhar</span>
             </button>
 
-            {/* Quick ERP / Minha Loja link */}
+            {/* Quick ERP / Painel do Dono link */}
             <button
-              onClick={() => onNavigateToERP("myStore")}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-stone-100/90 hover:bg-stone-200 text-stone-700 border border-stone-200/70 rounded-full text-xs font-bold transition-all cursor-pointer"
-              title="Voltar ao Painel da Minha Loja"
+              onClick={() => onNavigateToERP("ownerHome")}
+              className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 hover:bg-stone-800 text-amber-300 border border-stone-800 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="Retornar à Central de Gestão do Dono"
             >
-              <Layers className="w-3.5 h-3.5 text-amber-700" />
-              <span className="hidden sm:inline">Minha Loja</span>
-              <span className="sm:hidden">Painel</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Painel do Dono</span>
+              <span className="sm:hidden">Dono</span>
             </button>
 
             {/* 🛍 Minha sacola Button */}

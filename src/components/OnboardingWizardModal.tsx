@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Sparkles,
   Store,
@@ -58,18 +58,18 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Step 1: Identificação da Loja
-  const [storeName, setStoreName] = useState<string>(currentTenant?.name || "Lumina Semijoias");
-  const [ownerName, setOwnerName] = useState<string>("Maria Fernanda Silva");
-  const [documentNumber, setDocumentNumber] = useState<string>("48.291.802/0001-94");
-  const [whatsapp, setWhatsapp] = useState<string>("(19) 98765-4321");
-  const [instagram, setInstagram] = useState<string>("@luminasemijoias_oficial");
-  const [city, setCity] = useState<string>("Limeira");
-  const [stateUf, setStateUf] = useState<string>("SP");
-  const [email, setEmail] = useState<string>("contato@luminasemijoias.com.br");
+  const [storeName, setStoreName] = useState<string>(currentTenant?.name || "Minha Loja de Semijoias");
+  const [ownerName, setOwnerName] = useState<string>("Proprietário(a)");
+  const [documentNumber, setDocumentNumber] = useState<string>(currentTenant?.document || "48.291.802/0001-94");
+  const [whatsapp, setWhatsapp] = useState<string>(currentTenant?.contactWhatsapp || "(19) 98765-4321");
+  const [instagram, setInstagram] = useState<string>("@semijoias_oficial");
+  const [city, setCity] = useState<string>(currentTenant?.city || "Limeira");
+  const [stateUf, setStateUf] = useState<string>(currentTenant?.state || "SP");
+  const [email, setEmail] = useState<string>(currentTenant?.contactEmail || "contato@lojasemijoias.com.br");
 
   // Step 2: Vitrine & Catálogo
-  const [storefrontName, setStorefrontName] = useState<string>(currentTenant?.name || "Lumina Semijoias");
-  const [bio, setBio] = useState<string>("Semijoias finas banhadas a ouro 18K e ródio com verniz de proteção e 1 ano de garantia digital.");
+  const [storefrontName, setStorefrontName] = useState<string>(currentBranding?.logoText || currentTenant?.name || "Minha Loja de Semijoias");
+  const [bio, setBio] = useState<string>(currentBranding?.tagline || "Semijoias finas banhadas a ouro 18K e ródio com verniz de proteção e 1 ano de garantia digital.");
   const [logoUrl, setLogoUrl] = useState<string>(
     currentBranding?.logoUrl || "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=200&auto=format&fit=crop&q=80"
   );
@@ -80,12 +80,38 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   const [secondaryColor, setSecondaryColor] = useState<string>(currentBranding?.secondaryColor || "#1C1917");
 
   // Step 3: Atendimento & Entrega
-  const [orderWhatsapp, setOrderWhatsapp] = useState<string>("(19) 98765-4321");
+  const [orderWhatsapp, setOrderWhatsapp] = useState<string>(currentTenant?.contactWhatsapp || "(19) 98765-4321");
   const [businessHours, setBusinessHours] = useState<string>("Seg a Sex das 09h às 18h • Sáb das 09h às 13h");
   const [deliveryPickup, setDeliveryPickup] = useState<boolean>(true);
   const [deliveryLocal, setDeliveryLocal] = useState<boolean>(true);
   const [deliveryShipping, setDeliveryShipping] = useState<boolean>(true);
   const [deliveryCustom, setDeliveryCustom] = useState<boolean>(true);
+
+  // Synchronize state when modal opens with tenant or branding
+  useEffect(() => {
+    if (isOpen) {
+      if (currentTenant) {
+        if (currentTenant.name) setStoreName(currentTenant.name);
+        if (currentTenant.document) setDocumentNumber(currentTenant.document);
+        if (currentTenant.contactWhatsapp) {
+          setWhatsapp(currentTenant.contactWhatsapp);
+          setOrderWhatsapp(currentTenant.contactWhatsapp);
+        }
+        if (currentTenant.city) setCity(currentTenant.city);
+        if (currentTenant.state) setStateUf(currentTenant.state);
+        if (currentTenant.contactEmail) setEmail(currentTenant.contactEmail);
+      }
+      if (currentBranding) {
+        if (currentBranding.logoText) setStorefrontName(currentBranding.logoText);
+        else if (currentTenant?.name) setStorefrontName(currentTenant.name);
+        if (currentBranding.tagline) setBio(currentBranding.tagline);
+        if (currentBranding.logoUrl) setLogoUrl(currentBranding.logoUrl);
+        if (currentBranding.primaryColor) setPrimaryColor(currentBranding.primaryColor);
+        if (currentBranding.secondaryColor) setSecondaryColor(currentBranding.secondaryColor);
+      }
+      setStep(1);
+    }
+  }, [isOpen, currentTenant, currentBranding]);
 
   // Step 5: Descontos Automáticos de Lançamento (Opcional)
   const [launchDiscountEnabled, setLaunchDiscountEnabled] = useState<boolean>(true);

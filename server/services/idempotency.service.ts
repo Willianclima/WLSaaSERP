@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { query } from "../db/postgres";
+import { TenantContext } from "../db/tenantContext";
 
 export interface IdempotencyRecord {
   id: string;
@@ -56,6 +57,11 @@ export class IdempotencyService {
    * Finds an existing valid idempotency record for the organization.
    */
   static async getRecord(orgId: string, idempotencyKey: string): Promise<IdempotencyRecord | null> {
+    const activeTenant = TenantContext.get()?.tenantId;
+    if (!activeTenant || activeTenant !== orgId) {
+      return TenantContext.run({ tenantId: orgId }, () => this.getRecord(orgId, idempotencyKey));
+    }
+
     try {
       const res = await query(
         "SELECT * FROM idempotency_keys WHERE organization_id = $1 AND idempotency_key = $2 AND expires_at > NOW()",
@@ -98,6 +104,11 @@ export class IdempotencyService {
       userId,
       ttlMinutes = 60,
     } = options;
+
+    const activeTenant = TenantContext.get()?.tenantId;
+    if (organizationId && (!activeTenant || activeTenant !== organizationId)) {
+      return TenantContext.run({ tenantId: organizationId }, () => this.execute(options, operation));
+    }
 
     if (!idempotencyKey) {
       const result = await operation();

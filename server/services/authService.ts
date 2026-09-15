@@ -8,6 +8,8 @@ import {
   planRepo,
   moduleRepo,
 } from "../repositories";
+import { inventoryRepo } from "../modules/inventory/inventory.repository";
+import { TenantContext } from "../db/tenantContext";
 import {
   UserEntity,
   OrganizationEntity,
@@ -91,43 +93,57 @@ export class AuthService {
     };
     await orgRepo.create(organization);
 
-    // 3. Create Owner Membership
-    const membership: OrganizationMemberEntity = {
-      id: `mem-${Date.now()}`,
-      organizationId: organization.id,
-      userId: user.id,
-      role: "OWNER",
-      customPermissions: ["*"],
-      status: "ACTIVE",
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-    };
-    await memberRepo.create(membership);
+    // 3, 4 & 5. Create Owner Membership, Trial Subscription, and Activate Modules within tenant RLS context
+    return await TenantContext.run({ tenantId: organization.id, isSuperAdmin: true }, async () => {
+      const membership: OrganizationMemberEntity = {
+        id: `mem-${Date.now()}`,
+        organizationId: organization.id,
+        userId: user.id,
+        role: "OWNER",
+        customPermissions: ["*"],
+        status: "ACTIVE",
+        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      };
+      await memberRepo.create(membership);
 
-    // 4. Create 30-day Trial Subscription
-    const now = new Date();
-    const trialEnd = new Date(now.getTime() + 30 * 86400000);
-    const subscription: SubscriptionEntity = {
-      id: `sub-${Date.now()}`,
-      organizationId: organization.id,
-      planId: "TRIAL_30D",
-      status: "TRIALING",
-      trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
-      trialEndsAt: trialEnd.toISOString().replace("T", " ").substring(0, 16),
-      currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-      currentPeriodEnd: trialEnd.toISOString().replace("T", " ").substring(0, 16),
-      paymentMethod: "MANUAL_TRIAL",
-      autoRenew: true,
-      createdAt: now.toISOString().replace("T", " ").substring(0, 16),
-      updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
-    };
-    await subRepo.create(subscription);
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + 30 * 86400000);
+      const subscription: SubscriptionEntity = {
+        id: `sub-${Date.now()}`,
+        organizationId: organization.id,
+        planId: "TRIAL_30D",
+        status: "TRIALING",
+        trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
+        trialEndsAt: trialEnd.toISOString().replace("T", " ").substring(0, 16),
+        currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
+        currentPeriodEnd: trialEnd.toISOString().replace("T", " ").substring(0, 16),
+        paymentMethod: "MANUAL_TRIAL",
+        autoRenew: true,
+        createdAt: now.toISOString().replace("T", " ").substring(0, 16),
+        updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+      };
+      await subRepo.create(subscription);
 
-    // 5. Activate All Plan Modules
-    const plan = (await planRepo.findById("TRIAL_30D"))!;
-    await moduleRepo.bulkInitialize(organization.id, plan.allowedModules);
+      const plan = (await planRepo.findById("TRIAL_30D"))!;
+      await moduleRepo.bulkInitialize(organization.id, plan.allowedModules);
 
-    // 6. Return Session Payload
-    return this.buildAuthSession(user, organization, membership, subscription);
+      try {
+        await inventoryRepo.createLocation({
+          id: `loc-hq-${organization.id}`,
+          organizationId: organization.id,
+          name: "Matriz / Showroom Central",
+          type: "HEADQUARTERS",
+          code: "MATRIZ",
+          description: "Estoque principal da matriz",
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (lErr) {
+        console.warn("Location init during registration:", lErr);
+      }
+
+      return this.buildAuthSession(user, organization, membership, subscription);
+    });
   }
 
   /**
@@ -159,8 +175,10 @@ export class AuthService {
       throw new Error("Usuário inativo ou suspenso. Entre em contato com o suporte.");
     }
 
-    // Find memberships
-    const userMemberships = await memberRepo.listByUser(user.id);
+    // Find memberships across organizations with system admin context for auth
+    const userMemberships = await TenantContext.run({ isSuperAdmin: true }, async () => {
+      return await memberRepo.listByUser(user.id);
+    });
     let selectedMembership: OrganizationMemberEntity | undefined;
 
     if (userMemberships.length === 0) {

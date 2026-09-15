@@ -24,6 +24,10 @@ import {
   Building2,
   Bot,
   Lock,
+  Award,
+  ArrowRight,
+  Percent,
+  Briefcase,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 import { mockCurrentUser } from "../data/mockData";
@@ -38,6 +42,7 @@ interface SidebarNavigationProps {
   onOpenNewSale?: () => void;
   onOpenNewProduct?: () => void;
   onOpenShareModal?: () => void;
+  onOpenPlatformConsole?: () => void;
   pendingOrdersCount?: number;
 }
 
@@ -51,6 +56,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   onOpenNewSale,
   onOpenNewProduct,
   onOpenShareModal,
+  onOpenPlatformConsole,
   pendingOrdersCount = 0,
 }) => {
   // Check if current tab is in Vender or Produtos
@@ -98,6 +104,25 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     <aside className="w-64 bg-white border-r border-stone-200/90 flex flex-col justify-between shrink-0 min-h-screen select-none font-sans">
       {/* Scrollable Navigation Area */}
       <div className="flex flex-col flex-1 overflow-y-auto scrollbar-none py-3">
+        {/* ========================================================================= */}
+        {/* PLATFORM OWNER MASTER ENTRY (FOR SUPER_ADMIN / WILLIAN)                  */}
+        {/* ========================================================================= */}
+        {currentUser?.role === "SUPER_ADMIN" && onOpenPlatformConsole && (
+          <div className="px-3 pb-2">
+            <button
+              onClick={onOpenPlatformConsole}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold bg-stone-950 hover:bg-stone-900 text-amber-300 border border-stone-800 transition-all shadow-xs cursor-pointer group"
+              title="Acessar o Produto 2: Central da Plataforma WLSaaSERP"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>Central da Plataforma</span>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        )}
+
         {/* ========================================================================= */}
         {/* HEADER: STORE BRAND & EDIT                                                */}
         {/* ========================================================================= */}
@@ -397,6 +422,82 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                 }`}
               />
               <span>Clientes</span>
+            </button>
+          </div>
+
+          {/* 5. 🤝 REVENDEDORAS */}
+          <div className="pt-1">
+            <button
+              onClick={() => onTabChange("resellers")}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "resellers"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
+              }`}
+            >
+              <Award
+                className={`w-4 h-4 ${
+                  activeTab === "resellers" ? "text-amber-300" : "text-stone-500"
+                }`}
+              />
+              <span>Revendedoras</span>
+            </button>
+          </div>
+
+          {/* 6. 💼 CONSIGNAÇÃO & MALETAS */}
+          <div className="pt-1">
+            <button
+              onClick={() => onTabChange("consignments")}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "consignments"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
+              }`}
+            >
+              <Briefcase
+                className={`w-4 h-4 ${
+                  activeTab === "consignments" ? "text-amber-300" : "text-stone-500"
+                }`}
+              />
+              <span>Consignação (Maletas)</span>
+            </button>
+          </div>
+
+          {/* 7. 📈 COMISSÕES */}
+          <div className="pt-1">
+            <button
+              onClick={() => onTabChange("commissions")}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "commissions"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
+              }`}
+            >
+              <Percent
+                className={`w-4 h-4 ${
+                  activeTab === "commissions" ? "text-amber-300" : "text-stone-500"
+                }`}
+              />
+              <span>Comissões</span>
+            </button>
+          </div>
+
+          {/* 8. 🛡️ GARANTIAS DIGITAIS */}
+          <div className="pt-1">
+            <button
+              onClick={() => onTabChange("warranties")}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "warranties"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
+              }`}
+            >
+              <ShieldCheck
+                className={`w-4 h-4 ${
+                  activeTab === "warranties" ? "text-amber-300" : "text-stone-500"
+                }`}
+              />
+              <span>Garantias</span>
             </button>
           </div>
         </nav>

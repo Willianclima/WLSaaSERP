@@ -234,7 +234,9 @@ router.post("/save", async (req: AuthenticatedRequest, res: Response) => {
         await productRepo.create(newProduct);
 
         // Seed inventory balance for headquarters
-        const locId = "loc-lumina-matriz";
+        const orgLocations = await inventoryRepo.listLocations(org.id);
+        const defaultLoc = orgLocations.find((l) => l.type === "HEADQUARTERS" || l.code === "MATRIZ") || orgLocations[0];
+        const locId = defaultLoc ? defaultLoc.id : "loc-lumina-matriz";
         const balanceKey = `${prodId}:${locId}`;
         const stockQty = Number(item.stock) || 1;
         const balance: InventoryBalanceEntity = {

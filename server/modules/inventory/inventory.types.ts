@@ -38,7 +38,7 @@ export interface InventoryLocationEntity {
   code: string;
   description?: string;
   isActive: boolean;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface InventoryBalanceEntity {
@@ -93,6 +93,7 @@ export interface InventoryStockSummary {
   stockPhysical: number;      // Saldo Físico em Lojas e Depósitos Próprios
   stockConsigned: number;     // Saldo em Maletas de Revendedoras (type === 'RESELLER_BAG')
   stockAvailable: number;     // Disponível para faturamento
+  stockReserved?: number;     // Total reservado / bloqueado
   totalStock: number;         // Saldo Global
   locations: LocationBalanceDetail[];
 }

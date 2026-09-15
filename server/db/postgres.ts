@@ -118,6 +118,9 @@ export async function query<T = any>(text: string, params?: any[]): Promise<pg.Q
       await applyRlsContext(client);
       return await client.query<T>(text, params);
     } finally {
+      try {
+        await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'false', false)");
+      } catch {}
       client.release();
     }
   }
@@ -139,6 +142,9 @@ export async function withTransaction<T>(
     await client.query("ROLLBACK");
     throw error;
   } finally {
+    try {
+      await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'false', false)");
+    } catch {}
     client.release();
   }
 }

@@ -5,6 +5,7 @@ import { inventoryRepo } from "./inventory.repository";
 import { CreateMovementDTO } from "./inventory.types";
 import { auditService } from "../../services/auditService";
 import { InventoryHardeningTestSuite } from "./inventoryHardening.test";
+import { InventoryStressTester } from "./inventoryStressTest";
 
 export class InventoryController {
   /**
@@ -899,6 +900,41 @@ export class InventoryController {
       return res.status(500).json({
         success: false,
         error: error.message || "Erro ao executar suite de testes de concorrência.",
+      });
+    }
+  }
+
+  /**
+   * POST /api/inventory/stress-test/run
+   * Runs the comprehensive high-concurrency stress test suite:
+   * 1. 50 concurrent updates on same product (Lost updates / atomic integrity)
+   * 2. 60 concurrent shoppers competing for 12 items (Overselling / phantom reservations)
+   * 3. 50 concurrent mixed requests cross-tenant (RLS leakage / session isolation)
+   * 4. 25 concurrent native database row locks (SELECT ... FOR UPDATE serialization)
+   */
+  static async runStressTest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const isProduction = process.env.NODE_ENV === "production";
+      const devAllowOverride = req.headers["x-dev-test-runner"] === "enabled" || process.env.ENABLE_DEV_TEST_RUNNER === "true";
+
+      if (isProduction && !devAllowOverride) {
+        return res.status(403).json({
+          success: false,
+          error: "A execução de testes de estresse é restrita a ambientes de desenvolvimento/staging ou requer flag de autorização explícita (x-dev-test-runner: enabled).",
+        });
+      }
+
+      const report = await InventoryStressTester.runFullStressSuite();
+
+      return res.json({
+        success: true,
+        data: report,
+        message: `Teste de estresse concluído: ${report.summary.scenariosPassed}/${report.summary.scenariosRun} cenários aprovados sob ${report.summary.totalConcurrentRequests} requisições simultâneas em ${report.totalDurationMs}ms. Race conditions detectadas: ${report.raceConditionsDetected ? "SIM" : "NENHUMA"}.`,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Erro ao executar teste de estresse de estoque.",
       });
     }
   }

@@ -94,6 +94,8 @@ export interface CreateProductDTO {
   warrantyMonths?: number;
   isCustomizable?: boolean;
   imageUrl?: string;
+  galleryUrls?: string[];
+  media?: any[];
   description?: string;
   status?: ProductStatus;
 }
@@ -112,6 +114,8 @@ export interface UpdateProductDTO {
   warrantyMonths?: number;
   isCustomizable?: boolean;
   imageUrl?: string;
+  galleryUrls?: string[];
+  media?: any[];
   description?: string;
   status?: ProductStatus;
 }

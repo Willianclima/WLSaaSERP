@@ -148,4 +148,11 @@ router.post(
   InventoryController.runHardeningTests
 );
 
+// High-Concurrency Stress Test Runner (RLS & DB Locks Integrity)
+router.post(
+  "/stress-test/run",
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
+  InventoryController.runStressTest
+);
+
 export default router;

@@ -76,16 +76,17 @@ export const OrderCreationModal: React.FC<OrderCreationModalProps> = ({
 
   // Address
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const defaultAddr = selectedCustomer?.addresses?.find((a: any) => a.isDefault) || selectedCustomer?.addresses?.[0] || selectedCustomer?.primaryAddress;
   const [shippingAddress, setShippingAddress] = useState({
-    recipientName: selectedCustomer?.fullName || selectedCustomer?.name || "Cliente Balcão",
-    zipCode: "13480-000",
-    street: "Rua do Comércio",
-    number: "100",
-    complement: "",
-    neighborhood: "Centro",
-    city: "Limeira",
-    state: "SP",
-    country: "BRA",
+    recipientName: selectedCustomer?.fullName || selectedCustomer?.tradeName || selectedCustomer?.name || "Cliente Balcão",
+    zipCode: defaultAddr?.zipCode || "",
+    street: defaultAddr?.street || "",
+    number: defaultAddr?.number || "",
+    complement: defaultAddr?.complement || "",
+    neighborhood: defaultAddr?.neighborhood || "",
+    city: defaultAddr?.city || "",
+    state: defaultAddr?.state || "",
+    country: defaultAddr?.country || "BRA",
   });
 
   const [notes, setNotes] = useState("");
@@ -111,10 +112,18 @@ export const OrderCreationModal: React.FC<OrderCreationModalProps> = ({
     setSelectedCustomerId(id);
     const c = customers.find((cust) => cust.id === id);
     if (c) {
-      setShippingAddress((prev) => ({
-        ...prev,
-        recipientName: c.fullName || c.name || "Cliente",
-      }));
+      const addr = c.addresses?.find((a: any) => a.isDefault) || c.addresses?.[0] || c.primaryAddress;
+      setShippingAddress({
+        recipientName: c.fullName || c.tradeName || c.name || "Cliente",
+        zipCode: addr?.zipCode || "",
+        street: addr?.street || "",
+        number: addr?.number || "",
+        complement: addr?.complement || "",
+        neighborhood: addr?.neighborhood || "",
+        city: addr?.city || "",
+        state: addr?.state || "",
+        country: addr?.country || "BRA",
+      });
     }
   };
 

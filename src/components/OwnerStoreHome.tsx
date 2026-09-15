@@ -30,6 +30,7 @@ import {
   Customer,
   DigitalWarranty,
   StoreBrandingConfig,
+  RBACUser,
 } from "../types";
 
 interface OwnerStoreHomeProps {
@@ -39,6 +40,7 @@ interface OwnerStoreHomeProps {
   orders: UnifiedOrder[];
   customers: Customer[];
   warranties: DigitalWarranty[];
+  currentUser?: RBACUser;
   trialDaysRemaining?: number;
   onNavigateTab: (tab: string) => void;
   onOpenNewSale: () => void;
@@ -55,6 +57,7 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
   orders,
   customers,
   warranties,
+  currentUser,
   onNavigateTab,
   onOpenNewSale,
   onOpenNewProduct,
@@ -78,7 +81,7 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
   const greeting =
     currentHour < 12 ? "Bom dia" : currentHour < 18 ? "Boa tarde" : "Boa noite";
   
-  const ownerName = "Maria";
+  const ownerName = currentUser?.name ? currentUser.name.split(" ")[0] : "Willian";
 
   const formattedDate = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",

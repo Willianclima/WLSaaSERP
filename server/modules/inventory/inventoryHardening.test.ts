@@ -5,6 +5,7 @@ import { dbStore } from "../../db/store";
 import { IdempotencyService } from "../../services/idempotency.service";
 import { query } from "../../db/postgres";
 import { OrderService } from "../orders/order.service";
+import { TenantContext } from "../../db/tenantContext";
 
 export interface TestResultItem {
   testName: string;
@@ -34,7 +35,29 @@ export class InventoryHardeningTestSuite {
     const orgId = this.TEST_ORG;
     await this.teardownTestEnvironment();
 
-    // Seed test location A
+    // Ensure sandbox tenant and locations exist in PostgreSQL under super admin privileges
+    await TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      try {
+        await query(
+          `INSERT INTO organizations (id, name, slug, document, contact_email, contact_whatsapp, status, created_at, updated_at)
+           VALUES ($1, 'Sandbox Org Hardening', 'sandbox-org-hardening', '00000000000199', 'sandbox@aura.test', '11999999999', 'ACTIVE', NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [orgId]
+        );
+        await query(
+          `INSERT INTO inventory_locations (id, organization_id, name, code, type, is_active, created_at)
+           VALUES 
+             ($1, $2, 'Armazém Sandbox de Teste A', 'TEST-SANDBOX-A', 'WAREHOUSE', TRUE, NOW()),
+             ($3, $2, 'Armazém Sandbox de Teste B', 'TEST-SANDBOX-B', 'PHYSICAL_STORE', TRUE, NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [this.TEST_LOC_A, orgId, this.TEST_LOC_B]
+        );
+      } catch (err: any) {
+        console.warn("[setupTestEnvironment] Aviso ao criar fixtures em PG:", err.message);
+      }
+    });
+
+    // Seed test location A in memory
     dbStore.inventoryLocations.set(this.TEST_LOC_A, {
       id: this.TEST_LOC_A,
       organizationId: orgId,
@@ -45,7 +68,7 @@ export class InventoryHardeningTestSuite {
       createdAt: new Date().toISOString(),
     });
 
-    // Seed test location B
+    // Seed test location B in memory
     dbStore.inventoryLocations.set(this.TEST_LOC_B, {
       id: this.TEST_LOC_B,
       organizationId: orgId,
@@ -62,21 +85,48 @@ export class InventoryHardeningTestSuite {
    */
   private static async teardownTestEnvironment() {
     const orgId = this.TEST_ORG;
-    // Remove balances
+    // Remove in-memory balances
     for (const [key, bal] of dbStore.inventoryBalances.entries()) {
       if (bal.organizationId === orgId) {
         dbStore.inventoryBalances.delete(key);
       }
     }
-    // Remove reservations
+    // Remove in-memory reservations
     for (const [key, res] of dbStore.inventoryReservations.entries()) {
       if (res.organizationId === orgId) {
         dbStore.inventoryReservations.delete(key);
       }
     }
-    // Remove locations
+    // Remove in-memory locations
     dbStore.inventoryLocations.delete(this.TEST_LOC_A);
     dbStore.inventoryLocations.delete(this.TEST_LOC_B);
+
+    // Clean up PostgreSQL fixtures
+    await TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      try {
+        await query("DELETE FROM order_items WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM orders WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM inventory_reservations WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM inventory_movements WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM inventory_balances WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM inventory_locations WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM idempotency_keys WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM products WHERE organization_id = $1", [orgId]);
+        await query("DELETE FROM organizations WHERE id = $1", [orgId]);
+      } catch (err: any) {
+        // Cleanup ignore
+      }
+    });
+  }
+
+  private static async ensureTestProduct(orgId: string, productId: string, name = "Produto Teste Hardening"): Promise<void> {
+    await query(
+      `INSERT INTO products (
+        id, organization_id, sku, name, category, bath, price, cost_price, status, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, 'ANEIS', 'OURO_18K', 100.0, 30.0, 'ATIVO', NOW(), NOW())
+      ON CONFLICT (id) DO NOTHING`,
+      [productId, orgId, `SKU-${productId}`, name]
+    );
   }
 
   /**
@@ -90,6 +140,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial balance: 1 unit on hand
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 1);
 
@@ -159,6 +210,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // Initial balance: 4 units on hand
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 4);
 
@@ -220,6 +272,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial balance: 10 on hand
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 10);
 
@@ -291,6 +344,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial on hand: 5 units
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 5);
 
@@ -354,6 +408,7 @@ export class InventoryHardeningTestSuite {
     const productId = `prod-deadlock-${Date.now()}`;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial balances: 10 at Loc A, 10 at Loc B
       await inventoryRepo.adjustOnHand(orgId, productId, this.TEST_LOC_A, 10);
       await inventoryRepo.adjustOnHand(orgId, productId, this.TEST_LOC_B, 10);
@@ -498,6 +553,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial balance: 20 units on hand
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 20);
 
@@ -608,6 +664,7 @@ export class InventoryHardeningTestSuite {
     const locationId = this.TEST_LOC_A;
 
     try {
+      await this.ensureTestProduct(orgId, productId);
       // 1. Initial balance: 50 units on hand
       await inventoryRepo.adjustOnHand(orgId, productId, locationId, 50);
 
@@ -852,15 +909,17 @@ export class InventoryHardeningTestSuite {
         details: `Erro durante execução do teste de lock no PostgreSQL: ${err.message}`,
       };
     } finally {
-      try {
-        await query("DELETE FROM order_items WHERE product_id = $1", [testProductId]);
-        await query("DELETE FROM inventory_reservations WHERE product_id = $1", [testProductId]);
-        await query("DELETE FROM inventory_movements WHERE product_id = $1", [testProductId]);
-        await query("DELETE FROM inventory_balances WHERE product_id = $1", [testProductId]);
-        await query("DELETE FROM products WHERE id = $1", [testProductId]);
-      } catch {
-        // cleanup ignore
-      }
+      await TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+        try {
+          await query("DELETE FROM order_items WHERE product_id = $1", [testProductId]);
+          await query("DELETE FROM inventory_reservations WHERE product_id = $1", [testProductId]);
+          await query("DELETE FROM inventory_movements WHERE product_id = $1", [testProductId]);
+          await query("DELETE FROM inventory_balances WHERE product_id = $1", [testProductId]);
+          await query("DELETE FROM products WHERE id = $1", [testProductId]);
+        } catch {
+          // cleanup ignore
+        }
+      });
     }
   }
 
@@ -874,15 +933,15 @@ export class InventoryHardeningTestSuite {
     const results: TestResultItem[] = [];
 
     try {
-      results.push(await this.testTwoUsersOneItem());
-      results.push(await this.testTenConcurrentReservations());
-      results.push(await this.testReservationExpirationRace());
-      results.push(await this.testSimultaneousCancelAndPayment());
-      results.push(await this.testDeadlockSimulation());
-      results.push(await this.testIdempotencyValidation());
-      results.push(await this.testReservationFullLifecycle());
-      results.push(await this.testBackgroundWorkerExpiryAndReconciliation());
-      results.push(await this.testPostgresForUpdateLocking());
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testTwoUsersOneItem()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testTenConcurrentReservations()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testReservationExpirationRace()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testSimultaneousCancelAndPayment()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testDeadlockSimulation()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testIdempotencyValidation()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testReservationFullLifecycle()));
+      results.push(await TenantContext.run({ tenantId: this.TEST_ORG }, () => this.testBackgroundWorkerExpiryAndReconciliation()));
+      results.push(await TenantContext.run({ tenantId: "org-lumina-01" }, () => this.testPostgresForUpdateLocking()));
     } finally {
       await this.teardownTestEnvironment();
     }

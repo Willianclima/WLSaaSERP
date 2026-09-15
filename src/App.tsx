@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { SidebarNavigation } from "./components/SidebarNavigation";
 import { WireframeProductsCatalog } from "./components/WireframeProductsCatalog";
 import { HeaderNavbar } from "./components/HeaderNavbar";
@@ -27,6 +27,8 @@ import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { MyStoreShowcase } from "./components/MyStoreShowcase";
+import { PlatformMasterConsole } from "./components/platform/PlatformMasterConsole";
+import { PlatformHeader, ProductMode } from "./components/platform/PlatformHeader";
 import { apiClient } from "./services/apiClient";
 import { toast } from "./utils/toast";
 
@@ -67,8 +69,36 @@ import {
 } from "./types";
 import confetti from "canvas-confetti";
 
+function detectInitialRoute(): { tab: string; slug?: string } {
+  if (typeof window === "undefined") return { tab: "ownerHome" };
+  const path = window.location.pathname;
+  const search = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+
+  if (path.startsWith("/loja/")) {
+    const slug = path.replace(/^\/loja\/?/, "").split("/")[0].split("?")[0];
+    return { tab: "storefront", slug: slug || undefined };
+  }
+
+  const queryLoja = search.get("loja");
+  if (queryLoja) {
+    return { tab: "storefront", slug: queryLoja };
+  }
+
+  if (hash === "#storefront" || hash === "#catalogo" || hash === "#loja") {
+    return { tab: "storefront" };
+  }
+
+  return { tab: "ownerHome" };
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>("ownerHome");
+  const initialRoute = useMemo(() => detectInitialRoute(), []);
+  const [activeTab, setActiveTab] = useState<string>(initialRoute.tab);
+  const [productMode, setProductMode] = useState<ProductMode>(() => {
+    if (initialRoute.tab === "storefront") return "TENANT_STORE";
+    return "PLATFORM_OWNER";
+  });
   const [storefrontCategory, setStorefrontCategory] = useState<string>("TODOS");
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
   const [brandingConfig, setBrandingConfig] = useState<StoreBrandingConfig>(() => {
@@ -304,6 +334,41 @@ export default function App() {
     checkOnboardingStatus();
   }, [selectedTenant.id]);
 
+  React.useEffect(() => {
+    if (activeTab === "storefront") {
+      const slug = initialRoute.slug || selectedTenant.slug || "lumina";
+      fetch(`/api/products/public?storeSlug=${encodeURIComponent(slug)}`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+            setProducts(res.data);
+          }
+          if (res.organization) {
+            const org = res.organization;
+            setSelectedTenant((prev) => ({
+              ...prev,
+              id: org.id || prev.id,
+              name: org.name || prev.name,
+              slug: org.slug || prev.slug,
+              contactWhatsapp: org.contactWhatsapp || prev.contactWhatsapp,
+              contactEmail: org.contactEmail || prev.contactEmail,
+              city: org.city || prev.city,
+              state: org.state || prev.state,
+              logo: org.logoUrl || prev.logo,
+            }));
+            setBrandingConfig((prev) => ({
+              ...prev,
+              logoText: org.name || prev.logoText,
+              logoUrl: org.logoUrl || prev.logoUrl,
+              contactWhatsapp: org.contactWhatsapp || prev.contactWhatsapp,
+              contactEmail: org.contactEmail || prev.contactEmail,
+            }));
+          }
+        })
+        .catch((e) => console.warn("Could not load public storefront:", e));
+    }
+  }, [activeTab, selectedTenant.slug]);
+
   const handleUpdateBranding = (newBranding: StoreBrandingConfig) => {
     setBrandingConfig(newBranding);
     try {
@@ -338,6 +403,8 @@ export default function App() {
           warrantyMonths: newProd.warrantyMonths,
           isCustomizable: newProd.isCustomizable,
           imageUrl: newProd.imageUrl,
+          galleryUrls: newProd.galleryUrls,
+          media: newProd.media,
           description: newProd.description,
           status: newProd.status,
         }),
@@ -963,7 +1030,7 @@ export default function App() {
         unitPrice: item.unitPrice,
         discountAmount: item.discountAmount || 0,
         customizationSpec: item.customizationSpec,
-        locationId: item.locationId || "loc-lumina-matriz",
+        locationId: item.locationId || undefined,
       })),
       payments: orderData.payments || [
         {
@@ -1012,7 +1079,7 @@ export default function App() {
 
   // Place Buyer Order from Storefront (True Transactional Flow)
   const handlePlaceBuyerOrder = async (newOrder: any) => {
-    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+    const tenantId = selectedTenant.id || "org-lumina-01";
 
     try {
       // 1. Transactional call to backend FIRST - Wait for confirmed success
@@ -1403,13 +1470,31 @@ export default function App() {
               p.id === item.productId || p.sku === item.sku
                 ? {
                     ...p,
+                    stockReserved: Math.max(0, (p.stockReserved || 0) - qty),
                     stockPhysical: Math.max(0, p.stockPhysical - qty),
-                    stockAvailable: Math.max(0, p.stockAvailable - qty),
-                    availableStock: Math.max(0, (p.availableStock ?? p.currentStock ?? 1) - qty),
+                    stockAvailable: Math.max(0, p.stockPhysical - qty - Math.max(0, (p.stockReserved || 0) - qty)),
+                    availableStock: Math.max(0, p.stockPhysical - qty - Math.max(0, (p.stockReserved || 0) - qty)),
                   }
                 : p
             )
           );
+
+          const itemSku = item.productSnapshot?.sku || item.sku || "SKU-N/A";
+          const itemName = item.productSnapshot?.name || item.productName || "Produto Semijoia";
+          const ledgerEntry: InventoryLedgerEntry = {
+            id: `led-${Date.now()}-${item.productId}`,
+            productId: item.productId,
+            sku: itemSku,
+            productName: itemName,
+            type: "SAIDA_VENDA",
+            qtyChange: -qty,
+            physicalBalanceAfter: 0,
+            consignedBalanceAfter: 0,
+            timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+            operator: currentUser?.name || "Vendedora Matriz",
+            reason: `Venda confirmada pedido ${targetOrder.orderNumber} (Baixa definitiva no Ledger)`,
+          };
+          setLedger((prev) => [ledgerEntry, ...prev]);
         });
       }
 
@@ -1554,6 +1639,7 @@ export default function App() {
                 orders={orders}
                 customers={customers}
                 warranties={warranties}
+                currentUser={currentUser}
                 onNavigateTab={setActiveTab}
                 onOpenNewSale={() => setActiveTab("vender")}
                 onOpenNewProduct={() => setShowQuickProductModal(true)}

@@ -206,6 +206,7 @@ export interface InventoryLedgerEntry {
     | "RETORNO_CONSIGNACAO"
     | "VENDA_DIRETA"
     | "VENDA_REVENDEDORA"
+    | "SAIDA_VENDA"
     | "AJUSTE_INVENTARIO"
     | "REVERSAO_ESTORNO";
   qtyChange: number;

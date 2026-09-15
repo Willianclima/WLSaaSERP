@@ -122,8 +122,9 @@ export class StorageService {
     buffer: Buffer,
     originalFilename: string,
     mimeType: string,
-    options: UploadOptions
+    options: UploadOptions | string
   ): Promise<StorageUploadResult> {
+    const opts: UploadOptions = typeof options === "string" ? { organizationId: options } : options;
     const validation = this.validateMimeType(mimeType);
     if (!validation.valid) {
       throw new Error(validation.error);
@@ -138,7 +139,7 @@ export class StorageService {
       throw new Error(`Vídeo excede o limite máximo permitido de 50MB (${(buffer.length / 1024 / 1024).toFixed(1)}MB).`);
     }
 
-    const storageKey = this.generateStorageKey(options, originalFilename);
+    const storageKey = this.generateStorageKey(opts, originalFilename);
     const etag = crypto.createHash("md5").update(buffer).digest("hex");
     const fileSizeBytes = buffer.length;
 
@@ -193,8 +194,9 @@ export class StorageService {
     base64DataOrDataUri: string,
     originalFilename: string,
     mimeType: string,
-    options: UploadOptions
+    options: UploadOptions | string
   ): Promise<StorageUploadResult> {
+    const opts: UploadOptions = typeof options === "string" ? { organizationId: options } : options;
     let cleanBase64 = base64DataOrDataUri;
     let detectedMime = mimeType;
 
@@ -208,7 +210,7 @@ export class StorageService {
     }
 
     const buffer = Buffer.from(cleanBase64, "base64");
-    return await this.uploadBuffer(buffer, originalFilename, detectedMime || "image/webp", options);
+    return await this.uploadBuffer(buffer, originalFilename, detectedMime || "image/webp", opts);
   }
 
   /**

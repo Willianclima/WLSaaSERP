@@ -1,5 +1,7 @@
 import { productRepo } from "./product.repository";
 import { InventoryService } from "../inventory/inventory.service";
+import { orgRepo } from "../../repositories";
+import { TenantContext } from "../../db/tenantContext";
 import {
   CreateProductDTO,
   UpdateProductDTO,
@@ -58,6 +60,46 @@ export class ProductService {
 
     const created = await productRepo.create(entity);
 
+    // Persist media items in product_media table
+    if (Array.isArray(dto.media) && dto.media.length > 0) {
+      for (let i = 0; i < dto.media.length; i++) {
+        const m = dto.media[i];
+        if (m.url) {
+          try {
+            await productRepo.addMedia(orgId, created.id, {
+              storageKey: m.storage_key || m.storageKey || `${orgId}/products/${created.id}/${Date.now()}_${i}.webp`,
+              url: m.url,
+              cdnUrl: m.cdnUrl || m.url,
+              mediaType: m.type || m.mediaType || "IMAGE",
+              mimeType: m.mime_type || m.mimeType || "image/webp",
+              fileSizeBytes: m.file_size_bytes || m.fileSizeBytes || 0,
+              isPrimary: m.is_primary !== undefined ? Boolean(m.is_primary) : (i === 0),
+              sortOrder: m.sort_order !== undefined ? Number(m.sort_order) : i,
+              title: m.title || created.name,
+              altText: m.alt_text || m.altText || created.name,
+            });
+          } catch (mErr) {
+            console.warn("Error adding initial media:", mErr);
+          }
+        }
+      }
+    } else if (dto.imageUrl) {
+      try {
+        await productRepo.addMedia(orgId, created.id, {
+          storageKey: `${orgId}/products/${created.id}/main.webp`,
+          url: dto.imageUrl,
+          cdnUrl: dto.imageUrl,
+          mediaType: "IMAGE",
+          isPrimary: true,
+          sortOrder: 0,
+          title: created.name,
+          altText: created.name,
+        });
+      } catch (mErr) {
+        console.warn("Error adding default media:", mErr);
+      }
+    }
+
     // 2. If Initial Stock > 0, record in Inventory Ledger
     const initialQty = Number(dto.initialStock) || 0;
     if (initialQty > 0) {
@@ -72,10 +114,13 @@ export class ProductService {
       });
     }
 
+    // Retrieve fresh product entity with its media populated
+    const rehydrated = await productRepo.findById(orgId, created.id);
+    const productData = rehydrated || created;
     const stock = await InventoryService.getProductStock(orgId, created.id);
 
     return {
-      ...created,
+      ...productData,
       stockPhysical: stock.stockPhysical,
       stockConsigned: stock.stockConsigned,
       stockAvailable: stock.stockAvailable,
@@ -156,10 +201,42 @@ export class ProductService {
     }
 
     const updated = await productRepo.update(orgId, id, dto);
+
+    // Sync media if provided
+    if (Array.isArray(dto.media)) {
+      try {
+        const existingMedia = await productRepo.listMediaByProduct(orgId, id);
+        for (const em of existingMedia) {
+          await productRepo.deleteMedia(orgId, id, em.id);
+        }
+        for (let i = 0; i < dto.media.length; i++) {
+          const m = dto.media[i];
+          if (m.url) {
+            await productRepo.addMedia(orgId, id, {
+              storageKey: m.storage_key || m.storageKey || `${orgId}/products/${id}/${Date.now()}_${i}.webp`,
+              url: m.url,
+              cdnUrl: m.cdnUrl || m.url,
+              mediaType: m.type || m.mediaType || "IMAGE",
+              mimeType: m.mime_type || m.mimeType || "image/webp",
+              fileSizeBytes: m.file_size_bytes || m.fileSizeBytes || 0,
+              isPrimary: m.is_primary !== undefined ? Boolean(m.is_primary) : (i === 0),
+              sortOrder: m.sort_order !== undefined ? Number(m.sort_order) : i,
+              title: m.title || updated.name,
+              altText: m.alt_text || m.altText || updated.name,
+            });
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Error syncing media on updateProduct:", syncErr);
+      }
+    }
+
+    const rehydrated = await productRepo.findById(orgId, id);
+    const productData = rehydrated || updated;
     const stock = await InventoryService.getProductStock(orgId, updated.id);
 
     return {
-      ...updated,
+      ...productData,
       stockPhysical: stock.stockPhysical,
       stockConsigned: stock.stockConsigned,
       stockAvailable: stock.stockAvailable,
@@ -215,5 +292,49 @@ export class ProductService {
 
   static async reorderProductMedia(orgId: string, productId: string, orderedMediaIds: string[]) {
     return await productRepo.reorderMedia(orgId, productId, orderedMediaIds);
+  }
+
+  /**
+   * Lists products for the public storefront by store slug or organization ID.
+   * Completely unauthenticated / public access for buyers.
+   */
+  static async listPublicProducts(storeSlugOrOrgId: string, filter?: ProductFilterQuery) {
+    let org = await orgRepo.findById(storeSlugOrOrgId);
+    if (!org) {
+      org = await orgRepo.findBySlug(storeSlugOrOrgId);
+    }
+    if (!org) {
+      const all = await orgRepo.listAll();
+      org = all[0] || null;
+    }
+    if (!org) {
+      throw new Error(`Loja / Catálogo "${storeSlugOrOrgId}" não encontrado.`);
+    }
+
+    const effectiveFilter: ProductFilterQuery = {
+      ...filter,
+      status: "ACTIVE",
+    };
+
+    const result = await TenantContext.run(
+      { tenantId: org.id, isPublicStorefront: true },
+      async () => await ProductService.listProducts(org!.id, effectiveFilter)
+    );
+
+    return {
+      products: result.products,
+      total: result.total,
+      organization: {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        segment: org.segment,
+        contactWhatsapp: org.contactWhatsapp,
+        contactEmail: org.contactEmail,
+        city: org.city,
+        state: org.state,
+        logoUrl: org.logoUrl,
+      },
+    };
   }
 }

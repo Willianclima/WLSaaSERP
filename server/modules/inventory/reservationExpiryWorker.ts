@@ -3,6 +3,7 @@ import { inventoryRepo } from "./inventory.repository";
 import { InventoryConcurrencyService } from "./inventoryConcurrency.service";
 import { auditService } from "../../services/auditService";
 import { InventoryReservationEntity } from "./inventory.types";
+import { TenantContext } from "../../db/tenantContext";
 
 export interface ReservationExpiryWorkerConfig {
   /** Polling interval in milliseconds (default: 30000ms = 30s) */
@@ -223,30 +224,32 @@ export class ReservationExpiryWorker {
       // 2. Itera por organização processando reservas expiradas sob lock
       for (const orgId of orgIds) {
         try {
-          const expiredInOrg = await this.processExpiredReservationsForOrg(orgId, now);
-          for (const exp of expiredInOrg) {
-            expiredList.push({
-              id: exp.id,
-              organizationId: exp.organizationId,
-              productId: exp.productId,
-              locationId: exp.locationId,
-              quantity: exp.quantity,
-              referenceType: exp.referenceType,
-              referenceId: exp.referenceId,
-              expiredAt: new Date().toISOString(),
-            });
-          }
+          await TenantContext.run({ tenantId: orgId }, async () => {
+            const expiredInOrg = await this.processExpiredReservationsForOrg(orgId, now);
+            for (const exp of expiredInOrg) {
+              expiredList.push({
+                id: exp.id,
+                organizationId: exp.organizationId,
+                productId: exp.productId,
+                locationId: exp.locationId,
+                quantity: exp.quantity,
+                referenceType: exp.referenceType,
+                referenceId: exp.referenceId,
+                expiredAt: new Date().toISOString(),
+              });
+            }
 
-          // 3. Trigger Stock Reconciliation
-          if (this.config.autoReconcile) {
-            // Se houve reservas expiradas, reconcilia os produtos/locais afetados ou todos da organização
-            const affectedProductIds = new Set<string>(expiredInOrg.map((r) => r.productId));
-            const orgReconcileResults = await this.reconcileOrgReservationsAndBalances(
-              orgId,
-              affectedProductIds.size > 0 ? Array.from(affectedProductIds) : undefined
-            );
-            reconciliationsList.push(...orgReconcileResults);
-          }
+            // 3. Trigger Stock Reconciliation
+            if (this.config.autoReconcile) {
+              // Se houve reservas expiradas, reconcilia os produtos/locais afetados ou todos da organização
+              const affectedProductIds = new Set<string>(expiredInOrg.map((r) => r.productId));
+              const orgReconcileResults = await this.reconcileOrgReservationsAndBalances(
+                orgId,
+                affectedProductIds.size > 0 ? Array.from(affectedProductIds) : undefined
+              );
+              reconciliationsList.push(...orgReconcileResults);
+            }
+          });
         } catch (orgErr: any) {
           const msg = `Falha ao processar organização #${orgId}: ${orgErr.message}`;
           console.error(`[ReservationExpiryWorker] ${msg}`, orgErr);

@@ -256,6 +256,7 @@ export interface CreateOrderItemDTO {
   unitPrice?: number; // Se omitido, pega o preço do catálogo vigente
   discountAmount?: number;
   customizationSpec?: CustomJewelryOrderSpec;
+  productSnapshot?: Partial<ProductSnapshot>;
 }
 
 export interface CreateOrderPaymentDTO {
@@ -268,9 +269,18 @@ export interface CreateOrderPaymentDTO {
 }
 
 export interface CreateOrderDTO {
-  customerId: string;
+  customerId?: string;
+  customer?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    document?: string;
+    personType?: "PF" | "PJ";
+  };
   customerSnapshot?: Partial<OrderCustomerSnapshot>;
   channel: OrderChannel;
+  status?: OrderStatus;
+  initialStatus?: OrderStatus;
   items: CreateOrderItemDTO[];
   payments?: CreateOrderPaymentDTO[];
   shippingAddress?: Partial<OrderShippingAddress>;
@@ -278,10 +288,10 @@ export interface CreateOrderDTO {
   shippingAmount?: number;
   resellerId?: string;
   resellerCommissionRate?: number;
+  warrantyCode?: string;
   externalReference?: string;
   metadata?: Record<string, any>;
   notes?: string;
-  initialStatus?: OrderStatus;
   idempotencyKey?: string;
   createdBy?: string;
 }
