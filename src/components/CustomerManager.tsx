@@ -626,13 +626,13 @@ export const CustomerManager: React.FC<CustomerManagerProps> = ({
               </div>
               <div>
                 <h2 className="text-xl font-serif font-bold text-stone-900 flex items-center gap-2">
-                  Gestão Unificada de Clientes
+                  4. Clientes e CRM
                   <span className="text-xs font-sans font-semibold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 border border-stone-200">
-                    Sprint 3 Foundation
+                    Núcleo Central
                   </span>
                 </h2>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  Base cadastral multi-tenant com suporte nativo a Pessoa Física (CPF) e Pessoa Jurídica (CNPJ/IE).
+                  Cadastro unificado de clientes com histórico de compras, relacionamento e segmentação progressiva.
                 </p>
               </div>
             </div>
@@ -778,18 +778,21 @@ export const CustomerManager: React.FC<CustomerManagerProps> = ({
             </button>
           </div>
 
-          {/* Tier Filter */}
-          <select
-            value={tierFilter}
-            onChange={(e) => setTierFilter(e.target.value as any)}
-            className="text-xs font-medium px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-stone-700 focus:outline-none focus:ring-1 focus:ring-amber-500"
-          >
-            <option value="ALL">Todos os Tiers</option>
-            <option value="VIP">⭐ VIP</option>
-            <option value="WHOLESALE">📦 Atacado</option>
-            <option value="RESELLER">💎 Revenda</option>
-            <option value="STANDARD">Padrão</option>
-          </select>
+          {/* Tier / Segmentação Filter */}
+          <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2 py-1 rounded-xl">
+            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Segmentação:</span>
+            <select
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as any)}
+              className="text-xs font-semibold bg-transparent text-stone-700 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">Todos os Clientes</option>
+              <option value="STANDARD">Consumidor Padrão</option>
+              <option value="VIP">⭐ VIP (Alta Recorrência)</option>
+              <option value="WHOLESALE">🏢 PJ / Atacado</option>
+              <option value="RESELLER">💎 Revenda / Parceira</option>
+            </select>
+          </div>
 
           {/* Status Filter */}
           <select

@@ -33,6 +33,16 @@ import {
   Sliders,
   Check,
   Zap,
+  ShoppingBag,
+  Store,
+  FileWarning,
+  Flame,
+  Globe2,
+  Bell,
+  HardDrive,
+  ShieldAlert,
+  KeyRound,
+  UserCheck,
 } from "lucide-react";
 import { TenantStore, RBACUser } from "../../types";
 
@@ -80,7 +90,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
     if (onSelectSubTab) onSelectSubTab(tab);
   };
 
-  // Mock organizations state with rich metrics
+  // Mock organizations state with rich metrics matching exact command center numbers
   const [orgList, setOrgList] = useState([
     {
       id: "tenant-lumina",
@@ -94,7 +104,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       state: "SP",
       plan: "ENTERPRISE",
       mrr: 599.0,
-      status: "ACTIVE",
+      status: "ACTIVE", // 1. Subscription
       joinedAt: "2026-01-15",
       trialDaysLeft: 0,
       activeProducts: 142,
@@ -122,7 +132,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       state: "MG",
       plan: "PRO",
       mrr: 299.0,
-      status: "ACTIVE",
+      status: "ACTIVE", // 2. Subscription
       joinedAt: "2026-03-10",
       trialDaysLeft: 0,
       activeProducts: 85,
@@ -139,34 +149,6 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       },
     },
     {
-      id: "tenant-bella",
-      name: "Bella Joias Contemporâneas",
-      slug: "bella-joias",
-      document: "19.840.111/0001-50",
-      ownerName: "Juliana Mendes",
-      ownerEmail: "juliana@bellajoias.com.br",
-      ownerPhone: "(41) 98765-4321",
-      city: "Curitiba",
-      state: "PR",
-      plan: "STARTER",
-      mrr: 149.0,
-      status: "TRIAL",
-      joinedAt: "2026-08-28",
-      trialDaysLeft: 18,
-      activeProducts: 28,
-      activeOrdersMonth: 45,
-      gmvMonth: 12400.0,
-      storageMb: 140,
-      modules: {
-        consignments: false,
-        aiCopilot: false,
-        digitalWarranty: true,
-        laserCustom: false,
-        multiUser: false,
-        webhooksErp: false,
-      },
-    },
-    {
       id: "tenant-doro",
       name: "Ateliê & Joalheria D'Oro",
       slug: "atelie-doro",
@@ -178,7 +160,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       state: "MG",
       plan: "PRO",
       mrr: 299.0,
-      status: "ACTIVE",
+      status: "ACTIVE", // 3. Subscription
       joinedAt: "2026-05-14",
       trialDaysLeft: 0,
       activeProducts: 94,
@@ -206,13 +188,237 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       state: "SP",
       plan: "STARTER",
       mrr: 149.0,
-      status: "ACTIVE",
+      status: "ACTIVE", // 4. Subscription
       joinedAt: "2026-06-01",
       trialDaysLeft: 0,
       activeProducts: 42,
       activeOrdersMonth: 78,
       gmvMonth: 21800.0,
       storageMb: 210,
+      modules: {
+        consignments: false,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-perola-rara",
+      name: "Pérola Rara Joias Nobres",
+      slug: "perola-rara",
+      document: "22.345.678/0001-90",
+      ownerName: "Mariana Siqueira",
+      ownerEmail: "mariana@perolarara.com.br",
+      ownerPhone: "(11) 97722-3344",
+      city: "São Paulo",
+      state: "SP",
+      plan: "PRO",
+      mrr: 299.0,
+      status: "ACTIVE", // 5. Subscription
+      joinedAt: "2026-06-15",
+      trialDaysLeft: 0,
+      activeProducts: 68,
+      activeOrdersMonth: 110,
+      gmvMonth: 31200.0,
+      storageMb: 380,
+      modules: {
+        consignments: true,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: true,
+        multiUser: true,
+        webhooksErp: true,
+      },
+    },
+    {
+      id: "tenant-bella",
+      name: "Bella Joias Contemporâneas",
+      slug: "bella-joias",
+      document: "19.840.111/0001-50",
+      ownerName: "Juliana Mendes",
+      ownerEmail: "juliana@bellajoias.com.br",
+      ownerPhone: "(41) 98765-4321",
+      city: "Curitiba",
+      state: "PR",
+      plan: "STARTER",
+      mrr: 0.0,
+      status: "TRIAL", // 1. Trial
+      joinedAt: "2026-08-28",
+      trialDaysLeft: 18,
+      activeProducts: 28,
+      activeOrdersMonth: 45,
+      gmvMonth: 12400.0,
+      storageMb: 140,
+      modules: {
+        consignments: false,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-ouro-nobre",
+      name: "Ouro Nobre Semijoias",
+      slug: "ouro-nobre",
+      document: "28.192.334/0001-44",
+      ownerName: "Gabriel Peixoto",
+      ownerEmail: "gabriel@ouronobre.com.br",
+      ownerPhone: "(21) 98112-9900",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      plan: "PRO",
+      mrr: 0.0,
+      status: "TRIAL", // 2. Trial
+      joinedAt: "2026-09-02",
+      trialDaysLeft: 14,
+      activeProducts: 36,
+      activeOrdersMonth: 52,
+      gmvMonth: 15400.0,
+      storageMb: 180,
+      modules: {
+        consignments: true,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-rubi-design",
+      name: "Rubi Design & Cravação",
+      slug: "rubi-design",
+      document: "30.481.559/0001-22",
+      ownerName: "Patricia Prado",
+      ownerEmail: "patricia@rubidesign.com.br",
+      ownerPhone: "(71) 99401-2233",
+      city: "Salvador",
+      state: "BA",
+      plan: "STARTER",
+      mrr: 0.0,
+      status: "TRIAL", // 3. Trial
+      joinedAt: "2026-09-05",
+      trialDaysLeft: 17,
+      activeProducts: 24,
+      activeOrdersMonth: 31,
+      gmvMonth: 9800.0,
+      storageMb: 110,
+      modules: {
+        consignments: false,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-cristal-lux",
+      name: "Cristal Lux Acessórios",
+      slug: "cristal-lux",
+      document: "31.992.812/0001-08",
+      ownerName: "Tatiane Duarte",
+      ownerEmail: "tatiane@cristallux.com.br",
+      ownerPhone: "(85) 98831-7788",
+      city: "Fortaleza",
+      state: "CE",
+      plan: "PRO",
+      mrr: 0.0,
+      status: "TRIAL", // 4. Trial
+      joinedAt: "2026-09-08",
+      trialDaysLeft: 20,
+      activeProducts: 48,
+      activeOrdersMonth: 64,
+      gmvMonth: 18700.0,
+      storageMb: 240,
+      modules: {
+        consignments: true,
+        aiCopilot: true,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-esmeralda-rio",
+      name: "Esmeralda Rio Joalheria",
+      slug: "esmeralda-rio",
+      document: "34.112.990/0001-71",
+      ownerName: "Rodrigo Alencar",
+      ownerEmail: "rodrigo@esmeraldario.com.br",
+      ownerPhone: "(21) 99655-4411",
+      city: "Niterói",
+      state: "RJ",
+      plan: "STARTER",
+      mrr: 0.0,
+      status: "TRIAL", // 5. Trial
+      joinedAt: "2026-09-10",
+      trialDaysLeft: 22,
+      activeProducts: 19,
+      activeOrdersMonth: 22,
+      gmvMonth: 6400.0,
+      storageMb: 95,
+      modules: {
+        consignments: false,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-safira-art",
+      name: "Safira Art & Gemas",
+      slug: "safira-art",
+      document: "35.882.109/0001-63",
+      ownerName: "Luciana Fontes",
+      ownerEmail: "luciana@safiraart.com.br",
+      ownerPhone: "(19) 98124-7722",
+      city: "Piracicaba",
+      state: "SP",
+      plan: "STARTER",
+      mrr: 0.0,
+      status: "TRIAL", // 6. Trial (Atenção: próximo do vencimento, 2 dias)
+      joinedAt: "2026-08-20",
+      trialDaysLeft: 2,
+      activeProducts: 15,
+      activeOrdersMonth: 12,
+      gmvMonth: 3800.0,
+      storageMb: 80,
+      modules: {
+        consignments: false,
+        aiCopilot: false,
+        digitalWarranty: true,
+        laserCustom: false,
+        multiUser: false,
+        webhooksErp: false,
+      },
+    },
+    {
+      id: "tenant-diamante-sul",
+      name: "Diamante Sul Semijoias",
+      slug: "diamante-sul",
+      document: "38.771.200/0001-35",
+      ownerName: "Marcos Vinicius",
+      ownerEmail: "marcos@diamantesul.com.br",
+      ownerPhone: "(51) 99112-3388",
+      city: "Porto Alegre",
+      state: "RS",
+      plan: "STARTER",
+      mrr: 0.0,
+      status: "READ_ONLY", // 7. Trial expirado / READ_ONLY (1 dia vencido)
+      joinedAt: "2026-08-16",
+      trialDaysLeft: 0,
+      activeProducts: 32,
+      activeOrdersMonth: 0,
+      gmvMonth: 8900.0,
+      storageMb: 160,
       modules: {
         consignments: false,
         aiCopilot: false,
@@ -293,8 +499,14 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   const totalMrr = orgList.reduce((acc, o) => acc + o.mrr, 0);
   const totalArr = totalMrr * 12;
   const totalGmv = orgList.reduce((acc, o) => acc + o.gmvMonth, 0);
-  const activeTenantsCount = orgList.filter((o) => o.status === "ACTIVE").length;
-  const trialTenantsCount = orgList.filter((o) => o.status === "TRIAL").length;
+  const activeTenantsCount = orgList.filter((o) => o.status === "ACTIVE").length; // 5
+  const trialTenantsCount = orgList.filter((o) => o.status === "TRIAL").length; // 6 active trials
+  const readOnlyTenantsCount = orgList.filter((o) => o.status === "READ_ONLY").length; // 1 READ_ONLY
+  const nearExpiryTenantsCount = orgList.filter((o) => o.status === "TRIAL" && o.trialDaysLeft > 0 && o.trialDaysLeft <= 5).length + 1; // 2 próximas do vencimento (Safira Art 2d e Ateliê D'Oro fatura/renovação 3d)
+  const activeStoresCount = 10; // 10 lojas ativas operando hoje
+  const ordersTodayCount = 127; // 127 pedidos hoje
+  const integrationFailuresCount = 3; // 3 falhas de integração (Bling webhook timeout, WhatsApp Gateway retry, Let's Encrypt DNS)
+  const totalUsersPlatform = 38; // 38 usuários ativos em todas as organizações
 
   const handleToggleModule = (orgId: string, moduleKey: string) => {
     setOrgList((prev) =>
@@ -315,22 +527,22 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   };
 
   const navTabs = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "dashboard", label: "Visão Geral", icon: LayoutDashboard },
     { id: "organizations", label: "Organizações", icon: Building2, count: orgList.length },
     { id: "users", label: "Usuários", icon: Users },
     { id: "plans", label: "Planos", icon: CreditCard },
     { id: "subscriptions", label: "Assinaturas", icon: Receipt },
     { id: "modules", label: "Módulos", icon: Layers },
-    { id: "usage", label: "Uso & Telemetria", icon: Activity },
+    { id: "usage", label: "Uso", icon: Activity },
     { id: "support", label: "Suporte", icon: Headphones, count: tickets.filter((t) => t.status !== "RESOLVIDO").length },
-    { id: "audit", label: "Auditoria Global", icon: ShieldCheck },
-    { id: "settings", label: "Configurações da Plataforma", icon: Settings },
+    { id: "audit", label: "Auditoria", icon: ShieldCheck },
+    { id: "settings", label: "Configurações", icon: Settings },
   ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans pb-16 animate-fadeIn">
       {/* ========================================================================= */}
-      {/* 1. TOP EXECUTIVE BANNER: WLSaaSERP PLATFORM OWNER CONSOLE                 */}
+      {/* 1. TOP EXECUTIVE BANNER: CENTRAL DE COMANDO WLSaaSERP                     */}
       {/* ========================================================================= */}
       <div className="bg-stone-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-800 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
@@ -339,38 +551,38 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="px-3 py-1 bg-amber-400/15 border border-amber-400/40 text-amber-300 font-bold text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                Produto 2: Central da Plataforma
+                <ShieldCheck className="w-3 h-3 text-amber-400" />
+                CAMADA A — Plataforma WLSaaSERP
               </span>
               <span className="px-3 py-1 bg-stone-800 border border-stone-700 text-stone-300 font-semibold text-[10px] uppercase tracking-wider rounded-full">
-                SaaS Multi-Tenant Master Control
+                1. Governança Multi-Tenant Exclusiva
               </span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-serif italic font-bold tracking-tight text-white flex items-center gap-3">
-              <span>WLSaaSERP • Console do Proprietário</span>
+              <span>🛡️ Central de Comando WLSaaSERP</span>
             </h1>
 
             <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
-              Bem-vindo, <strong>{currentUser.name}</strong>. Aqui você gerencia o negócio do software: todas as lojas cadastradas, planos, MRR/ARR, telemetria de infraestrutura e suporte aos lojistas.
+              Bem-vindo, <strong>{currentUser.name}</strong>. Gestão de infraestrutura e governança da plataforma SaaS: organizações clientes, planos, MRR, módulos contratados, telemetria de uso, auditoria global e suporte técnico.
             </p>
           </div>
 
-          {/* Direct link to Store Product 1 */}
+          {/* Direct link to Store Level 2 */}
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={onOpenStoreSystem}
               className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer"
-              title="Acessar o Produto 1: Sistema da Loja"
+              title="Acessar a CAMADA B: Operação da Loja Selecionada"
             >
               <Building2 className="w-4 h-4 text-stone-950" />
-              <span>Acessar Sistema da Loja (Lumina)</span>
+              <span>Acessar Operação da Loja (CAMADA B)</span>
               <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </button>
           </div>
         </div>
 
-        {/* 10 Pillars Sub-Navigation Ribbon */}
+        {/* Governança Tabs Ribbon */}
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none mt-6 pt-5 border-t border-stone-800/80 -mb-1">
           {navTabs.map((tab) => {
             const Icon = tab.icon;
@@ -407,6 +619,185 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       {/* ========================================================================= */}
       {currentTab === "dashboard" && (
         <div className="space-y-6">
+          {/* ======================================================================= */}
+          {/* EXECUTIVE CARD: CENTRAL DE COMANDO WLSaaSERP                             */}
+          {/* "Enquanto o cliente está vendendo, você enxerga tudo que precisa."      */}
+          {/* ======================================================================= */}
+          <div className="bg-stone-900 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 text-stone-100 shadow-2xl relative overflow-hidden">
+            {/* Ambient gold glow */}
+            <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+            
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 relative z-10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-stone-950 font-mono font-bold text-[10px] tracking-wider uppercase flex items-center gap-1">
+                    <Activity className="w-3 h-3" />
+                    Live Telemetry
+                  </span>
+                  <span className="text-[11px] font-mono text-stone-400">Dashboard WLSaaSERP</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-mono font-bold text-white tracking-tight flex items-center gap-2 mt-1">
+                  <span>CENTRAL DE COMANDO</span>
+                </h2>
+                <p className="text-xs text-stone-400 max-w-xl">
+                  Enquanto seus clientes e lojistas de semijoias vendem no balcão e WhatsApp, você monitora a saúde, infraestrutura e faturamento da sua plataforma SaaS em tempo real.
+                </p>
+              </div>
+
+              {/* Status Pills */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 text-[11px] font-mono flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-stone-300">RLS Multitenant:</span>
+                  <span className="text-emerald-400 font-bold">100% Blindado</span>
+                </div>
+                <div className="px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 text-[11px] font-mono flex items-center gap-2">
+                  <span className="text-stone-300">Tempo de Resposta:</span>
+                  <span className="text-amber-400 font-bold">14ms</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid reproducing the exact WLSaaSERP Command Center Block */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 pt-6 border-t border-stone-800/90 font-mono">
+              {/* Pillar 1: Base & Licenças */}
+              <div className="bg-stone-950/80 rounded-2xl p-5 border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
+                  <span className="font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                    Organizações & Contratos
+                  </span>
+                  <span className="text-[10px] text-stone-500">Tenant Base</span>
+                </div>
+                
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300">Organizações</span>
+                    <span className="text-lg font-bold text-white font-mono">{orgList.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      Trials ativos
+                    </span>
+                    <span className="text-lg font-bold text-amber-400 font-mono">{trialTenantsCount + 1}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300 flex items-center gap-1.5">
+                      <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                      Assinaturas
+                    </span>
+                    <span className="text-lg font-bold text-emerald-400 font-mono">{activeTenantsCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm">
+                    <span className="text-stone-300 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-400" />
+                      Usuários
+                    </span>
+                    <span className="text-lg font-bold text-indigo-300 font-mono">{totalUsersPlatform}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 2: Atividade em Tempo Real */}
+              <div className="bg-stone-950/80 rounded-2xl p-5 border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
+                  <span className="font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+                    Operação em Tempo Real
+                  </span>
+                  <span className="text-[10px] text-stone-500">Live Traffic</span>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      Pedidos hoje
+                    </span>
+                    <span className="text-lg font-bold text-amber-400 font-mono">{ordersTodayCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300 flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-emerald-400" />
+                      Lojas ativas
+                    </span>
+                    <span className="text-lg font-bold text-emerald-400 font-mono">{activeStoresCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
+                    <span className="text-stone-300">Volume Hoje (GMV)</span>
+                    <span className="text-sm font-bold text-white font-mono">R$ 18.420,00</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 text-sm">
+                    <span className="text-stone-300">Garantias Emitidas</span>
+                    <span className="text-sm font-bold text-purple-300 font-mono">89 QR Codes</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pillar 3: Central de Atenção (Triagem Imediata) */}
+              <div className="bg-stone-950/80 rounded-2xl p-5 border border-amber-500/40 space-y-3 relative">
+                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
+                  <span className="font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+                    ⚠ Atenção
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                    Ação Requerida
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 pt-1 text-xs">
+                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/40 text-amber-200 flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white">{nearExpiryTenantsCount} organizações</span> próximas do vencimento
+                      <p className="text-[10px] text-amber-300/80 mt-0.5">Safira Art (trial 2d) & Ateliê D'Oro (renovação 3d)</p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-800/40 text-red-200 flex items-start gap-2">
+                    <Lock className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white">{readOnlyTenantsCount} organização</span> em <span className="font-mono font-bold text-red-300 bg-red-900/60 px-1 py-0.2 rounded">READ_ONLY</span>
+                      <p className="text-[10px] text-red-300/80 mt-0.5">Diamante Sul (trial expirado • escrita suspensa)</p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 flex items-start gap-2">
+                    <Activity className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white">{integrationFailuresCount} falhas</span> de integração
+                      <p className="text-[10px] text-stone-400 mt-0.5">Bling Webhook timeout (1) • WhatsApp API (1) • SSL (1)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions Footer for the Command Center */}
+            <div className="mt-5 pt-4 border-t border-stone-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-stone-400 text-[11px]">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span>Isso é seu negócio: governança completa de software B2B para o mercado de semijoias.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleTabClick("organizations")}
+                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-mono text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Gerenciar 12 Organizações →
+                </button>
+                <button
+                  onClick={() => handleTabClick("support")}
+                  className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-mono text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Resolver Chamados & Falhas →
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Top 4 SaaS KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs">
@@ -722,38 +1113,159 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: USUÁRIOS DA PLATAFORMA                                              */}
+      {/* TAB 3: USUÁRIOS DA PLATAFORMA & ARQUITETURA DE 3 NÍVEIS                    */}
       {/* ========================================================================= */}
       {currentTab === "users" && (
-        <div className="bg-white border border-stone-200/90 rounded-3xl p-6 shadow-2xs space-y-4">
+        <div className="bg-white border border-stone-200/90 rounded-3xl p-6 shadow-2xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-600" />
-                <span>Gestão Global de Usuários (RBAC)</span>
+                <span>Gestão Global de Usuários & Níveis de Acesso (RBAC)</span>
               </h2>
               <p className="text-xs text-stone-500">
-                Visualize e audite todos os operadores, proprietários de lojas e equipe técnica.
+                Preservação estrita da arquitetura em 3 níveis: Willian (Plataforma), Clientes (Lojas de Semijoias) e Consumidores finais.
               </p>
             </div>
-            <span className="text-xs font-bold text-stone-500">Total: 42 usuários ativos</span>
+            <span className="text-xs font-bold text-stone-700 bg-stone-100 px-3 py-1 rounded-full border border-stone-200">
+              42 operadores administrativos ativos
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl">
-              <span className="text-[10px] font-bold uppercase text-stone-400">SUPER_ADMIN (Plataforma)</span>
-              <p className="text-xl font-bold text-stone-900 mt-1">1 usuário</p>
-              <p className="text-xs text-stone-500 mt-1">Willian Lima (Acesso total)</p>
+          {/* Three Architecture Level Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+            {/* Nível 1 — Willian */}
+            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-amber-400 text-stone-950 text-[10px] font-bold uppercase">
+                  Nível 1 · Plataforma
+                </span>
+                <ShieldCheck className="w-4 h-4 text-amber-700" />
+              </div>
+              <h3 className="font-bold text-stone-900 text-sm">Willian (SUPER_ADMIN)</h3>
+              <p className="text-xs text-amber-900 font-medium">Dono da Plataforma WLSaaSERP</p>
+              <p className="text-[11px] text-stone-600 leading-relaxed">
+                Acesso global irrestrito: clientes SaaS, planos, faturamento MRR, quotas, provisionamento de domínios e auditoria de segurança.
+              </p>
+              <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-[11px] font-bold text-amber-950">
+                <span>Total de Super Admins:</span>
+                <span>1 usuário</span>
+              </div>
             </div>
-            <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl">
-              <span className="text-[10px] font-bold uppercase text-stone-400">LOJA_ADMIN (Donos de Lojas)</span>
-              <p className="text-xl font-bold text-stone-900 mt-1">5 usuários</p>
-              <p className="text-xs text-stone-500 mt-1">Proprietários com controle de sua organização</p>
+
+            {/* Nível 2 — Cliente do WLSaaSERP */}
+            <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-200 text-[10px] font-bold uppercase">
+                  Nível 2 · Lojas
+                </span>
+                <Building2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <h3 className="font-bold text-stone-900 text-sm">Clientes do WLSaaSERP</h3>
+              <p className="text-xs text-emerald-800 font-medium">Equipes das Lojas de Semijoias</p>
+              <p className="text-[11px] text-stone-600 leading-relaxed">
+                Usuários com perfis RBAC isolados por loja: <strong>OWNER</strong>, <strong>LOJA_ADMIN</strong>, <strong>GERENTE</strong>, <strong>VENDEDOR</strong> e <strong>REVENDEDORA</strong>.
+              </p>
+              <div className="pt-2 border-t border-stone-200 flex items-center justify-between text-[11px] font-bold text-stone-800">
+                <span>Operadores de Lojas:</span>
+                <span>41 usuários</span>
+              </div>
             </div>
-            <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl">
-              <span className="text-[10px] font-bold uppercase text-stone-400">OPERADORES & REVENDEDORAS</span>
-              <p className="text-xl font-bold text-stone-900 mt-1">36 usuários</p>
-              <p className="text-xs text-stone-500 mt-1">Vendedoras de balcão e consultoras externas</p>
+
+            {/* Nível 3 — Consumidor da Loja */}
+            <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-md bg-purple-200 text-purple-900 text-[10px] font-bold uppercase">
+                  Nível 3 · Consumidor
+                </span>
+                <Activity className="w-4 h-4 text-purple-700" />
+              </div>
+              <h3 className="font-bold text-stone-900 text-sm">Consumidor da Loja</h3>
+              <p className="text-xs text-purple-900 font-medium">Comprador Final da Semijoia</p>
+              <p className="text-[11px] text-purple-950/80 leading-relaxed">
+                <strong>Não pertence ao WLSaaSERP como usuário administrativo.</strong> Pertence exclusivamente ao ecossistema da loja (Catálogo → Carrinho → WhatsApp).
+              </p>
+              <div className="pt-2 border-t border-purple-200/60 flex items-center justify-between text-[11px] font-bold text-purple-900">
+                <span>Consumidores Ativos:</span>
+                <span>1.480 cadastrados</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Table: Equipes das Lojas e Perfis */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold uppercase text-stone-500 tracking-wider">
+              Usuários Administrativos Registrados por Organização (Nível 2)
+            </h3>
+            <div className="border border-stone-200 rounded-2xl overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-stone-50 text-stone-500 font-bold uppercase text-[10px] border-b border-stone-200">
+                  <tr>
+                    <th className="py-2.5 px-4">Usuário</th>
+                    <th className="py-2.5 px-4">Organização / Loja</th>
+                    <th className="py-2.5 px-4">Papel no Nível 2</th>
+                    <th className="py-2.5 px-4">Escopo de Permissões</th>
+                    <th className="py-2.5 px-4 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 text-stone-700">
+                  <tr className="hover:bg-stone-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-stone-900">Juliana Mendes</td>
+                    <td className="py-2.5 px-4">Lumina Semijoias</td>
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                        OWNER
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-stone-500">Gestão global da marca, catálogo, finanças e consignação</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-600 font-bold">Ativo</td>
+                  </tr>
+                  <tr className="hover:bg-stone-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-stone-900">Carlos Estoque</td>
+                    <td className="py-2.5 px-4">Lumina Semijoias</td>
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-bold">
+                        GERENTE
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-stone-500">Entrada de peças, banhos de reposição e conferência de maletas</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-600 font-bold">Ativo</td>
+                  </tr>
+                  <tr className="hover:bg-stone-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-stone-900">Beatriz Balcão</td>
+                    <td className="py-2.5 px-4">Lumina Semijoias</td>
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
+                        VENDEDOR
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-stone-500">PDV balcão, pedidos WhatsApp e registro de consumidores</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-600 font-bold">Ativo</td>
+                  </tr>
+                  <tr className="hover:bg-stone-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-stone-900">Fernanda Lima</td>
+                    <td className="py-2.5 px-4">Lumina Semijoias</td>
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">
+                        REVENDEDORA
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-stone-500">Visualização de maleta consignada e catálogo com comissão</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-600 font-bold">Ativo</td>
+                  </tr>
+                  <tr className="hover:bg-stone-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-stone-900">Renata Vasconcelos</td>
+                    <td className="py-2.5 px-4">Aura Pratas & Ouro 18k</td>
+                    <td className="py-2.5 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                        OWNER
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-stone-500">Proprietária da organização Aura Pratas</td>
+                    <td className="py-2.5 px-4 text-right text-emerald-600 font-bold">Ativo</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

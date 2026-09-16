@@ -15,6 +15,7 @@ import { DigitalWarrantyManager } from "./components/DigitalWarrantyManager";
 import { CustomJewelryStudio } from "./components/CustomJewelryStudio";
 import { UnifiedSalesOrders } from "./components/UnifiedSalesOrders";
 import { ResellersNetworkManager } from "./components/ResellersNetworkManager";
+import { CommercialNetworkModule } from "./components/CommercialNetworkModule";
 import { AIGatewayMCPCopilot } from "./components/AIGatewayMCPCopilot";
 import { SecurityAuditLGPD } from "./components/SecurityAuditLGPD";
 import { StorefrontBuyerExperience } from "./components/StorefrontBuyerExperience";
@@ -25,6 +26,7 @@ import { CustomerManager } from "./components/CustomerManager";
 import { ShareCatalogModal } from "./components/ShareCatalogModal";
 import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
+import { CriticalPathModal } from "./components/CriticalPathModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { MyStoreShowcase } from "./components/MyStoreShowcase";
 import { PlatformMasterConsole } from "./components/platform/PlatformMasterConsole";
@@ -121,6 +123,7 @@ export default function App() {
     } catch (e) {}
     return base;
   });
+  const [tenants, setTenants] = useState<TenantStore[]>(mockTenants);
   const [currentUser, setCurrentUser] = useState<RBACUser>(() => {
     try {
       const saved = localStorage.getItem("aura_user_profile");
@@ -158,6 +161,7 @@ export default function App() {
   const [showQuickSaleModal, setShowQuickSaleModal] = useState<boolean>(false);
   const [showQuickProductModal, setShowQuickProductModal] = useState<boolean>(false);
   const [showAssistantHelpModal, setShowAssistantHelpModal] = useState<boolean>(false);
+  const [showCriticalPathModal, setShowCriticalPathModal] = useState<boolean>(false);
   const [trialRemainingDays, setTrialRemainingDays] = useState<number>(27);
   const [trialEndsAt, setTrialEndsAt] = useState<string>("2026-09-28");
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean>(true);
@@ -1554,8 +1558,8 @@ export default function App() {
     );
   }
 
-  // If in storefront mode, render full dedicated buyer storefront experience
-  if (activeTab === "storefront") {
+  // If in storefront mode, render full dedicated buyer storefront experience (Nível 3: Consumidor)
+  if (activeTab === "storefront" || productMode === "STORE_CONSUMER") {
     return (
       <StorefrontBuyerExperience
         tenant={selectedTenant}
@@ -1566,9 +1570,20 @@ export default function App() {
         warranties={warranties}
         initialCategory={storefrontCategory}
         initialCoupon={storefrontCoupon}
+        currentUser={currentUser}
         onPlaceOrder={handlePlaceBuyerOrder}
-        onNavigateToERP={(tab) => setActiveTab(tab || "myStore")}
-        onNavigateToHome={() => setActiveTab("home")}
+        onNavigateToERP={(tab) => {
+          setProductMode("TENANT_STORE");
+          setActiveTab(tab || "myStore");
+        }}
+        onNavigateToHome={() => {
+          setProductMode("TENANT_STORE");
+          setActiveTab("home");
+        }}
+        onNavigateToPlatform={() => {
+          setProductMode("PLATFORM_OWNER");
+          setActiveTab("ownerHome");
+        }}
       />
     );
   }
@@ -1583,34 +1598,82 @@ export default function App() {
         </div>
       )}
 
-      {/* Trial Status Banner (Pilot Client 01) */}
-      <TrialStatusBanner
-        remainingDays={trialRemainingDays}
-        trialEndsAt={trialEndsAt}
-        storeName={selectedTenant.name}
-        onOpenOnboarding={() => setShowOnboardingModal(true)}
-        onOpenStorefront={() => setActiveTab("myStore")}
-        onOpenShareModal={() => setShowShareModal(true)}
-        onOpenSettings={() => setActiveTab("storeSettings")}
+      {/* Top Header: Platform Master Switcher (Nível 1 · Nível 2 · Nível 3) */}
+      <PlatformHeader
+        currentUser={currentUser}
+        currentMode={productMode}
+        selectedTenant={selectedTenant}
+        tenants={tenants}
+        onSwitchMode={(mode) => {
+          setProductMode(mode);
+          if (mode === "STORE_CONSUMER") {
+            setActiveTab("storefront");
+          } else if (activeTab === "storefront") {
+            setActiveTab(mode === "PLATFORM_OWNER" ? "ownerHome" : "dashboard");
+          }
+        }}
+        onSelectTenant={(t) => {
+          setSelectedTenant(t);
+          showToast(`Loja alterada para: ${t.name}`);
+        }}
+        onOpenStorefrontPreview={() => {
+          setProductMode("STORE_CONSUMER");
+          setActiveTab("storefront");
+        }}
+        onSwitchRole={(role) => {
+          handleUpdateUser({ role });
+          showToast(`Papel de loja simulado: ${role}`);
+        }}
       />
 
-      {/* Main Layout Container with Sidebar and Content Rail */}
-      <div className="flex-1 flex flex-col md:flex-row w-full min-h-screen">
-        {/* Left Sidebar Navigation (Desktop) */}
-        <div className="hidden md:block">
-          <SidebarNavigation
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            tenant={selectedTenant}
-            branding={brandingConfig}
+      {/* If in Platform Master Mode (Produto 2), render dedicated full platform console */}
+      {productMode === "PLATFORM_OWNER" ? (
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          <PlatformMasterConsole
             currentUser={currentUser}
-            onOpenHelp={() => setShowAssistantHelpModal(true)}
-            onOpenNewSale={() => setShowQuickSaleModal(true)}
-            onOpenNewProduct={() => setShowQuickProductModal(true)}
-            onOpenShareModal={() => setShowShareModal(true)}
-            pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
+            tenants={tenants}
+            onImpersonateTenant={(t) => {
+              setSelectedTenant(t);
+              setProductMode("TENANT_STORE");
+              setActiveTab("dashboard");
+              showToast(`Acesso concedido como lojista de: ${t.name}`);
+            }}
+            onOpenStoreSystem={() => setProductMode("TENANT_STORE")}
+            onNotify={(msg) => showToast(msg)}
           />
-        </div>
+        </main>
+      ) : (
+        <>
+          {/* Trial Status Banner (Pilot Client 01) */}
+          <TrialStatusBanner
+            remainingDays={trialRemainingDays}
+            trialEndsAt={trialEndsAt}
+            storeName={selectedTenant.name}
+            onOpenOnboarding={() => setShowOnboardingModal(true)}
+            onOpenStorefront={() => setActiveTab("myStore")}
+            onOpenShareModal={() => setShowShareModal(true)}
+            onOpenSettings={() => setActiveTab("storeSettings")}
+            onOpenCriticalPath={() => setShowCriticalPathModal(true)}
+          />
+
+          {/* Main Layout Container with Sidebar and Content Rail */}
+          <div className="flex-1 flex flex-col md:flex-row w-full min-h-screen">
+            {/* Left Sidebar Navigation (Desktop) */}
+            <div className="hidden md:block">
+              <SidebarNavigation
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                tenant={selectedTenant}
+                branding={brandingConfig}
+                currentUser={currentUser}
+                onOpenHelp={() => setShowAssistantHelpModal(true)}
+                onOpenNewSale={() => setShowQuickSaleModal(true)}
+                onOpenNewProduct={() => setShowQuickProductModal(true)}
+                onOpenShareModal={() => setShowShareModal(true)}
+                onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
+                pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
+              />
+            </div>
 
         {/* Right Content Area */}
         <div className="flex-1 flex flex-col min-w-0">
@@ -1798,6 +1861,19 @@ export default function App() {
               />
             )}
 
+            {activeTab === "commercialNetwork" && (
+              <CommercialNetworkModule
+                resellers={resellers}
+                consignments={consignments}
+                products={products}
+                tiers={tiers}
+                onAddReseller={handleAddReseller}
+                onSettleConsignment={handleSettleConsignment}
+                onCreateConsignment={handleCreateConsignment}
+                onUpdateTiers={setTiers}
+              />
+            )}
+
             {activeTab === "resellers" && (
               <ResellersNetworkManager
                 resellers={resellers}
@@ -1825,6 +1901,8 @@ export default function App() {
           </main>
         </div>
       </div>
+      </>
+      )}
 
       {/* Editorial Footer */}
       <footer className="border-t border-stone-200 py-4 px-6 bg-stone-50 text-[10px] font-bold text-stone-500 uppercase tracking-[0.2em]">
@@ -1898,6 +1976,24 @@ export default function App() {
         onOpenShareCatalog={() => {
           setShowAssistantHelpModal(false);
           setShowShareModal(true);
+        }}
+      />
+
+      {/* Critical Path Business Journey Modal */}
+      <CriticalPathModal
+        isOpen={showCriticalPathModal}
+        onClose={() => setShowCriticalPathModal(false)}
+        onNavigateTab={(tab) => {
+          setActiveTab(tab);
+          setShowCriticalPathModal(false);
+        }}
+        onOpenNewProduct={() => {
+          setShowCriticalPathModal(false);
+          setShowQuickProductModal(true);
+        }}
+        onOpenStorefront={() => {
+          setShowCriticalPathModal(false);
+          setActiveTab("storefront");
         }}
       />
     </div>

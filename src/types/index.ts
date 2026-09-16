@@ -345,11 +345,65 @@ export interface CustomJewelryOrderSpec {
 export * from "./customer";
 export * from "./order";
 
+// ============================================================================
+// OS TRÊS NÍVEIS DO ECOSSISTEMA WLSaaSERP
+// ============================================================================
+
+/**
+ * Nível 1 — Willian (Dono da plataforma)
+ * Papel: SUPER_ADMIN
+ * Controla: Clientes SaaS, organizações, planos, assinaturas, módulos, utilização, suporte, segurança, auditoria.
+ */
+export type PlatformRole = "SUPER_ADMIN";
+
+/**
+ * Nível 2 — Cliente do WLSaaSERP (Loja de Semijoias)
+ * Usuários administrativos e operacionais da loja:
+ * - OWNER: Dona/Proprietária da marca
+ * - LOJA_ADMIN: Administrador geral da loja
+ * - GERENTE: Gerente comercial e operacional de estoque
+ * - VENDEDOR: Vendedor de balcão e atendimento WhatsApp
+ * - REVENDEDORA: Revendedora externa com maletas de consignação
+ */
+export type StoreUserRole =
+  | "OWNER"
+  | "LOJA_ADMIN"
+  | "GERENTE"
+  | "VENDEDOR"
+  | "REVENDEDORA"
+  | "GERENTE_COMERCIAL"
+  | "REVENDEDORA_PORTAL"
+  | "AI_GATEWAY";
+
+export type SystemUserRole = PlatformRole | StoreUserRole;
+
+/**
+ * Nível 3 — Consumidor da loja (Cliente Comprador Final)
+ * É quem compra a semijoia na vitrine pública.
+ * Fluxo: Consumidor -> Catálogo -> Produto -> Carrinho -> Pedido -> WhatsApp / pagamento
+ * ⚠️ NÃO pertence ao WLSaaSERP como usuário administrativo. Pertence ao ecossistema da loja.
+ */
+export interface StoreConsumer {
+  id?: string;
+  name: string;
+  phone: string; // WhatsApp
+  email?: string;
+  city?: string;
+  state?: string;
+  notes?: string;
+  totalOrdersCount?: number;
+  totalSpent?: number;
+  firstPurchasedAt?: string;
+  lastPurchasedAt?: string;
+}
+
+export type EcosystemLevel = "LEVEL_1_PLATFORM" | "LEVEL_2_STORE" | "LEVEL_3_CONSUMER";
+
 export interface RBACUser {
   id: string;
   name: string;
   email: string;
-  role: "SUPER_ADMIN" | "LOJA_ADMIN" | "GERENTE_COMERCIAL" | "REVENDEDORA_PORTAL" | "AI_GATEWAY";
+  role: SystemUserRole;
   tenantId: string;
   avatar?: string;
   photoUrl?: string;

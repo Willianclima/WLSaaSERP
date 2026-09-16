@@ -28,6 +28,22 @@ import {
   ArrowRight,
   Percent,
   Briefcase,
+  Store,
+  MessageCircle,
+  Receipt,
+  Warehouse,
+  BookmarkCheck,
+  CheckCircle2,
+  History,
+  ClipboardList,
+  AlertTriangle,
+  UserCheck,
+  Network,
+  Handshake,
+  HeartHandshake,
+  Share2,
+  Palette,
+  QrCode,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 import { mockCurrentUser } from "../data/mockData";
@@ -59,8 +75,8 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   onOpenPlatformConsole,
   pendingOrdersCount = 0,
 }) => {
-  // Check if current tab is in Vender or Produtos
-  const isVenderActive = [
+  // Check if current tab is in Vendas or Estoque
+  const isVendasActive = [
     "vender",
     "orders",
     "sales",
@@ -68,9 +84,11 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     "commissions",
     "payments",
     "newSale",
+    "myStore",
+    "storefront",
   ].includes(activeTab);
 
-  const isProdutosActive = [
+  const isEstoqueActive = [
     "catalog",
     "products",
     "inventory",
@@ -79,16 +97,16 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     "consignments",
   ].includes(activeTab);
 
-  // Accordion state: both open by default to give clear overview of the tree
-  const [venderOpen, setVenderOpen] = useState(true);
-  const [produtosOpen, setProdutosOpen] = useState(true);
+  // Accordion state: open by default to provide instant visibility
+  const [vendasOpen, setVendasOpen] = useState(true);
+  const [estoqueOpen, setEstoqueOpen] = useState(true);
+  const [clientesOpen, setClientesOpen] = useState(false);
+  const [redeComercialOpen, setRedeComercialOpen] = useState(true);
+  const [brandOpen, setBrandOpen] = useState(false);
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
 
   // Secondary/ERP tools kept tucked away behind the scenes
   const advancedTools = [
-    { id: "warranties", label: "Garantias Digitais", icon: ShieldCheck },
-    { id: "customJewelry", label: "Peças Personalizadas", icon: Crown },
-    { id: "consignments", label: "Maletas & Consignação", icon: Sliders },
     { id: "reports", label: "Relatórios de Desempenho", icon: BarChart3 },
     { id: "saasBilling", label: "Gestão SaaS & Assinatura", icon: Building2 },
     { id: "aiGateway", label: "AI Copilot MCP", icon: Bot },
@@ -105,31 +123,45 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
       {/* Scrollable Navigation Area */}
       <div className="flex flex-col flex-1 overflow-y-auto scrollbar-none py-3">
         {/* ========================================================================= */}
-        {/* PLATFORM OWNER MASTER ENTRY (FOR SUPER_ADMIN / WILLIAN)                  */}
+        {/* 🟦 CAMADA A — PLATAFORMA WLSaaSERP (GOVERNANÇA)                           */}
         {/* ========================================================================= */}
         {currentUser?.role === "SUPER_ADMIN" && onOpenPlatformConsole && (
-          <div className="px-3 pb-2">
+          <div className="px-3 pb-2.5">
+            <div className="px-1 pb-1 flex items-center justify-between text-[10px] font-bold text-amber-900/80 uppercase tracking-wider">
+              <span>🟦 CAMADA A — Plataforma</span>
+            </div>
             <button
               onClick={onOpenPlatformConsole}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold bg-stone-950 hover:bg-stone-900 text-amber-300 border border-stone-800 transition-all shadow-xs cursor-pointer group"
-              title="Acessar o Produto 2: Central da Plataforma WLSaaSERP"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold bg-stone-950 hover:bg-stone-900 text-amber-300 border border-stone-800 transition-all shadow-xs cursor-pointer group"
+              title="Acessar a CAMADA A: 🛡️ Central de Comando WLSaaSERP (Governança)"
             >
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span>Central da Plataforma</span>
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="truncate">🛡️ Central WLSaaSERP</span>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+              <ArrowRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
             </button>
+            <div className="mt-1 px-1 flex items-center justify-between text-[9px] text-stone-600">
+              <span>Governança Multi-Tenant</span>
+              <span className="bg-amber-100/90 text-amber-900 px-1 rounded font-mono font-bold">L1</span>
+            </div>
           </div>
         )}
 
         {/* ========================================================================= */}
-        {/* HEADER: STORE BRAND & EDIT                                                */}
+        {/* 🟩 CAMADA B — OPERAÇÃO DA LOJA (HEADER DA MARCA)                           */}
         {/* ========================================================================= */}
+        <div className="px-3 pt-1">
+          <div className="px-1 pb-1 flex items-center justify-between text-[10px] font-bold text-emerald-900/90 uppercase tracking-wider">
+            <span>🟩 CAMADA B — Operação</span>
+            <span className="text-[9px] text-stone-600 font-mono">Loja L2</span>
+          </div>
+        </div>
+
         <div
           onClick={() => onTabChange("storeSettings")}
-          className="px-4 py-3 mx-2.5 rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer group hover:bg-stone-50 transition-all border border-transparent hover:border-stone-200/70"
-          title="Clique para configurar o nome e logotipo da sua loja"
+          className="px-4 py-3 mx-2.5 rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer group hover:bg-stone-50 transition-all border border-stone-200/60 bg-stone-50/40"
+          title="Clique para configurar o nome e identidade da sua loja"
         >
           <div className="flex items-center gap-3 min-w-0">
             {branding?.logoType === "IMAGE" && branding?.logoUrl ? (
@@ -155,7 +187,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
               </span>
             </div>
           </div>
-          <div className="p-1 rounded-md text-stone-300 group-hover:text-amber-600 transition-colors shrink-0 opacity-40 group-hover:opacity-100">
+          <div className="p-1 rounded-md text-stone-400 group-hover:text-amber-600 transition-colors shrink-0">
             <Edit2 className="w-3.5 h-3.5" />
           </div>
         </div>
@@ -164,16 +196,10 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
         <div className="my-2 border-t border-stone-100 mx-4" />
 
         {/* ========================================================================= */}
-        {/* AS 5 ÁREAS PRINCIPAIS:                                                   */}
-        {/* 1. Início                                                                */}
-        {/* 2. Vender (Novo pedido, Pedidos, Pagamentos)                             */}
-        {/* 3. Produtos (Catálogo, Estoque, Entrada de peças, Ajustes)                */}
-        {/* 4. Clientes                                                              */}
-        {/* ───────────────────────────────                                          */}
-        {/* 5. Minha Loja                                                            */}
+        {/* NAVEGAÇÃO DA OPERAÇÃO DA LOJA (CAMADA B)                                   */}
         {/* ========================================================================= */}
         <nav className="px-3 space-y-1">
-          {/* 1. 🏠 INÍCIO */}
+          {/* 1. 🏠 VISÃO GERAL / INÍCIO */}
           <button
             onClick={() => onTabChange("ownerHome")}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -189,18 +215,18 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                   : "text-stone-500"
               }`}
             />
-            <span>Início</span>
+            <span>Visão Geral</span>
           </button>
 
-          {/* 2. 🛍️ VENDER (Com Sub-Itens) */}
+          {/* 2. 🛍️ VENDAS (Árvore Completa: PDV, Pedidos, E-commerce, WhatsApp, Pagamento) */}
           <div className="pt-1">
             <button
               onClick={() => {
-                setVenderOpen(true);
-                onTabChange("vender");
+                setVendasOpen(!vendasOpen);
+                if (!isVendasActive) onTabChange("orders");
               }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                isVenderActive
+                isVendasActive
                   ? "bg-amber-50/80 text-amber-950 font-bold border border-amber-200/70"
                   : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
               }`}
@@ -208,62 +234,78 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
               <div className="flex items-center gap-3">
                 <ShoppingBag
                   className={`w-4 h-4 ${
-                    isVenderActive ? "text-amber-700" : "text-stone-500"
+                    isVendasActive ? "text-amber-700" : "text-stone-500"
                   }`}
                 />
-                <span>Vender</span>
+                <span>Vendas</span>
               </div>
               <ChevronDown
                 className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 ${
-                  venderOpen ? "rotate-0" : "-rotate-90"
+                  vendasOpen ? "rotate-0" : "-rotate-90"
                 }`}
               />
             </button>
 
-            {/* Tree Branch: Sub-itens de Vender */}
-            {venderOpen && (
-              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn">
-                {/* ├── Vender agora / Balcão */}
+            {/* Sub-itens estruturados de Vendas */}
+            {vendasOpen && (
+              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn text-xs">
+                {/* ├── Nova venda */}
                 <button
-                  onClick={() => onTabChange("vender")}
-                  className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer group ${
-                    activeTab === "vender" || activeTab === "sales"
-                      ? "bg-stone-900 text-white font-bold"
-                      : "text-emerald-700 hover:bg-emerald-50/80 hover:text-emerald-900"
-                  }`}
-                  title="Balcão de venda rápida e envio pelo WhatsApp"
+                  onClick={() => {
+                    if (onOpenNewSale) {
+                      onOpenNewSale();
+                    } else {
+                      onTabChange("vender");
+                    }
+                  }}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg text-emerald-800 hover:bg-emerald-50 hover:text-emerald-950 transition-colors cursor-pointer group font-medium"
+                  title="Abrir formulário de nova venda rápida"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[10px] font-mono select-none">
-                      ├──
-                    </span>
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
                     <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                    <span>Vender agora</span>
+                    <span>Nova venda</span>
                   </div>
-                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                    Balcão
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                    +Venda
                   </span>
+                </button>
+
+                {/* ├── PDV (Balcão de Caixa) */}
+                <button
+                  onClick={() => onTabChange("vender")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "vender" || activeTab === "sales"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Frente de caixa e PDV balcão"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Store className="w-3.5 h-3.5 text-stone-500" />
+                    <span>PDV</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400 font-sans">Balcão</span>
                 </button>
 
                 {/* ├── Pedidos */}
                 <button
                   onClick={() => onTabChange("orders")}
-                  className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
                     activeTab === "orders"
                       ? "bg-stone-900 text-white font-bold"
                       : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[10px] font-mono select-none">
-                      ├──
-                    </span>
-                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <ShoppingBag className="w-3.5 h-3.5 text-stone-500" />
                     <span>Pedidos</span>
                   </div>
                   {pendingOrdersCount > 0 && (
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
                         activeTab === "orders"
                           ? "bg-amber-400 text-stone-900"
                           : "bg-amber-500 text-white"
@@ -274,231 +316,573 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                   )}
                 </button>
 
-                {/* └── Pagamentos */}
+                {/* ├── E-commerce (Vitrine / Loja Virtual) */}
+                <button
+                  onClick={() => onTabChange("myStore")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "myStore" || activeTab === "storefront"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Catálogo virtual para consumidores finais"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Globe className="w-3.5 h-3.5 text-stone-500" />
+                    <span>E-commerce</span>
+                  </div>
+                  <span className="text-[9px] text-amber-800 font-semibold">Online</span>
+                </button>
+
+                {/* ├── WhatsApp */}
+                <button
+                  onClick={() => {
+                    if (onOpenShareModal) {
+                      onOpenShareModal();
+                    } else {
+                      onTabChange("orders");
+                    }
+                  }}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-emerald-50/60 hover:text-emerald-900 transition-colors cursor-pointer group"
+                  title="Compartilhamento de carrinho, comprovantes e pedidos pelo WhatsApp"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>WhatsApp</span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-100/80 text-emerald-800 font-bold px-1 rounded">
+                    Zap
+                  </span>
+                </button>
+
+                {/* └── Pagamento */}
                 <button
                   onClick={() => onTabChange("financial")}
-                  className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left flex items-center gap-2 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
                     activeTab === "financial" || activeTab === "commissions" || activeTab === "payments"
                       ? "bg-stone-900 text-white font-bold"
                       : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
                   }`}
+                  title="Controle de recebimentos, taxas PIX e cartão"
                 >
-                  <span
-                    className={`text-[10px] font-mono select-none ${
-                      activeTab === "financial" || activeTab === "commissions" || activeTab === "payments"
-                        ? "text-stone-400"
-                        : "text-stone-400"
-                    }`}
-                  >
-                    └──
-                  </span>
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Pagamentos</span>
+                  <span className="text-stone-400 text-[10px] font-mono select-none">└──</span>
+                  <Receipt className="w-3.5 h-3.5 text-stone-500" />
+                  <span>Pagamento</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* 3. 📦 PRODUTOS (Com Sub-Itens) */}
+          {/* 3. 📦 ESTOQUE (Árvore Completa: Físico, Reservado, Disponível, Consignado, Movimentações, Inventário, Estoque mínimo) */}
           <div className="pt-1">
             <button
               onClick={() => {
-                setProdutosOpen(!produtosOpen);
-                if (!isProdutosActive) onTabChange("catalog");
+                setEstoqueOpen(!estoqueOpen);
+                if (!isEstoqueActive) onTabChange("inventory");
               }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                isProdutosActive
+                isEstoqueActive
                   ? "bg-teal-50/80 text-teal-950 font-bold border border-teal-200/70"
                   : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
               }`}
             >
               <div className="flex items-center gap-3">
-                <Package
+                <Boxes
                   className={`w-4 h-4 ${
-                    isProdutosActive ? "text-teal-700" : "text-stone-500"
+                    isEstoqueActive ? "text-teal-700" : "text-stone-500"
                   }`}
                 />
-                <span>Produtos</span>
+                <span>Estoque</span>
               </div>
               <ChevronDown
                 className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 ${
-                  produtosOpen ? "rotate-0" : "-rotate-90"
+                  estoqueOpen ? "rotate-0" : "-rotate-90"
                 }`}
               />
             </button>
 
-            {/* Tree Branch: Sub-itens de Produtos */}
-            {produtosOpen && (
-              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn">
-                {/* ├── Catálogo */}
-                <button
-                  onClick={() => onTabChange("catalog")}
-                  className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === "catalog" || activeTab === "products"
-                      ? "bg-stone-900 text-white font-bold"
-                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
-                  }`}
-                >
-                  <span className="text-stone-400 text-[10px] font-mono select-none">
-                    ├──
-                  </span>
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>Catálogo</span>
-                </button>
-
-                {/* ├── Estoque */}
+            {/* Sub-itens estruturados de Estoque */}
+            {estoqueOpen && (
+              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn text-xs">
+                {/* ├── Físico */}
                 <button
                   onClick={() => onTabChange("inventory")}
-                  className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
                     activeTab === "inventory" || activeTab === "stock"
                       ? "bg-stone-900 text-white font-bold"
                       : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
                   }`}
-                >
-                  <span className="text-stone-400 text-[10px] font-mono select-none">
-                    ├──
-                  </span>
-                  <Boxes className="w-3.5 h-3.5" />
-                  <span>Estoque</span>
-                </button>
-
-                {/* ├── Entrada de peças */}
-                <button
-                  onClick={() => {
-                    if (onOpenNewProduct) {
-                      onOpenNewProduct();
-                    } else {
-                      onTabChange("catalog");
-                    }
-                  }}
-                  className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-teal-800 hover:bg-teal-50 hover:text-teal-950 transition-colors cursor-pointer group"
-                  title="Cadastrar nova semijoia com foto, banho e preço"
+                  title="Estoque físico presente na gaveta e cofre da matriz"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[10px] font-mono select-none">
-                      ├──
-                    </span>
-                    <Plus className="w-3.5 h-3.5 text-teal-600 group-hover:scale-110 transition-transform" />
-                    <span>Entrada de peças</span>
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Warehouse className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Físico</span>
                   </div>
-                  <span className="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.5 rounded">
-                    +Peça
-                  </span>
+                  <span className="text-[9px] text-stone-400">Total</span>
                 </button>
 
-                {/* └── Ajustes */}
+                {/* ├── Reservado */}
                 <button
-                  onClick={() => onTabChange("adjustments")}
-                  className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === "adjustments" || activeTab === "consignments"
+                  onClick={() => onTabChange("orders")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Peças reservadas em pedidos aguardando confirmação ou expedição"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Reservado</span>
+                  </div>
+                  <span className="text-[9px] text-amber-800 font-semibold">Pedidos</span>
+                </button>
+
+                {/* ├── Disponível */}
+                <button
+                  onClick={() => onTabChange("catalog")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "catalog" || activeTab === "products"
                       ? "bg-stone-900 text-white font-bold"
                       : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
                   }`}
-                  title="Ajustes de inventário, perdas e maletas consignadas"
+                  title="Saldo real apto para venda imediata (Físico - Reservado)"
                 >
-                  <span className="text-stone-400 text-[10px] font-mono select-none">
-                    └──
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Disponível</span>
+                  </div>
+                  <span className="text-[9px] text-emerald-700 font-bold">Venda</span>
+                </button>
+
+                {/* ├── Consignado (Maletas) */}
+                <button
+                  onClick={() => onTabChange("consignments")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "consignments"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Peças expedidas para maletas de revendedoras"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Briefcase className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Consignado</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Maletas</span>
+                </button>
+
+                {/* ├── Movimentações (Ledger Imutável) */}
+                <button
+                  onClick={() => onTabChange("inventory")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "inventory"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Histórico de entradas, saídas, transferências e estornos"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <History className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Movimentações</span>
+                  </div>
+                  <span className="text-[9px] bg-teal-100 text-teal-900 font-mono font-bold px-1 rounded">
+                    Ledger
                   </span>
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Ajustes</span>
+                </button>
+
+                {/* ├── Inventário */}
+                <button
+                  onClick={() => onTabChange("catalog")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Catálogo geral e conferência de inventário físico"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <ClipboardList className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Inventário</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Geral</span>
+                </button>
+
+                {/* └── Estoque mínimo */}
+                <button
+                  onClick={() => onTabChange("adjustments")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "adjustments"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Alertas de ponto de reposição e estoque crítico"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">└──</span>
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Estoque mínimo</span>
+                  </div>
+                  <span className="text-[9px] text-amber-700 font-bold">Alertas</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* 4. 👥 CLIENTES */}
+          {/* 4. 👥 CLIENTES E CRM */}
           <div className="pt-1">
             <button
-              onClick={() => onTabChange("customers")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              onClick={() => {
+                onTabChange("customers");
+                setClientesOpen(!clientesOpen);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "customers"
                   ? "bg-stone-900 text-white font-bold shadow-xs"
                   : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
               }`}
             >
-              <Users
-                className={`w-4 h-4 ${
-                  activeTab === "customers" ? "text-amber-300" : "text-stone-500"
+              <div className="flex items-center gap-3">
+                <Users
+                  className={`w-4 h-4 ${
+                    activeTab === "customers" ? "text-amber-300" : "text-stone-500"
+                  }`}
+                />
+                <span>Clientes e CRM</span>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 ${
+                  clientesOpen ? "rotate-0" : "-rotate-90"
                 }`}
               />
-              <span>Clientes</span>
             </button>
+
+            {/* Sub-itens de Clientes & Segmentação */}
+            {clientesOpen && (
+              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn text-xs">
+                {/* ├── Base de Clientes */}
+                <button
+                  onClick={() => onTabChange("customers")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "customers"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Base unificada de clientes (Pessoa Física e Jurídica)"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Users className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Clientes</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Unificado</span>
+                </button>
+
+                {/* ├── Consumidores (PF) */}
+                <button
+                  onClick={() => onTabChange("customers")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Consumidor final e compras no balcão / vitrine"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Consumidores</span>
+                  </div>
+                  <span className="text-[9px] text-blue-700 font-semibold">B2C</span>
+                </button>
+
+                {/* ├── VIP & PJ */}
+                <button
+                  onClick={() => onTabChange("customers")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Clientes VIP e contas jurídicas com atacado"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Crown className="w-3.5 h-3.5 text-amber-600" />
+                    <span>VIP / PJ</span>
+                  </div>
+                  <span className="text-[9px] text-amber-700 font-semibold">Tiers</span>
+                </button>
+
+                {/* └── Histórico & Relacionamento */}
+                <button
+                  onClick={() => onTabChange("customers")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Histórico de compras e relacionamento por WhatsApp"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">└──</span>
+                    <History className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Histórico & CRM</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Timeline</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* 5. 🤝 REVENDEDORAS */}
+          {/* 5. 🤝 REDE COMERCIAL (MÓDULO DESACOPLADO) */}
           <div className="pt-1">
             <button
-              onClick={() => onTabChange("resellers")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "resellers"
-                  ? "bg-stone-900 text-white font-bold shadow-xs"
-                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
-              }`}
-            >
-              <Award
-                className={`w-4 h-4 ${
-                  activeTab === "resellers" ? "text-amber-300" : "text-stone-500"
-                }`}
-              />
-              <span>Revendedoras</span>
-            </button>
-          </div>
-
-          {/* 6. 💼 CONSIGNAÇÃO & MALETAS */}
-          <div className="pt-1">
-            <button
-              onClick={() => onTabChange("consignments")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === "consignments"
-                  ? "bg-stone-900 text-white font-bold shadow-xs"
-                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
-              }`}
-            >
-              <Briefcase
-                className={`w-4 h-4 ${
-                  activeTab === "consignments" ? "text-amber-300" : "text-stone-500"
-                }`}
-              />
-              <span>Consignação (Maletas)</span>
-            </button>
-          </div>
-
-          {/* 7. 📈 COMISSÕES */}
-          <div className="pt-1">
-            <button
-              onClick={() => onTabChange("commissions")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              onClick={() => {
+                onTabChange("commercialNetwork");
+                setRedeComercialOpen(!redeComercialOpen);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "commercialNetwork" ||
+                activeTab === "resellers" ||
+                activeTab === "consignments" ||
                 activeTab === "commissions"
                   ? "bg-stone-900 text-white font-bold shadow-xs"
                   : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
               }`}
+              title="Módulo independente de Revenda e Consignação"
             >
-              <Percent
-                className={`w-4 h-4 ${
-                  activeTab === "commissions" ? "text-amber-300" : "text-stone-500"
+              <div className="flex items-center gap-3">
+                <Network
+                  className={`w-4 h-4 ${
+                    activeTab === "commercialNetwork" ||
+                    activeTab === "resellers" ||
+                    activeTab === "consignments" ||
+                    activeTab === "commissions"
+                      ? "text-amber-300"
+                      : "text-stone-500"
+                  }`}
+                />
+                <div className="flex items-center gap-1.5">
+                  <span>Rede Comercial</span>
+                  <span className="text-[9px] bg-amber-400/20 text-amber-600 font-mono font-bold px-1.5 py-0.2 rounded border border-amber-400/30">
+                    Módulo
+                  </span>
+                </div>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 ${
+                  redeComercialOpen ? "rotate-0" : "-rotate-90"
                 }`}
               />
-              <span>Comissões</span>
             </button>
+
+            {/* Sub-itens da Rede Comercial */}
+            {redeComercialOpen && (
+              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn text-xs">
+                {/* ├── Visão Geral do Módulo */}
+                <button
+                  onClick={() => onTabChange("commercialNetwork")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "commercialNetwork"
+                      ? "bg-amber-600 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Painel completo e integrado da Rede Comercial"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Painel da Rede</span>
+                  </div>
+                  <span className="text-[9px] text-amber-600 font-bold">Hub</span>
+                </button>
+
+                {/* ├── Revendedoras & Líderes */}
+                <button
+                  onClick={() => onTabChange("resellers")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "resellers"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Consultoras autônomas e hierarquia de liderança"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Award className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Revendedoras</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Líderes</span>
+                </button>
+
+                {/* ├── Consignação & Maletas */}
+                <button
+                  onClick={() => onTabChange("consignments")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "consignments"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Expedição, controle de prazo e devoluções de maletas"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Briefcase className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Maletas</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Consignado</span>
+                </button>
+
+                {/* ├── Acertos de Mercadoria */}
+                <button
+                  onClick={() => onTabChange("consignments")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Prestação de contas das peças vendidas vs devolvidas"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Acertos</span>
+                  </div>
+                  <span className="text-[9px] text-emerald-700 font-bold">Retorno</span>
+                </button>
+
+                {/* └── Comissões & Repasses */}
+                <button
+                  onClick={() => onTabChange("commissions")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "commissions"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Regras de comissionamento progressivo e bônus"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">└──</span>
+                    <Percent className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Comissões</span>
+                  </div>
+                  <span className="text-[9px] text-amber-700 font-bold">Regras</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* 8. 🛡️ GARANTIAS DIGITAIS */}
+          {/* 6. 🛡️ GARANTIAS (PASSAPORTE DIGITAL) */}
           <div className="pt-1">
             <button
               onClick={() => onTabChange("warranties")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === "warranties"
                   ? "bg-stone-900 text-white font-bold shadow-xs"
                   : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
               }`}
+              title="Passaporte Digital da Joia & QR Code Público"
             >
-              <ShieldCheck
-                className={`w-4 h-4 ${
-                  activeTab === "warranties" ? "text-amber-300" : "text-stone-500"
+              <div className="flex items-center gap-3">
+                <ShieldCheck
+                  className={`w-4 h-4 ${
+                    activeTab === "warranties" ? "text-amber-300" : "text-stone-500"
+                  }`}
+                />
+                <span>6. Garantias</span>
+              </div>
+              <span className="text-[9px] bg-emerald-500/10 text-emerald-700 font-mono font-bold px-1.5 py-0.2 rounded border border-emerald-500/20">
+                QR Code
+              </span>
+            </button>
+          </div>
+
+          {/* 7. 🎨 MARCA E LOJA DIGITAL */}
+          <div className="pt-1">
+            <button
+              onClick={() => {
+                onTabChange("storeSettings");
+                setBrandOpen(!brandOpen);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === "storeSettings" || activeTab === "settings" || activeTab === "myStore" || activeTab === "storefront"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : "text-stone-700 hover:text-stone-900 hover:bg-stone-50"
+              }`}
+              title="Identidade visual, vitrine online, catálogo e canais de venda"
+            >
+              <div className="flex items-center gap-3">
+                <Palette
+                  className={`w-4 h-4 ${
+                    activeTab === "storeSettings" || activeTab === "settings" || activeTab === "myStore" || activeTab === "storefront"
+                      ? "text-amber-300"
+                      : "text-stone-500"
+                  }`}
+                />
+                <span>7. Marca & Loja</span>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-stone-400 transition-transform duration-200 ${
+                  brandOpen ? "rotate-0" : "-rotate-90"
                 }`}
               />
-              <span>Garantias</span>
             </button>
+
+            {/* Sub-itens de Marca e Loja Digital */}
+            {brandOpen && (
+              <div className="mt-1 ml-4 pl-3 border-l-2 border-stone-200/90 space-y-0.5 animate-fadeIn text-xs">
+                {/* ├── Logo, Cores & Banner */}
+                <button
+                  onClick={() => onTabChange("storeSettings")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "storeSettings"
+                      ? "bg-stone-900 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Logo, cores da marca, tipografia e banners"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Logo & Cores</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">Visual</span>
+                </button>
+
+                {/* ├── Catálogo & Loja Virtual */}
+                <button
+                  onClick={() => onTabChange("myStore")}
+                  className={`w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+                    activeTab === "myStore" || activeTab === "storefront"
+                      ? "bg-amber-600 text-white font-bold"
+                      : "text-stone-700 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                  title="Catálogo interativo do consumidor final"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <Globe className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Catálogo Web</span>
+                  </div>
+                  <span className="text-[9px] text-amber-600 font-bold">Online</span>
+                </button>
+
+                {/* ├── WhatsApp & Instagram */}
+                <button
+                  onClick={() => onTabChange("storeSettings")}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Canais de atendimento, WhatsApp e redes sociais"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">├──</span>
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>WhatsApp & Insta</span>
+                  </div>
+                  <span className="text-[9px] text-emerald-700 font-bold">Canais</span>
+                </button>
+
+                {/* └── Compartilhamento & SEO */}
+                <button
+                  onClick={() => {
+                    if (onOpenShareModal) onOpenShareModal();
+                    else onTabChange("storeSettings");
+                  }}
+                  className="w-full text-left flex items-center justify-between px-3 py-1.5 rounded-lg font-medium text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                  title="Compartilhamento de catálogo, QR Code e SEO"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px] font-mono select-none">└──</span>
+                    <Share2 className="w-3.5 h-3.5 text-stone-500" />
+                    <span>Compartilhar</span>
+                  </div>
+                  <span className="text-[9px] text-stone-400">SEO / Link</span>
+                </button>
+              </div>
+            )}
           </div>
         </nav>
 
@@ -508,8 +892,8 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
         <div className="my-3 border-t border-stone-200/80 mx-4" />
 
         <div className="px-3">
-          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-            Canal de Vendas
+          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+            Vitrine do Consumidor
           </div>
           <button
             onClick={() => onTabChange("myStore")}
@@ -518,7 +902,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                 ? "bg-amber-500 text-white shadow-xs"
                 : "bg-amber-50/70 hover:bg-amber-100/80 text-amber-950 border border-amber-200/80"
             }`}
-            title="Sua loja está pronta! Veja o link, compartilhe no WhatsApp e venda"
+            title="Sua loja online com catálogo interativo para clientes comprarem via WhatsApp e PIX"
           >
             <div className="flex items-center gap-2.5">
               <Globe
@@ -526,23 +910,20 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                   activeTab === "myStore" || activeTab === "storefront" ? "text-white" : "text-amber-700"
                 }`}
               />
-              <span>Minha Loja</span>
+              <span>Loja Virtual</span>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-semibold opacity-90 group-hover:opacity-100 transition-opacity">
-              <span>Pronta!</span>
+              <span>Nível 3</span>
               <Sparkles className="w-3 h-3" />
             </div>
           </button>
         </div>
 
         {/* ========================================================================= */}
-        {/* SEPARADOR                                                                 */}
+        {/* CONFIGURAÇÕES E AJUDA                                                    */}
         {/* ========================================================================= */}
         <div className="my-3 border-t border-stone-200/80 mx-4" />
 
-        {/* ========================================================================= */}
-        {/* CONFIGURAÇÕES E AJUDA                                                    */}
-        {/* ========================================================================= */}
         <div className="px-3 space-y-1">
           {/* ⚙ Configurações */}
           <button
@@ -652,3 +1033,4 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     </aside>
   );
 };
+

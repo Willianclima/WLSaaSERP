@@ -19,6 +19,7 @@ interface TrialStatusBannerProps {
   onOpenStorefront: () => void;
   onOpenShareModal: () => void;
   onOpenSettings: () => void;
+  onOpenCriticalPath?: () => void;
 }
 
 export const TrialStatusBanner: React.FC<TrialStatusBannerProps> = ({
@@ -29,6 +30,7 @@ export const TrialStatusBanner: React.FC<TrialStatusBannerProps> = ({
   onOpenStorefront,
   onOpenShareModal,
   onOpenSettings,
+  onOpenCriticalPath,
 }) => {
   return (
     <div className="bg-gradient-to-r from-stone-900 via-stone-950 to-stone-900 border-b border-amber-500/30 text-stone-100 py-2.5 px-4 sm:px-6">
@@ -57,6 +59,17 @@ export const TrialStatusBanner: React.FC<TrialStatusBannerProps> = ({
 
         {/* Right: Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap justify-center">
+          {onOpenCriticalPath && (
+            <button
+              onClick={onOpenCriticalPath}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/50 font-bold text-xs transition-all shadow-xs cursor-pointer"
+              title="Visualizar o Caminho Crítico do Negócio (Fluxo de Venda)"
+            >
+              <Zap className="w-3 h-3 text-amber-400" />
+              <span>Caminho Crítico</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenOnboarding}
             className="flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-all shadow-xs cursor-pointer"

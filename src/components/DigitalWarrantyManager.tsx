@@ -11,6 +11,12 @@ import {
   Printer,
   Copy,
   Check,
+  User,
+  ShoppingBag,
+  Clock,
+  Sparkles,
+  FileText,
+  BadgeCheck,
 } from "lucide-react";
 import { DigitalWarranty, UnifiedOrder } from "../types";
 
@@ -66,21 +72,24 @@ export const DigitalWarrantyManager: React.FC<DigitalWarrantyManagerProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
-              Domínio #7: Garantia Digital & QR Code Público
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              6. Garantias & Autenticidade
+            </span>
+            <span className="text-[10px] font-mono text-stone-400">
+              Passaporte Digital da Joia
             </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-serif italic font-bold tracking-wide text-stone-900 mt-1">
-            Certificados Digitais de Garantia & Portal de Validação
+            Garantia Digital & QR Code Público
           </h2>
           <p className="text-xs text-stone-600 mt-1 max-w-2xl font-sans leading-relaxed">
-            Geração instantânea de QR Code para clientes finais com validade de 12 meses para banho metálico e cravamento de pedras.
+            Certificados vinculados ao produto, cliente, pedido e data de venda, com prazo de validade e histórico rastreável via QR Code.
           </p>
         </div>
 
         <div className="flex items-center gap-2 bg-stone-100 px-3 py-1.5 rounded-full border border-stone-200 text-xs font-semibold text-stone-700">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>{warranties.length} Garantias Ativas</span>
+          <span>{warranties.length} Passaportes Ativos</span>
         </div>
       </div>
 
@@ -211,25 +220,75 @@ export const DigitalWarrantyManager: React.FC<DigitalWarrantyManagerProps> = ({
               </div>
 
               <div className="space-y-2 text-xs text-stone-800 border-y border-stone-100 py-4">
-                <div className="flex justify-between">
-                  <span className="text-stone-500 font-medium">Titular:</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Cliente:</span>
+                  </span>
                   <span className="font-bold text-stone-900">{selectedWarranty.customerName}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500 font-medium">Peça:</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Produto:</span>
+                  </span>
                   <span className="font-semibold text-stone-900">{selectedWarranty.productName}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500 font-medium">Banho Nobre:</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Pedido:</span>
+                  </span>
+                  <span className="font-mono font-bold text-stone-800">
+                    {selectedWarranty.orderNumber || "PED-001"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Data da Venda:</span>
+                  </span>
+                  <span className="font-mono text-stone-700">
+                    {new Date(selectedWarranty.issueDate).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Prazo de Garantia:</span>
+                  </span>
+                  <span className="font-mono font-bold text-emerald-800">
+                    12 Meses (até {new Date(selectedWarranty.expirationDate).toLocaleDateString("pt-BR")})
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-stone-500 font-medium flex items-center gap-1.5">
+                    <BadgeCheck className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Banho & Acabamento:</span>
+                  </span>
                   <span className="font-semibold text-stone-900">{selectedWarranty.bathType}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500 font-medium">Data Emissão:</span>
-                  <span className="font-mono text-stone-700">{new Date(selectedWarranty.issueDate).toLocaleDateString("pt-BR")}</span>
+              </div>
+
+              {/* Histórico / Rastreabilidade */}
+              <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-[11px] space-y-1.5">
+                <div className="font-bold text-stone-700 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-stone-500" />
+                  <span>Histórico do Passaporte</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-stone-500 font-medium">Válido até:</span>
-                  <span className="font-mono font-bold text-emerald-800">{new Date(selectedWarranty.expirationDate).toLocaleDateString("pt-BR")}</span>
+                <div className="text-stone-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Emissão pós-baixa de estoque:</span>
+                    <span className="font-mono">{new Date(selectedWarranty.issueDate).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Acionamentos / Reparos:</span>
+                    <span className="font-bold text-emerald-700">{selectedWarranty.claimsCount || 0} acionamentos</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Canal de Origem:</span>
+                    <span className="font-semibold">{selectedWarranty.channel}</span>
+                  </div>
                 </div>
               </div>
 

@@ -26,6 +26,7 @@ import {
   TenantStore,
   StoreBrandingConfig,
   OrganizationPaymentSettings,
+  RBACUser,
 } from "../types";
 import { clientInventoryService } from "../services/inventoryService";
 import {
@@ -51,9 +52,11 @@ interface StorefrontBuyerExperienceProps {
   warranties?: DigitalWarranty[];
   initialCategory?: string;
   initialCoupon?: string;
+  currentUser?: RBACUser;
   onPlaceOrder: (newOrder: UnifiedOrder) => Promise<any> | void;
   onNavigateToERP: (tab?: string) => void;
   onNavigateToHome?: () => void;
+  onNavigateToPlatform?: () => void;
 }
 
 export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps> = ({
@@ -62,9 +65,11 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   products,
   resellers,
   initialCategory = "TODOS",
+  currentUser,
   onPlaceOrder,
   onNavigateToERP,
   onNavigateToHome,
+  onNavigateToPlatform,
 }) => {
   // Search & Category state
   const [searchTerm, setSearchTerm] = useState("");
@@ -419,6 +424,43 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
+      {/* Simulation Bar if accessed from Platform Admin / Testing context */}
+      {currentUser?.role === "SUPER_ADMIN" && (
+        <div className="bg-stone-950 text-stone-200 border-b border-stone-800 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded-md bg-purple-500 text-white font-bold text-[10px] uppercase tracking-wider">
+              Nível 3 · Consumidor da Loja
+            </span>
+            <span className="font-semibold text-white">
+              Vitrine Pública: {tenant.name}
+            </span>
+            <span className="hidden lg:inline text-stone-400">
+              (Jornada: Catálogo → Produto → Carrinho → Pedido → WhatsApp)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-stone-400 hidden md:inline italic">
+              Não pertence ao WLSaaSERP como usuário administrativo
+            </span>
+            <button
+              onClick={() => onNavigateToERP("ownerHome")}
+              className="px-2.5 py-1 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Nível 2 (Loja)
+            </button>
+            {onNavigateToPlatform && (
+              <button
+                onClick={onNavigateToPlatform}
+                className="px-2.5 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Nível 1 (Plataforma)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs">
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 ${
