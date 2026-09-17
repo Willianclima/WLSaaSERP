@@ -9,6 +9,7 @@ import {
   SaaSPlanId,
 } from "../types/saas";
 import { query } from "../db/postgres";
+import { TenantContext } from "../db/tenantContext";
 
 // ============================================================================
 // REPOSITORIES INTERFACES
@@ -375,37 +376,43 @@ export class MembershipRepository implements IMembershipRepository {
   }
 
   async listByUser(userId: string): Promise<OrganizationMemberEntity[]> {
-    const res = await query(
-      "SELECT * FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'",
-      [userId]
-    );
-    return res.rows.map(mapRowToMember);
+    return TenantContext.run({ isSuperAdmin: true }, async () => {
+      const res = await query(
+        "SELECT * FROM organization_members WHERE user_id = $1 AND status = 'ACTIVE'",
+        [userId]
+      );
+      return res.rows.map(mapRowToMember);
+    });
   }
 
   async listByOrg(orgId: string): Promise<OrganizationMemberEntity[]> {
-    const res = await query(
-      "SELECT * FROM organization_members WHERE organization_id = $1 AND status = 'ACTIVE'",
-      [orgId]
-    );
-    return res.rows.map(mapRowToMember);
+    return TenantContext.run({ tenantId: orgId }, async () => {
+      const res = await query(
+        "SELECT * FROM organization_members WHERE organization_id = $1 AND status = 'ACTIVE'",
+        [orgId]
+      );
+      return res.rows.map(mapRowToMember);
+    });
   }
 
   async create(member: OrganizationMemberEntity): Promise<OrganizationMemberEntity> {
-    const res = await query(
-      `INSERT INTO organization_members (
-        id, organization_id, user_id, role, custom_permissions, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
-      RETURNING *`,
-      [
-        member.id,
-        member.organizationId,
-        member.userId,
-        member.role,
-        JSON.stringify(member.customPermissions || []),
-        member.status,
-      ]
-    );
-    return mapRowToMember(res.rows[0]);
+    return TenantContext.run({ tenantId: member.organizationId, isSuperAdmin: true }, async () => {
+      const res = await query(
+        `INSERT INTO organization_members (
+          id, organization_id, user_id, role, custom_permissions, status, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING *`,
+        [
+          member.id,
+          member.organizationId,
+          member.userId,
+          member.role,
+          JSON.stringify(member.customPermissions || []),
+          member.status,
+        ]
+      );
+      return mapRowToMember(res.rows[0]);
+    });
   }
 
   async update(id: string, partial: Partial<OrganizationMemberEntity>): Promise<OrganizationMemberEntity> {

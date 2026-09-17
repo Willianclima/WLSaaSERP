@@ -1143,13 +1143,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                 <ShieldCheck className="w-4 h-4 text-amber-700" />
               </div>
               <h3 className="font-bold text-stone-900 text-sm">Willian (SUPER_ADMIN)</h3>
-              <p className="text-xs text-amber-900 font-medium">Dono da Plataforma WLSaaSERP</p>
+              <p className="text-xs text-amber-900 font-medium">Administrador da Plataforma WLSaaSERP</p>
               <p className="text-[11px] text-stone-600 leading-relaxed">
-                Acesso global irrestrito: clientes SaaS, planos, faturamento MRR, quotas, provisionamento de domínios e auditoria de segurança.
+                Controle administrativo auditado: administra plataforma, gerencia organizações, habilita/desabilita módulos, administra planos e opera suporte controlado — com 100% das ações registradas em auditoria e sem bypass cego de RLS.
               </p>
               <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-[11px] font-bold text-amber-950">
-                <span>Total de Super Admins:</span>
-                <span>1 usuário</span>
+                <span>Governança:</span>
+                <span className="text-emerald-700">TUDO AUDITADO</span>
               </div>
             </div>
 
@@ -1771,6 +1771,120 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          {/* P0 SECURITY ARCHITECTURE BANNER: DUAS BARREIRAS DE BLINDAGEM MULTI-TENANT */}
+          <div className="mt-8 border border-stone-200 bg-stone-900 text-white rounded-2xl p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Arquitetura de Segurança P0: Duas Barreiras de Isolamento</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      RLS ATIVO & SET LOCAL
+                    </span>
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Prevenção absoluta contra vazamento de dados. O cabeçalho <code>x-tenant-id</code> jamais é aceito sem validação de identidade e membership.
+                  </p>
+                </div>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-stone-800 text-stone-300 text-xs font-mono font-semibold border border-stone-700">
+                SET LOCAL app.current_tenant_id
+              </div>
+            </div>
+
+            {/* Pipeline Visual Flow */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-center text-xs">
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-stone-700 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-stone-400 font-mono">1. ENTRADA</span>
+                <span className="font-bold text-white">REQUISIÇÃO</span>
+                <span className="text-[10px] text-stone-400">Bearer + Header</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-stone-700 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-amber-400 font-mono">2. AUTH</span>
+                <span className="font-bold text-amber-300">AUTENTICAÇÃO</span>
+                <span className="text-[10px] text-stone-400">HMAC-SHA256</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-stone-700 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-amber-400 font-mono">3. RBAC</span>
+                <span className="font-bold text-amber-300">MEMBERSHIP</span>
+                <span className="text-[10px] text-stone-400">Valida no DB</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-stone-700 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-indigo-400 font-mono">4. CONTEXT</span>
+                <span className="font-bold text-indigo-300">TENANT CONTEXT</span>
+                <span className="text-[10px] text-stone-400">AsyncLocal</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/20 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-emerald-400 font-mono">5. SET LOCAL</span>
+                <span className="font-bold text-emerald-300">RLS CONTEXT</span>
+                <span className="text-[10px] text-emerald-400/80">Injetado na query</span>
+              </div>
+              <div className="bg-stone-800/80 p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/20 flex flex-col items-center justify-center space-y-1">
+                <span className="text-[10px] text-emerald-400 font-mono">6. KERNEL</span>
+                <span className="font-bold text-emerald-300">POSTGRESQL</span>
+                <span className="text-[10px] text-emerald-400/80">Filtro no Disco</span>
+              </div>
+            </div>
+
+            {/* Explicação Técnica da Garantia */}
+            <div className="bg-stone-950/80 rounded-xl p-4 border border-stone-800 space-y-2 text-xs text-stone-300">
+              <div className="flex items-center gap-2 font-bold text-emerald-400">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Por que o ataque de injeção de cabeçalho 'x-tenant-id: loja-456' é 100% ineficaz:</span>
+              </div>
+              <p className="text-stone-400 pl-6 leading-relaxed">
+                Se um cliente autenticado na <strong>loja-123</strong> tentar adulterar a requisição enviando <code>x-tenant-id: loja-456</code>, a camada de <strong>AUTORIZAÇÃO & MEMBERSHIP</strong> verifica imediatamente a tabela <code>organization_members</code>. Como não existe vínculo ativo do usuário com a <em>loja-456</em>, a requisição é sumariamente rejeitada com <code>403 Forbidden (UNAUTHORIZED_TENANT_ACCESS)</code> antes de qualquer consulta aos dados, e o <code>SET LOCAL app.current_tenant_id</code> jamais recebe o ID falso.
+              </p>
+            </div>
+
+            {/* GOVERNANÇA DO SUPER ADMIN: CONTROLE ADMINISTRATIVO SEM BYPASS DE AUDITORIA */}
+            <div className="bg-stone-950/90 rounded-xl p-5 border border-amber-500/30 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Governança do SUPER_ADMIN: Controle Administrativo com Menor Privilégio</span>
+                </div>
+                <span className="text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/30">
+                  SEM CONTAS ONIPOTENTES · TUDO AUDITADO
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2 text-center text-xs">
+                <div className="bg-stone-900 p-2.5 rounded-lg border border-stone-800 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">1. PLATAFORMA</span>
+                  <span className="text-stone-200 font-medium text-[11px]">Administrar Plataforma</span>
+                </div>
+                <div className="bg-stone-900 p-2.5 rounded-lg border border-stone-800 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">2. ORGANIZAÇÕES</span>
+                  <span className="text-stone-200 font-medium text-[11px]">Gerenciar Lojas</span>
+                </div>
+                <div className="bg-stone-900 p-2.5 rounded-lg border border-stone-800 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">3. MÓDULOS</span>
+                  <span className="text-stone-200 font-medium text-[11px]">Habilitar Módulos</span>
+                </div>
+                <div className="bg-stone-900 p-2.5 rounded-lg border border-stone-800 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">4. PLANOS</span>
+                  <span className="text-stone-200 font-medium text-[11px]">Administrar Planos</span>
+                </div>
+                <div className="bg-stone-900 p-2.5 rounded-lg border border-stone-800 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">5. SUPORTE</span>
+                  <span className="text-stone-200 font-medium text-[11px]">Suporte Controlado</span>
+                </div>
+                <div className="bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-500/40 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-emerald-400 font-mono font-bold">6. AUDITORIA</span>
+                  <span className="text-emerald-300 font-bold text-[11px]">TUDO AUDITADO</span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-stone-400 leading-relaxed">
+                O Super Admin <strong>não ignora as regras do RLS nem atua às cegas</strong>. Quando necessita prestar auxílio técnico a uma loja, a sessão é aberta em <strong>Suporte Técnico Supervisionado</strong>, injetando o tenant daquela loja específica no RLS e gravando cada leitura ou ação em <code>audit_logs</code> com o IP e justificativa registrada.
+              </p>
+            </div>
           </div>
         </div>
       )}

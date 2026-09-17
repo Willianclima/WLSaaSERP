@@ -8,11 +8,11 @@ export class AccessControlService {
    * while OWNER, LOJA_ADMIN, GERENTE_COMERCIAL, VENDEDOR are tenant-scoped roles (organization_members.role).
    */
   static hasRole(userRole: OrganizationRole, requiredRoles: OrganizationRole[], isPlatformSuperAdmin = false): boolean {
-    // Platform Super Admin has universal platform maintenance bypass
+    // Platform Super Admin can access platform management and supervised support features (all audited)
     if (isPlatformSuperAdmin) {
       return true;
     }
-    // Tenant Owner has full administrative control within their tenant
+    // Tenant Owner has administrative control within their tenant
     if (userRole === "OWNER") {
       return true;
     }

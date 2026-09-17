@@ -1,16 +1,26 @@
 import crypto from "crypto";
 import { Response, NextFunction } from "express";
+import pg from "pg";
 import { getSessionSecret } from "../config/authConfig";
 import { userRepo, orgRepo, memberRepo } from "../repositories";
 import { UserEntity, OrganizationEntity, OrganizationRole } from "../types/saas";
 import { Request } from "express";
 import { TenantContext } from "../db/tenantContext";
+import { auditService } from "../services/auditService";
+import { getPostgresPool, setLocalTenantId, applyRlsContext } from "../db/postgres";
 
 export interface AuthenticatedRequest extends Request {
   user?: UserEntity;
   tenant?: OrganizationEntity;
   userRole?: OrganizationRole;
   organizationId?: string;
+  withTenantDb?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
+  executeWithRls?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
+  scopedQuery?: <T = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
+  db?: {
+    query: <T = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
+    withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
+  };
 }
 
 /**
@@ -129,109 +139,199 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     req.user = user;
 
     // -------------------------------------------------------------------------
-    // 3. TENANT RESOLUTION (STRICT IN PRODUCTION, DEMO FALLBACK ONLY IN DEV)
+    // 2. IDENTIDADE VERIFICADA (Nível 1 de Barreira)
     // -------------------------------------------------------------------------
-    let targetOrgId = tenantHeader || orgIdFromToken;
+    req.user = user;
 
-    if (!targetOrgId) {
-      if (isProduction || !allowDevDemoFallback) {
-        return res.status(400).json({
-          success: false,
-          code: "TENANT_REQUIRED",
-          error: "Identificador da organização/loja (x-tenant-id) é obrigatório em produção.",
-        });
+    // -------------------------------------------------------------------------
+    // 3. MEMBERSHIP DISCOVERY & VALIDAÇÃO (Nível 2 de Barreira)
+    // A organização NUNCA vem puramente de um cabeçalho arbitrário (x-tenant-id).
+    // Ela DEVE ser validada contra os memberships ativos da identidade:
+    // IDENTIDADE -> MEMBERSHIP -> TENANT CONTEXT -> RLS -> POSTGRESQL
+    // -------------------------------------------------------------------------
+    const userMemberships = await memberRepo.listByUser(user.id);
+    const activeMemberships = userMemberships.filter((m) => m.status === "ACTIVE");
+
+    // Identificador de tenant que a requisição está solicitando (se houver)
+    const requestedTenantId = (tenantHeader || orgIdFromToken)?.trim();
+
+    let targetTenantId: string | undefined;
+    let effectiveRole: OrganizationRole = "VENDEDOR";
+
+    if (user.isPlatformSuperAdmin) {
+      // -----------------------------------------------------------------------
+      // PERFIL SUPER_ADMIN (Governança da Plataforma):
+      // - Pode administrar a plataforma (infraestrutura, telemetria global)
+      // - Pode gerenciar organizações (criar, listar, suspender)
+      // - Pode habilitar/desabilitar módulos
+      // - Pode administrar planos de assinatura
+      // - Pode acessar SUPORTE CONTROLADO a lojas específicas
+      // - TUDO AUDITADO (nunca bypass silencioso de RLS)
+      // -----------------------------------------------------------------------
+      if (requestedTenantId) {
+        // Suporte técnico supervisionado a uma organização específica
+        const tenant = await orgRepo.findById(requestedTenantId);
+        if (!tenant || tenant.status !== "ACTIVE") {
+          return res.status(404).json({
+            success: false,
+            code: "TENANT_NOT_FOUND",
+            error: `Organização '${requestedTenantId}' não encontrada ou inativa no sistema.`,
+          });
+        }
+        targetTenantId = tenant.id;
+        effectiveRole = "SUPER_ADMIN";
+
+        // AUDITORIA P0 MANDATÓRIA: Todo acesso de Super Admin a dados de tenant é registrado
+        const supportReason = (req.headers["x-support-reason"] as string) || "Sessão de suporte técnico supervisionado de plataforma";
+        await auditService.logAction(
+          targetTenantId,
+          user.id,
+          "SUPER_ADMIN_CONTROLLED_SUPPORT_ACCESS",
+          "ORGANIZATION",
+          targetTenantId,
+          req.ip,
+          req.headers["user-agent"] as string,
+          `Super Admin (${user.email}) acessou loja em suporte supervisionado. Motivo: ${supportReason}`
+        );
+      } else {
+        // Super Admin operando em rota de plataforma global (sem escopo de loja específico)
+        targetTenantId = activeMemberships[0]?.organizationId;
+        effectiveRole = "SUPER_ADMIN";
+      }
+    } else {
+      // -----------------------------------------------------------------------
+      // USUÁRIOS REGULARES (OWNER, ADMIN, GERENTE, VENDEDOR, REVENDEDORA):
+      // BLINDAGEM P0: Se o navegador tentar injetar x-tenant-id: loja-456
+      // e o usuário for da loja-123, a tentativa é REJEITADA IMEDIATAMENTE com 403.
+      // O cabeçalho adulterado JAMAIS é aceito.
+      // -----------------------------------------------------------------------
+      if (activeMemberships.length === 0) {
+        if (!isProduction && allowDevDemoFallback) {
+          // Dev convenience: auto-seed dev membership
+          const allOrgs = await orgRepo.listAll();
+          const devOrg = allOrgs[0];
+          if (devOrg) {
+            const devMembership = {
+              id: `mem-dev-${user.id}-${devOrg.id}`,
+              organizationId: devOrg.id,
+              userId: user.id,
+              role: "OWNER" as OrganizationRole,
+              status: "ACTIVE" as const,
+              createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+            };
+            await memberRepo.create(devMembership);
+            activeMemberships.push(devMembership);
+          }
+        }
+
+        if (activeMemberships.length === 0) {
+          return res.status(403).json({
+            success: false,
+            code: "NO_ACTIVE_MEMBERSHIPS",
+            error: "Acesso negado: a sua identidade não possui membership ativo em nenhuma organização.",
+          });
+        }
       }
 
-      // DEVELOPMENT ONLY: Look up primary membership or seed tenant
-      const userMemberships = await memberRepo.listByUser(user.id);
-      if (userMemberships.length > 0) {
-        targetOrgId = userMemberships[0].organizationId;
+      if (requestedTenantId) {
+        // Verifica se o tenant solicitado pertence aos memberships ATIVOS desta identidade
+        const matchedMembership = activeMemberships.find((m) => m.organizationId === requestedTenantId);
+
+        if (!matchedMembership) {
+          // TENTATIVA DE SPOOFING OU ACESSO INDEVIDO DETECTADA:
+          // O usuário está autenticado na loja-123 e tentou mandar x-tenant-id: loja-456
+          return res.status(403).json({
+            success: false,
+            code: "UNAUTHORIZED_TENANT_ACCESS",
+            error: `Acesso não autorizado: a sua identidade autenticada (${user.email}) não possui membership ativo na organização '${requestedTenantId}'. Violação de isolamento multi-tenant bloqueada na barreira de Membership.`,
+          });
+        }
+
+        targetTenantId = matchedMembership.organizationId;
+        effectiveRole = matchedMembership.role;
       } else {
-        const allOrgs = await orgRepo.listAll();
-        targetOrgId = allOrgs[0]?.id;
+        // Nenhuma organização solicitada no cabeçalho: deriva estritamente do membership principal da identidade
+        targetTenantId = activeMemberships[0].organizationId;
+        effectiveRole = activeMemberships[0].role;
       }
     }
 
-    if (!targetOrgId) {
-      return res.status(404).json({
+    if (!targetTenantId) {
+      return res.status(400).json({
         success: false,
-        code: "TENANT_NOT_FOUND",
-        error: "Nenhuma organização vinculada ao contexto da requisição.",
+        code: "TENANT_CONTEXT_MISSING",
+        error: "Nenhuma organização identificada no contexto de autenticação.",
       });
     }
 
-    const tenant = await orgRepo.findById(targetOrgId);
+    const tenant = await orgRepo.findById(targetTenantId);
     if (!tenant || tenant.status !== "ACTIVE") {
       return res.status(404).json({
         success: false,
         code: "TENANT_INACTIVE_OR_NOT_FOUND",
-        error: `Organização '${targetOrgId}' não encontrada ou inativa no sistema.`,
-      });
-    }
-
-    // -------------------------------------------------------------------------
-    // 4. MEMBERSHIP VALIDATION (STRICT RBAC & MULTI-TENANT ISOLATION)
-    // -------------------------------------------------------------------------
-    let membership = await memberRepo.findByOrgAndUser(tenant.id, user.id);
-
-    if (!membership && !user.isPlatformSuperAdmin) {
-      if (isProduction || !allowDevDemoFallback) {
-        return res.status(403).json({
-          success: false,
-          code: "MEMBERSHIP_REQUIRED",
-          error: `Acesso negado: o usuário não possui vínculo ativo com a organização '${tenant.name}'.`,
-        });
-      }
-
-      // In dev mode, check if user belongs to any org or auto-grant dev access
-      const userMemberships = await memberRepo.listByUser(user.id);
-      if (userMemberships.length === 0) {
-        console.warn(`[AuthMiddleware] [DEV] Criando vínculo de desenvolvimento para ${user.email} na organização ${tenant.name}`);
-        membership = {
-          id: `mem-dev-${user.id}-${tenant.id}`,
-          organizationId: tenant.id,
-          userId: user.id,
-          role: "OWNER",
-          status: "ACTIVE",
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        };
-        await memberRepo.create(membership);
-      } else {
-        return res.status(403).json({
-          success: false,
-          code: "UNAUTHORIZED_TENANT_ACCESS",
-          error: `Acesso não autorizado: você não é membro da organização ${tenant.name}.`,
-        });
-      }
-    }
-
-    if (membership && membership.status !== "ACTIVE" && !user.isPlatformSuperAdmin) {
-      return res.status(403).json({
-        success: false,
-        code: "MEMBERSHIP_SUSPENDED",
-        error: "Seu acesso de membro a esta organização está suspenso ou inativo.",
+        error: `Organização '${targetTenantId}' não encontrada ou inativa no sistema.`,
       });
     }
 
     req.tenant = tenant;
     req.organizationId = tenant.id;
+    req.userRole = effectiveRole;
+
+    const isSuperAdmin = Boolean(user.isPlatformSuperAdmin);
+    const sanitizedTenantId = tenant.id.replace(/[^a-zA-Z0-9_\-]/g, "");
+
+    // Injeção de helpers de banco garantindo SET LOCAL app.current_tenant_id antes de consultas
+    req.withTenantDb = async <T>(
+      callback: (client: pg.PoolClient) => Promise<T>
+    ): Promise<T> => {
+      const client = await getPostgresPool().connect();
+      try {
+        await client.query("BEGIN");
+        await setLocalTenantId(client, sanitizedTenantId, isSuperAdmin);
+        const result = await callback(client);
+        await client.query("COMMIT");
+        return result;
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    };
+    req.executeWithRls = req.withTenantDb;
+
+    req.scopedQuery = async <T = any>(
+      text: string,
+      params?: any[]
+    ): Promise<pg.QueryResult<T>> => {
+      const client = await getPostgresPool().connect();
+      try {
+        await applyRlsContext(client);
+        return await client.query<T>(text, params);
+      } finally {
+        try {
+          await client.query(
+            "SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'false', false)"
+          );
+        } catch {}
+        client.release();
+      }
+    };
+
+    req.db = {
+      query: <T = any>(sql: string, params?: any[]) => req.scopedQuery!<T>(sql, params),
+      withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => req.withTenantDb!<T>(callback),
+    };
 
     // -------------------------------------------------------------------------
-    // 5. RESOLVE RBAC ROLE
+    // 4. TENANT CONTEXT INJECTION (ASYNC LOCAL STORAGE)
+    // O tenant ID estritamente validado por membership é injetado no contexto.
+    // O PostgreSQL RLS executará: SET LOCAL app.current_tenant_id = '<targetTenantId>'
     // -------------------------------------------------------------------------
-    let role: OrganizationRole = "VENDEDOR";
-    if (membership) {
-      role = membership.role;
-    }
-    if (user.isPlatformSuperAdmin) {
-      role = "SUPER_ADMIN";
-    }
-
-    req.userRole = role;
     TenantContext.run(
       {
-        tenantId: tenant.id,
-        isSuperAdmin: Boolean(user.isPlatformSuperAdmin),
+        tenantId: sanitizedTenantId,
+        isSuperAdmin,
       },
       () => {
         next();
@@ -244,3 +344,5 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     });
   }
 }
+
+export { tenantRlsMiddleware } from "./tenantRlsMiddleware";

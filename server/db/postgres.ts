@@ -63,9 +63,73 @@ export function getPostgresPool(): pg.Pool {
     global._auraPgPool.on("error", (err) => {
       console.error("[PostgreSQL Pool Error]", err);
     });
+
+    // Intercept client checkouts to automatically attach RLS session variables
+    const originalConnect = global._auraPgPool.connect.bind(global._auraPgPool);
+    global._auraPgPool.connect = function (...args: any[]) {
+      if (typeof args[0] === "function") {
+        const cb = args[0];
+        return originalConnect((err: any, client: any, release: any) => {
+          if (err) return cb(err, client, release);
+          return cb(null, interceptClientWithRls(client), release);
+        });
+      }
+      return originalConnect().then((client: any) => interceptClientWithRls(client));
+    } as any;
   }
 
   return global._auraPgPool;
+}
+
+/**
+ * Wraps a pg.PoolClient so that before executing queries, the active TenantContext
+ * is automatically enforced with SET LOCAL app.current_tenant_id = '...' and session set_config.
+ */
+export function interceptClientWithRls(client: pg.PoolClient): pg.PoolClient {
+  if (!client || typeof client.query !== "function") {
+    return client;
+  }
+  const originalQuery = client.query.bind(client);
+  let contextApplied = false;
+
+  (client as any).query = async function (this: any, ...args: any[]) {
+    const context = TenantContext.get();
+    const tenantId = context?.tenantId;
+
+    if (tenantId && !contextApplied) {
+      const sanitized = tenantId.replace(/[^a-zA-Z0-9_\-]/g, "");
+      const isSuper = context?.isSuperAdmin ? "true" : "false";
+
+      await originalQuery.call(
+        this,
+        "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_super_admin', $2, false)",
+        [sanitized, isSuper]
+      );
+      try {
+        await originalQuery.call(this, `SET LOCAL app.current_tenant_id = '${sanitized}'`);
+      } catch {
+        // SET LOCAL outside transaction is harmless
+      }
+      contextApplied = true;
+    }
+
+    return (originalQuery as any).apply(this, args);
+  };
+
+  const originalRelease = client.release.bind(client);
+  client.release = function (destroy?: boolean | Error) {
+    // Reset session configuration on client release to prevent pool cross-contamination
+    originalQuery
+      .call(
+        this,
+        "SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'false', false)"
+      )
+      .catch(() => {});
+    contextApplied = false;
+    return originalRelease(destroy as any);
+  };
+
+  return client;
 }
 
 /**
@@ -93,6 +157,8 @@ export const pool = new Proxy({} as pg.Pool, {
 
 /**
  * Helper to apply RLS session variables to a PostgreSQL client or pool connection.
+ * Executed via 'SET LOCAL' within transactions or set_config session parameters,
+ * enforcing: IDENTIDADE -> MEMBERSHIP -> TENANT CONTEXT -> RLS -> POSTGRESQL.
  */
 export async function applyRlsContext(client: pg.PoolClient | pg.Pool): Promise<void> {
   const context = TenantContext.get();
@@ -100,12 +166,67 @@ export async function applyRlsContext(client: pg.PoolClient | pg.Pool): Promise<
   const isSuperAdmin = context?.isSuperAdmin ? "true" : "false";
 
   if (tenantId) {
-    await client.query("SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_super_admin', $2, false)", [
-      tenantId,
-      isSuperAdmin,
-    ]);
+    const sanitizedTenantId = tenantId.replace(/[^a-zA-Z0-9_\-]/g, "");
+    // Parameterized session set_config
+    await client.query(
+      "SELECT set_config('app.current_tenant_id', $1, false), set_config('app.is_super_admin', $2, false)",
+      [sanitizedTenantId, isSuperAdmin]
+    );
+    // Explicit SET LOCAL app.current_tenant_id
+    try {
+      await client.query(`SET LOCAL app.current_tenant_id = '${sanitizedTenantId}'`);
+      await client.query(`SET LOCAL app.is_super_admin = '${isSuperAdmin}'`);
+    } catch {
+      // Handled by set_config if outside explicit BEGIN..COMMIT block
+    }
   } else if (context?.isSuperAdmin) {
-    await client.query("SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'true', false)");
+    await client.query(
+      "SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'true', false)"
+    );
+    try {
+      await client.query("SET LOCAL app.current_tenant_id = ''");
+      await client.query("SET LOCAL app.is_super_admin = 'true'");
+    } catch {}
+  }
+}
+
+/**
+ * Explicit helper to set the local tenant ID context on a PostgreSQL client.
+ * Executes: SET LOCAL app.current_tenant_id = '...'
+ * This is guaranteed to be bound to the current transaction scope in PostgreSQL.
+ */
+export async function setLocalTenantId(
+  client: pg.PoolClient,
+  tenantId: string,
+  isSuperAdmin: boolean = false
+): Promise<void> {
+  // Sanitize tenantId: only allow alphanumeric and dashes/underscores
+  const sanitizedTenantId = tenantId.replace(/[^a-zA-Z0-9_\-]/g, "");
+  await client.query(`SET LOCAL app.current_tenant_id = '${sanitizedTenantId}'`);
+  await client.query(`SET LOCAL app.is_super_admin = '${isSuperAdmin ? "true" : "false"}'`);
+}
+
+/**
+ * High-level helper to execute any database query block with guaranteed
+ * SET LOCAL app.current_tenant_id = '...' transaction isolation.
+ */
+export async function executeWithTenantRlsContext<T>(
+  tenantId: string,
+  callback: (client: pg.PoolClient) => Promise<T>,
+  isSuperAdmin: boolean = false
+): Promise<T> {
+  const client = await getPostgresPool().connect();
+  try {
+    await client.query("BEGIN");
+    await setLocalTenantId(client, tenantId, isSuperAdmin);
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

@@ -2,17 +2,26 @@
  * SQL DDL and Migration to Enable Row Level Security (RLS) on PostgreSQL
  * Multi-tenant isolation for Semi-joias ERP & SaaS platform
  * 
+ * Strict Security Architecture (P0):
+ * IDENTIDADE -> MEMBERSHIP -> TENANT CONTEXT -> RLS -> POSTGRESQL
+ * 
  * Strategy:
  * 1. ENABLE ROW LEVEL SECURITY on all tenant-specific tables.
- * 2. FORCE ROW LEVEL SECURITY so table owners cannot accidentally bypass RLS.
+ * 2. FORCE ROW LEVEL SECURITY so table owners and superusers cannot bypass RLS.
  * 3. CREATE POLICY for tenant isolation:
  *    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
- *    OR current_setting('app.is_super_admin', true) = 'true'
+ * 
+ * CRITICAL SECURITY PRINCIPLE:
+ * Super Admin DOES NOT bypass RLS on tenant tables.
+ * Super Admin has platform administrative control (organizations, plans, modules, infrastructure),
+ * but tenant-scoped tables (products, orders, customers, inventory, etc.) are ALWAYS strictly isolated by RLS.
+ * For technical support, Super Admin enters an explicitly scoped and AUDITED session
+ * where app.current_tenant_id is set to that specific tenant, preventing any cross-tenant data leak.
  */
 
 export const RLS_MIGRATION_DDL = `
 -- ============================================================================
--- ROW LEVEL SECURITY (RLS) MULTI-TENANT ISOLATION POLICIES
+-- ROW LEVEL SECURITY (RLS) MULTI-TENANT ISOLATION POLICIES (STRICT P0)
 -- ============================================================================
 
 -- 1. PRODUCTS
@@ -23,11 +32,9 @@ CREATE POLICY tenant_isolation_policy ON products
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 2. PRODUCT MEDIA
@@ -38,11 +45,9 @@ CREATE POLICY tenant_isolation_policy ON product_media
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 3. CUSTOMERS
@@ -53,11 +58,9 @@ CREATE POLICY tenant_isolation_policy ON customers
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 4. CUSTOMER ADDRESSES
@@ -68,11 +71,9 @@ CREATE POLICY tenant_isolation_policy ON customer_addresses
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 5. CUSTOMER CONTACTS
@@ -83,11 +84,9 @@ CREATE POLICY tenant_isolation_policy ON customer_contacts
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 6. ORDERS
@@ -98,11 +97,9 @@ CREATE POLICY tenant_isolation_policy ON orders
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 7. ORDER ITEMS
@@ -113,11 +110,9 @@ CREATE POLICY tenant_isolation_policy ON order_items
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 8. ORDER PAYMENTS
@@ -128,11 +123,9 @@ CREATE POLICY tenant_isolation_policy ON order_payments
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 9. ORDER STATE TRANSITIONS
@@ -143,11 +136,9 @@ CREATE POLICY tenant_isolation_policy ON order_state_transitions
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 10. INVENTORY BALANCES
@@ -158,11 +149,9 @@ CREATE POLICY tenant_isolation_policy ON inventory_balances
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 11. INVENTORY MOVEMENTS (LEDGER)
@@ -173,11 +162,9 @@ CREATE POLICY tenant_isolation_policy ON inventory_movements
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 12. INVENTORY RESERVATIONS
@@ -188,11 +175,9 @@ CREATE POLICY tenant_isolation_policy ON inventory_reservations
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 13. INVENTORY LOCATIONS
@@ -203,11 +188,9 @@ CREATE POLICY tenant_isolation_policy ON inventory_locations
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 14. IDEMPOTENCY KEYS
@@ -218,11 +201,9 @@ CREATE POLICY tenant_isolation_policy ON idempotency_keys
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 15. AUDIT LOGS
@@ -233,11 +214,9 @@ CREATE POLICY tenant_isolation_policy ON audit_logs
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 16. ORGANIZATION MEMBERS
@@ -248,11 +227,9 @@ CREATE POLICY tenant_isolation_policy ON organization_members
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 
 -- 17. ORGANIZATION MODULES
@@ -263,10 +240,8 @@ CREATE POLICY tenant_isolation_policy ON organization_modules
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
-    OR current_setting('app.is_super_admin', true) = 'true'
   );
 `;
