@@ -144,14 +144,36 @@ export class TenantManager {
         }
       }
 
-      // 4. Inspecionar payload sintético do token (sess_aura_<userId>_<tenantId>_<timestamp>)
+      // 4. Inspecionar token (JWT ou formato sess_aura_<userId>_<tenantId>_<timestamp>)
       const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem("aura_auth_token");
-      if (token && token.startsWith("sess_aura_")) {
-        const parts = token.split("_");
-        if (parts.length >= 4 && parts[3]) {
-          return {
-            organizationId: parts[3],
-          };
+      if (token) {
+        if (token.startsWith("sess_aura_")) {
+          const parts = token.split("_");
+          if (parts.length >= 4 && parts[3]) {
+            return {
+              organizationId: parts[3],
+            };
+          }
+        } else if (token.split(".").length === 3) {
+          try {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            const jsonPayload = decodeURIComponent(
+              atob(base64)
+                .split("")
+                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+            );
+            const parsed = JSON.parse(jsonPayload);
+            if (parsed.tenantId || parsed.organizationId) {
+              return {
+                userId: parsed.sub || parsed.userId,
+                organizationId: parsed.tenantId || parsed.organizationId,
+                role: parsed.role,
+                isPlatformSuperAdmin: Boolean(parsed.isPlatformSuperAdmin),
+              };
+            }
+          } catch {}
         }
       }
     } catch (err) {

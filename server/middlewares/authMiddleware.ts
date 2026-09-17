@@ -8,12 +8,14 @@ import { Request } from "express";
 import { TenantContext } from "../db/tenantContext";
 import { auditService } from "../services/auditService";
 import { getPostgresPool, setLocalTenantId, applyRlsContext } from "../db/postgres";
+import { JwtService } from "../services/jwtService";
 
 export interface AuthenticatedRequest extends Request {
   user?: UserEntity;
   tenant?: OrganizationEntity;
   userRole?: OrganizationRole;
   organizationId?: string;
+  jwtPayload?: any;
   withTenantDb?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
   executeWithRls?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
   scopedQuery?: <T = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
@@ -57,8 +59,24 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     if (authHeader) {
       const token = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-      // Format: sess_aura_{userId}_{orgId}_{timestamp}_{signature?}
-      if (token.startsWith("sess_aura_")) {
+      // Caso A: Formato JWT padrão RFC 7519
+      if (JwtService.isJwt(token)) {
+        try {
+          const payload = JwtService.verify(token);
+          const userId = payload.userId || payload.sub;
+          orgIdFromToken = payload.tenantId || payload.organizationId;
+          req.jwtPayload = payload;
+          user = await userRepo.findById(userId);
+        } catch (jwtErr: any) {
+          return res.status(401).json({
+            success: false,
+            code: "INVALID_JWT_TOKEN",
+            error: `Token JWT inválido ou expirado: ${jwtErr.message}`,
+          });
+        }
+      }
+      // Caso B: Formato de sessão legada sess_aura_{userId}_{orgId}_{timestamp}_{signature?}
+      else if (token.startsWith("sess_aura_")) {
         const parts = token.split("_");
         const userId = parts[2];
         orgIdFromToken = parts[3];
@@ -346,3 +364,4 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
 }
 
 export { tenantRlsMiddleware } from "./tenantRlsMiddleware";
+export { jwtTenantRlsMiddleware } from "./jwtTenantRlsMiddleware";

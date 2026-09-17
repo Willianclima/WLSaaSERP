@@ -368,11 +368,13 @@ export class MembershipRepository implements IMembershipRepository {
   }
 
   async findByOrgAndUser(orgId: string, userId: string): Promise<OrganizationMemberEntity | null> {
-    const res = await query(
-      "SELECT * FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'ACTIVE'",
-      [orgId, userId]
-    );
-    return res.rows.length > 0 ? mapRowToMember(res.rows[0]) : null;
+    return TenantContext.run({ isSuperAdmin: true }, async () => {
+      const res = await query(
+        "SELECT * FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'ACTIVE'",
+        [orgId, userId]
+      );
+      return res.rows.length > 0 ? mapRowToMember(res.rows[0]) : null;
+    });
   }
 
   async listByUser(userId: string): Promise<OrganizationMemberEntity[]> {

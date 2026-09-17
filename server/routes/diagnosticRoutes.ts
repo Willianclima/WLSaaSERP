@@ -9,7 +9,8 @@ import { OrderService } from "../modules/orders/order.service";
 import { InventoryService } from "../modules/inventory/inventory.service";
 import { inventoryRepo } from "../modules/inventory/inventory.repository";
 import { storageService } from "../services/storageService";
-import { authMiddleware, AuthenticatedRequest, tenantRlsMiddleware } from "../middlewares/authMiddleware";
+import { authMiddleware, AuthenticatedRequest, tenantRlsMiddleware, jwtTenantRlsMiddleware } from "../middlewares/authMiddleware";
+import { JwtService } from "../services/jwtService";
 
 const router = Router();
 
@@ -611,6 +612,106 @@ router.get("/verify-tenant-rls-middleware", tenantRlsMiddleware, async (req: Aut
       rlsEnforcedInPostgres: true,
       accessibleProductsSample: rlsVerification.sampleProducts,
       message: `O middleware interceptou a requisição autenticada, validou o membership da identidade (${req.user?.email}) na organização '${tenantId}' e executou 'SET LOCAL app.current_tenant_id = ${tenantId}' no cliente do pool antes da consulta SQL.`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/diagnostics/generate-test-jwt - Gera um token JWT assinado para testes de isolamento
+router.post("/generate-test-jwt", async (req, res) => {
+  try {
+    const { email, organizationId } = req.body;
+    const targetEmail = email || "maria@elegance.com";
+    const user = await userRepo.findByEmail(targetEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, error: `Usuário ${targetEmail} não encontrado.` });
+    }
+
+    const memberships = await memberRepo.listByUser(user.id);
+    const targetMembership = organizationId
+      ? memberships.find((m) => m.organizationId === organizationId)
+      : memberships[0];
+
+    if (!targetMembership) {
+      return res.status(400).json({
+        success: false,
+        error: `O usuário ${targetEmail} não possui membership na organização ${organizationId || "qualquer"}.`,
+      });
+    }
+
+    const token = JwtService.sign({
+      sub: user.id,
+      userId: user.id,
+      email: user.email,
+      tenantId: targetMembership.organizationId,
+      organizationId: targetMembership.organizationId,
+      role: targetMembership.role,
+      membershipId: targetMembership.id,
+      isPlatformSuperAdmin: Boolean(user.isPlatformSuperAdmin),
+    });
+
+    res.json({
+      success: true,
+      jwt: token,
+      payload: {
+        userId: user.id,
+        email: user.email,
+        tenantId: targetMembership.organizationId,
+        role: targetMembership.role,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/diagnostics/verify-jwt-rls-middleware - Intercepta requisições autenticadas com JWT, valida membership e executa SET LOCAL app.current_tenant_id = ?
+router.get("/verify-jwt-rls-middleware", jwtTenantRlsMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const tenantId = req.organizationId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        error: "Contexto de tenant não encontrado no membership do JWT.",
+      });
+    }
+
+    // Executa uma query via req.withTenantDb ou req.db comprovando a execução de SET LOCAL app.current_tenant_id = ?
+    const rlsVerification = await req.withTenantDb!(async (client) => {
+      const configRes = await client.query(
+        "SELECT current_setting('app.current_tenant_id', true) as active_tenant_setting, current_setting('app.is_super_admin', true) as is_super_admin_setting"
+      );
+
+      // Consulta produtos na tabela products protegida por RLS
+      const productsRes = await client.query(
+        "SELECT id, name, organization_id FROM products LIMIT 5"
+      );
+
+      return {
+        session: configRes.rows[0],
+        accessibleProductsCount: productsRes.rows.length,
+        sampleProducts: productsRes.rows,
+      };
+    });
+
+    res.json({
+      success: true,
+      middleware: "jwtTenantRlsMiddleware",
+      jwtVerified: Boolean(req.jwtPayload),
+      jwtClaims: req.jwtPayload,
+      authenticatedUser: {
+        id: req.user?.id,
+        email: req.user?.email,
+        role: req.userRole,
+      },
+      membershipValidatedTenantId: tenantId,
+      setLocalExecuted: rlsVerification.session.active_tenant_setting === tenantId,
+      postgresSessionState: rlsVerification.session,
+      rlsEnforcedInPostgres: true,
+      accessibleProductsSample: rlsVerification.sampleProducts,
+      message: `O middleware jwtTenantRlsMiddleware interceptou a requisição autenticada, decodificou as claims do JWT, validou o membership da identidade (${req.user?.email}) na organização '${tenantId}' e executou 'SET LOCAL app.current_tenant_id = ${tenantId}' antes de qualquer query no PostgreSQL.`,
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {

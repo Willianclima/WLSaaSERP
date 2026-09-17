@@ -17,7 +17,9 @@ import {
   SubscriptionEntity,
   AuthSessionResponse,
   SaaSPlanId,
+  OrganizationRole,
 } from "../types/saas";
+import { JwtService } from "./jwtService";
 
 export class AuthService {
   /**
@@ -29,6 +31,22 @@ export class AuthService {
     const secret = getSessionSecret();
     const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex").substring(0, 16);
     return `sess_aura_${payload}_${signature}`;
+  }
+
+  /**
+   * Generates a standard RFC 7519 JSON Web Token (JWT) with user identity and tenant membership claims.
+   */
+  static generateJwtToken(user: UserEntity, orgId: string, role: OrganizationRole = "OWNER", membershipId?: string): string {
+    return JwtService.sign({
+      sub: user.id,
+      userId: user.id,
+      email: user.email,
+      tenantId: orgId,
+      organizationId: orgId,
+      role,
+      membershipId,
+      isPlatformSuperAdmin: Boolean(user.isPlatformSuperAdmin),
+    });
   }
   /**
    * Registers a new company + admin user and automatically creates a 30-day trial subscription in the persistence layer.
@@ -281,6 +299,7 @@ export class AuthService {
 
     return {
       token: AuthService.generateSessionToken(user.id, organization.id),
+      jwt: AuthService.generateJwtToken(user, organization.id, membership.role, membership.id),
       user: {
         id: user.id,
         name: user.name,
