@@ -706,6 +706,120 @@ export class ApiClient {
       };
     }
   }
+
+  /**
+   * Consulta centralizada do Dashboard de Governança da Plataforma (SUPER_ADMIN).
+   * GET /api/platform/dashboard
+   */
+  static async getPlatformDashboard(): Promise<{
+    success: boolean;
+    authorizedAs: string;
+    timestamp: string;
+    metrics: {
+      totalOrganizations: number;
+      activeOrganizations: number;
+      activeSubscriptions: number;
+      trialTenantsCount: number;
+      readOnlyTenantsCount: number;
+      suspendedTenantsCount: number;
+      totalUsers: number;
+      totalProducts: number;
+      totalOrders: number;
+      ordersToday: number;
+      gmvToday: number;
+      totalGmv: number;
+      totalMrr: number;
+      totalArr: number;
+      systemHealth: {
+        database: string;
+        rlsEnforced: boolean;
+        poolStatus: string;
+        latencyMs: number;
+      };
+    };
+    organizations: any[];
+    plans: any[];
+  }> {
+    const res = await this.get("/api/platform/dashboard");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ${res.status} ao carregar dados da plataforma.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Ativa ou desativa módulos de uma organização na plataforma
+   */
+  static async togglePlatformModule(
+    organizationId: string,
+    moduleKey: string,
+    isEnabled: boolean
+  ): Promise<any> {
+    const res = await this.post(`/api/platform/organizations/${organizationId}/modules/toggle`, {
+      moduleKey,
+      isEnabled,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao atualizar módulo na organização.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Retorna a assinatura, plano, dias de trial e módulos ativos da organização autenticada.
+   */
+  static async getCurrentSubscription(): Promise<any> {
+    const res = await this.get("/api/subscriptions/current");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao carregar assinatura.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Lista todos os planos disponíveis no catálogo da plataforma.
+   */
+  static async getSubscriptionPlans(): Promise<any> {
+    const res = await this.get("/api/subscriptions/plans");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao carregar planos.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Simula contratação e pagamento de um plano para o tenant atual.
+   */
+  static async simulateSubscriptionPayment(targetPlanId: string, paymentMethod: string = "PIX"): Promise<any> {
+    const res = await this.post("/api/subscriptions/simulate-payment", {
+      targetPlanId,
+      paymentMethod,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao processar assinatura.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Alterna a ativação de um módulo autorizado pelo plano do tenant atual.
+   */
+  static async toggleSubscriptionModule(moduleKey: string, enable: boolean): Promise<any> {
+    const res = await this.post("/api/subscriptions/toggle-module", {
+      moduleKey,
+      enable,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao alternar módulo.`);
+    }
+    return res.json();
+  }
 }
 
 // Inicializa a cadeia padrão de interceptors de requisição (tenantRequestInterceptor)

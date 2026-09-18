@@ -15,6 +15,7 @@ import customerRoutes from "./server/modules/customers/customer.routes";
 import orderRoutes from "./server/modules/orders/order.routes";
 import storageRoutes from "./server/modules/storage/storage.routes";
 import onboardingRoutes from "./server/routes/onboardingRoutes";
+import platformRoutes from "./server/routes/platformRoutes";
 import { reservationExpiryWorker } from "./server/modules/inventory/reservationExpiryWorker";
 import { query } from "./server/db/postgres";
 import { dbRlsInterceptorMiddleware } from "./server/middlewares/dbRlsInterceptorMiddleware";
@@ -32,34 +33,31 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(dbRlsInterceptorMiddleware);
 
-// 1. Health check & Platform SaaS Diagnostics (PostgreSQL Cloud SQL backed)
+// 1. Health check Técnico (Separado estritamente de métricas da plataforma e tabelas sob RLS)
+// Valida se o processo HTTP está saudável, pool de conexão Postgres está responsivo e tabelas nucleares existem.
 app.get("/api/health", async (_req, res) => {
   try {
-    const [orgs, users, products, movements, subs] = await Promise.all([
-      query("SELECT count(*) as count FROM organizations"),
-      query("SELECT count(*) as count FROM users"),
-      query("SELECT count(*) as count FROM products"),
-      query("SELECT count(*) as count FROM inventory_movements"),
-      query("SELECT count(*) as count FROM subscriptions WHERE status IN ('ACTIVE', 'TRIALING')"),
-    ]);
+    // Executa verificação técnica simples sem consultar tabelas protegidas por RLS de tenant
+    const dbCheck = await query("SELECT 1 as alive");
+    const isAlive = dbCheck.rows[0]?.alive === 1 || dbCheck.rows[0]?.alive === "1";
 
-    res.json({
+    if (!isAlive) {
+      return res.status(503).json({
+        status: "error",
+        database: "unreachable",
+      });
+    }
+
+    return res.json({
       status: "ok",
-      database: "PostgreSQL (Cloud SQL)",
-      environment: process.env.NODE_ENV || "development",
-      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
-      platform: {
-        totalOrganizations: parseInt(orgs.rows[0]?.count || "0", 10),
-        totalUsers: parseInt(users.rows[0]?.count || "0", 10),
-        totalProducts: parseInt(products.rows[0]?.count || "0", 10),
-        totalInventoryMovements: parseInt(movements.rows[0]?.count || "0", 10),
-        activeSubscriptions: parseInt(subs.rows[0]?.count || "0", 10),
-        defaultSeedTenant: "lumina",
-      },
-      timestamp: new Date().toISOString(),
+      database: "ok",
     });
   } catch (err: any) {
-    res.status(500).json({ status: "error", error: err.message });
+    return res.status(503).json({
+      status: "error",
+      database: "error",
+      error: err.message,
+    });
   }
 });
 
@@ -67,6 +65,7 @@ app.get("/api/health", async (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/platform", platformRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/customers", customerRoutes);

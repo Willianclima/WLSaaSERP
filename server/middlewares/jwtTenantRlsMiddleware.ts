@@ -342,6 +342,11 @@ export async function jwtTenantRlsMiddleware(
     TenantContext.run(
       {
         tenantId: validatedTenantId,
+        userId: user.id,
+        userEmail: user.email,
+        userRole: effectiveRole,
+        ipAddress: req.ip || (req.headers["x-forwarded-for"] as string) || "127.0.0.1",
+        userAgent: (req.headers["user-agent"] as string) || "Aura Web Client",
         isSuperAdmin,
       },
       () => {

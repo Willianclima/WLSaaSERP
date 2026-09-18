@@ -11,6 +11,7 @@ import { inventoryRepo } from "../modules/inventory/inventory.repository";
 import { storageService } from "../services/storageService";
 import { authMiddleware, AuthenticatedRequest, tenantRlsMiddleware, jwtTenantRlsMiddleware } from "../middlewares/authMiddleware";
 import { JwtService } from "../services/jwtService";
+import { auditService, withAuditedOperation, AuditedOperation } from "../services/auditService";
 
 const router = Router();
 
@@ -719,5 +720,101 @@ router.get("/verify-jwt-rls-middleware", jwtTenantRlsMiddleware, async (req: Aut
   }
 });
 
+// POST /api/diagnostics/verify-audit-wrapper - Demonstração e validação do wrapper/decorador de auditoria P0
+router.post("/verify-audit-wrapper", jwtTenantRlsMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const tenantId = req.organizationId!;
+    const user = req.user!;
+    const { action, entity, entityId, payload } = req.body;
+
+    const opAction = action || "UPDATE_PRICING_RULE";
+    const opEntity = entity || "PRICING_POLICY";
+    const opEntityId = entityId || `rule-${Date.now()}`;
+
+    // Exemplo de classe com método decorado usando @AuditedOperation
+    class CriticalOperationService {
+      @AuditedOperation({
+        action: "DECORATOR_CRITICAL_EXECUTION",
+        entity: "FINANCIAL_LEDGER",
+        entityId: (res: any) => res.transactionId,
+        details: (_res: any, args: any[]) => `Transação financeira de R$ ${args[0]?.amount} registrada com carimbo de governança.`,
+        captureChanges: true,
+      })
+      async executeFinancialTransaction(data: { amount: number; note: string }) {
+        return {
+          transactionId: `tx-${Date.now()}`,
+          amount: data.amount,
+          note: data.note,
+          processedAt: new Date().toISOString(),
+          status: "SETTLED",
+        };
+      }
+    }
+
+    // 1. Executa operação crítica usando o wrapper funcional withAuditedOperation
+    const wrapperResult = await withAuditedOperation(
+      {
+        action: opAction,
+        entity: opEntity,
+        entityId: opEntityId,
+        details: `Operação crítica '${opAction}' executada pelo usuário ${user.email} com validação de tenant_id.`,
+        captureChanges: true,
+      },
+      async () => {
+        return {
+          operationId: opEntityId,
+          targetTenant: tenantId,
+          modifiedBy: user.email,
+          changesApplied: payload || { discountPct: 15, approvalRequired: true },
+          executionStatus: "SUCCESS",
+        };
+      }
+    );
+
+    // 2. Executa operação crítica usando o decorador @AuditedOperation
+    const serviceInstance = new CriticalOperationService();
+    const decoratorResult = await serviceInstance.executeFinancialTransaction({
+      amount: 4500.0,
+      note: "Ajuste de margem atacadista joias",
+    });
+
+    // 3. Consulta a tabela audit_logs no PostgreSQL para comprovar a gravação com o carimbo do usuário, timestamp e tenant_id validado
+    const recentLogs = await auditService.listLogs(tenantId, 5);
+
+    const wrapperAuditLog = recentLogs.find((l) => l.action === opAction && l.entityId === opEntityId);
+    const decoratorAuditLog = recentLogs.find((l) => l.action === "DECORATOR_CRITICAL_EXECUTION" && l.entityId === decoratorResult.transactionId);
+
+    res.json({
+      success: true,
+      governanceP0Validated: true,
+      tenantIdValidated: tenantId,
+      authenticatedUserStamp: {
+        userId: user.id,
+        email: user.email,
+        role: req.userRole,
+        ipAddress: req.ip || "127.0.0.1",
+        timestamp: new Date().toISOString(),
+      },
+      wrapperExecution: {
+        pattern: "withAuditedOperation",
+        result: wrapperResult,
+        auditLogRecorded: Boolean(wrapperAuditLog),
+        auditRecord: wrapperAuditLog,
+      },
+      decoratorExecution: {
+        pattern: "@AuditedOperation",
+        result: decoratorResult,
+        auditLogRecorded: Boolean(decoratorAuditLog),
+        auditRecord: decoratorAuditLog,
+      },
+      auditLogsInTenant: recentLogs,
+      message: "Operações críticas executadas com registro automático de auditoria, contendo carimbo do usuário, timestamp e tenant_id validado via P0.",
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;
+
 

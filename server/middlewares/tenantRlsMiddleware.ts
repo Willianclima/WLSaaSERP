@@ -197,6 +197,11 @@ export async function tenantRlsMiddleware(
     TenantContext.run(
       {
         tenantId: sanitizedTenantId,
+        userId: user?.id,
+        userEmail: user?.email,
+        userRole: req.userRole,
+        ipAddress: req.ip || (req.headers["x-forwarded-for"] as string) || "127.0.0.1",
+        userAgent: (req.headers["user-agent"] as string) || "Aura Web Client",
         isSuperAdmin,
       },
       () => {
