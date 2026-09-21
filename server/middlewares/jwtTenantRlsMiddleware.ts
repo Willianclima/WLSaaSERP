@@ -25,13 +25,20 @@ export async function jwtTenantRlsMiddleware(
 ) {
   try {
     const isProduction = process.env.NODE_ENV === "production";
-    const allowDevDemoFallback = !isProduction && process.env.ENABLE_DEV_AUTH_DEMO_FALLBACK !== "false";
 
     // -------------------------------------------------------------------------
     // 1. EXTRAÇÃO DO TOKEN (JWT ou Sessão Assinada)
     // -------------------------------------------------------------------------
     const authHeader = req.headers.authorization || (req.headers["x-session-token"] as string) || (req.query.token as string);
     const tenantHeader = (req.headers["x-tenant-id"] as string) || (req.query.tenantId as string);
+
+    if (!authHeader && !req.user) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_TOKEN_REQUIRED",
+        error: "Acesso não autorizado: token de autenticação JWT é obrigatório.",
+      });
+    }
 
     let tokenPayload: TenantJwtPayload | null = null;
     let userId: string | null = null;
@@ -124,24 +131,11 @@ export async function jwtTenantRlsMiddleware(
     }
 
     if (!user) {
-      if (isProduction || !allowDevDemoFallback) {
-        return res.status(401).json({
-          success: false,
-          code: "AUTH_TOKEN_REQUIRED",
-          error: "Acesso não autorizado: token JWT com identidade válida é obrigatório.",
-        });
-      }
-
-      // Fallback estrito apenas para ambiente de desenvolvimento local
-      const allUsers = await userRepo.listAll();
-      user = allUsers.find((u) => u.status === "ACTIVE") || allUsers[0] || null;
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          code: "NO_ACTIVE_USERS",
-          error: "Nenhum usuário ativo disponível no sistema.",
-        });
-      }
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_TOKEN_REQUIRED",
+        error: "Acesso não autorizado: token JWT com identidade válida é obrigatório.",
+      });
     }
 
     if (user.status !== "ACTIVE") {

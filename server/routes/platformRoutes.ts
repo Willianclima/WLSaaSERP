@@ -3,6 +3,7 @@ import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddlew
 import { requireRole } from "../middlewares/rbacMiddleware";
 import { orgRepo, userRepo, subRepo, planRepo, moduleRepo } from "../repositories";
 import { query } from "../db/postgres";
+import { auditService } from "../services/auditService";
 
 const router = Router();
 
@@ -261,7 +262,23 @@ router.post(
 
       const resolvedKey = keyMapping[moduleKey] || moduleKey;
 
-      await moduleRepo.setModuleStatus(orgId, resolvedKey as any, Boolean(isEnabled));
+      // AUDITORIA P0 MANDATÓRIA: Modificação de permissões/módulos por Super Admin deve persistir obrigatoriamente
+      await auditService.withAudit(
+        {
+          organizationId: orgId,
+          userId: req.user?.id,
+          action: "MODULE_TOGGLED",
+          entity: "ORGANIZATION_MODULE",
+          entityId: `${orgId}:${resolvedKey}`,
+          critical: true,
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"] as string,
+          details: `Super Admin (${req.user?.email}) ${isEnabled ? "ativou" : "desativou"} o módulo '${resolvedKey}' para a organização ${orgId}`,
+        },
+        async () => {
+          await moduleRepo.setModuleStatus(orgId, resolvedKey as any, Boolean(isEnabled));
+        }
+      );
 
       return res.json({
         success: true,

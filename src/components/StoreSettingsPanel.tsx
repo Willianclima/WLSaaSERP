@@ -42,13 +42,16 @@ import {
   MessageCircle,
   Sun,
   Moon,
+  Code2,
 } from "lucide-react";
-import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings, RBACUser } from "../types";
-import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS, mockCurrentUser } from "../data/mockData";
+import { StoreBrandingConfig, TenantStore, OrganizationPaymentSettings, RBACUser, StoreSmtpConfig } from "../types";
+import { DEFAULT_BRANDING_CONFIG, DEFAULT_PAYMENT_SETTINGS, DEFAULT_STORE_SMTP_CONFIG, mockCurrentUser } from "../data/mockData";
 import { SocialQRCodeCollageManager } from "./SocialQRCodeCollageManager";
 import { CustomDomainSSLManager } from "./CustomDomainSSLManager";
 import { PaymentPricingSettingsManager } from "./PaymentPricingSettingsManager";
 import { UserProfileSettings } from "./UserProfileSettings";
+import { StoreSmtpSettingsManager } from "./StoreSmtpSettingsManager";
+import { HtmlLiquidTemplateEditor } from "./HtmlLiquidTemplateEditor";
 import { ClientStorageService } from "../services/storageService";
 import confetti from "canvas-confetti";
 
@@ -56,12 +59,14 @@ interface StoreSettingsPanelProps {
   tenant: TenantStore;
   branding: StoreBrandingConfig;
   paymentSettings?: OrganizationPaymentSettings;
+  smtpConfig?: StoreSmtpConfig;
   currentUser?: RBACUser;
   onUpdateBranding: (newBranding: StoreBrandingConfig) => void;
   onUpdatePaymentSettings?: (newSettings: OrganizationPaymentSettings) => void;
+  onUpdateSmtpConfig?: (newSmtp: StoreSmtpConfig) => void;
   onUpdateUser?: (updated: Partial<RBACUser>) => void;
   onNavigateTab: (tab: string) => void;
-  initialSubTab?: "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile";
+  initialSubTab?: "branding" | "payment_settings" | "smtp" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile";
 }
 
 
@@ -216,16 +221,22 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
   tenant,
   branding,
   paymentSettings = DEFAULT_PAYMENT_SETTINGS,
+  smtpConfig = DEFAULT_STORE_SMTP_CONFIG,
   currentUser = mockCurrentUser,
   onUpdateBranding,
   onUpdatePaymentSettings,
+  onUpdateSmtpConfig,
   onUpdateUser,
   onNavigateTab,
   initialSubTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<
-    "branding" | "payment_settings" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile"
+    "branding" | "payment_settings" | "smtp" | "template_editor" | "domain" | "social_qr" | "poster" | "welcome" | "contact" | "preview" | "profile"
   >(initialSubTab || "branding");
+  const [localSmtpConfig, setLocalSmtpConfig] = useState<StoreSmtpConfig>({
+    ...DEFAULT_STORE_SMTP_CONFIG,
+    ...smtpConfig,
+  });
   const [formConfig, setFormConfig] = useState<StoreBrandingConfig>({ ...branding });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isAutoValidatingDNS, setIsAutoValidatingDNS] = useState<boolean>(false);
@@ -598,6 +609,19 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab("smtp")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+            activeSubTab === "smtp"
+              ? "bg-stone-900 text-amber-300 shadow-md border border-amber-400/50 ring-2 ring-amber-400/20"
+              : "bg-white text-stone-700 hover:bg-stone-100 border border-stone-200"
+          }`}
+        >
+          <Server className="w-3.5 h-3.5 text-amber-400" />
+          <span>📧 3. Servidor SMTP & E-mails</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+        </button>
+
+        <button
           onClick={() => setActiveSubTab("domain")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
             activeSubTab === "domain"
@@ -606,7 +630,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Globe className="w-3.5 h-3.5 text-amber-400" />
-          <span>🌐 3. Domínio & SSL</span>
+          <span>🌐 4. Domínio & SSL</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
         </button>
 
@@ -619,7 +643,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>📱 4. Redes Sociais & QR Codes</span>
+          <span>📱 5. Redes Sociais & QR Codes</span>
         </button>
 
         <button
@@ -631,7 +655,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-          <span>✨ 5. Cartaz Expo</span>
+          <span>✨ 6. Cartaz Expo</span>
         </button>
 
         <button
@@ -643,7 +667,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Type className="w-3.5 h-3.5 text-amber-400" />
-          <span>📝 6. Textos & Headlines</span>
+          <span>📝 7. Textos & Headlines</span>
         </button>
 
         <button
@@ -655,7 +679,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-          <span>📞 7. Contatos & WhatsApp</span>
+          <span>📞 8. Contatos & WhatsApp</span>
         </button>
 
         <button
@@ -667,7 +691,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <User className="w-3.5 h-3.5 text-amber-400" />
-          <span>👤 8. Meu Perfil & Foto</span>
+          <span>👤 9. Meu Perfil & Foto</span>
         </button>
 
         <button
@@ -679,7 +703,7 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           }`}
         >
           <Eye className="w-3.5 h-3.5 text-amber-400" />
-          <span>9. Pré-visualização</span>
+          <span>10. Pré-visualização</span>
         </button>
       </div>
 
@@ -691,6 +715,20 @@ export const StoreSettingsPanel: React.FC<StoreSettingsPanelProps> = ({
           onUpdateSettings={(newSettings) => {
             if (onUpdatePaymentSettings) {
               onUpdatePaymentSettings(newSettings);
+            }
+          }}
+        />
+      )}
+
+      {/* TAB SERVIDOR SMTP & E-MAILS DE GARANTIA/PEDIDOS */}
+      {activeSubTab === "smtp" && (
+        <StoreSmtpSettingsManager
+          tenant={tenant}
+          smtpConfig={localSmtpConfig}
+          onUpdateSmtpConfig={(updated) => {
+            setLocalSmtpConfig(updated);
+            if (onUpdateSmtpConfig) {
+              onUpdateSmtpConfig(updated);
             }
           }}
         />

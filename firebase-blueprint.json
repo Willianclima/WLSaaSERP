@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Product item in jewelry catalog and inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "material": { "type": "string" },
+        "bathType": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "wholesalePrice": { "type": "number" },
+        "retailPrice": { "type": "number" },
+        "stockQty": { "type": "number" },
+        "status": { "type": "string", "enum": ["ACTIVE", "LOW_STOCK", "OUT_OF_STOCK", "DISCONTINUED"] },
+        "warrantyMonths": { "type": "number" },
+        "photoUrl": { "type": "string" },
+        "qrCode": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "sku", "name", "retailPrice"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Registered buyer or B2B client",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "document": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "BLOCKED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "name"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Unified sales order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "channel": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "itemsCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "orderNumber", "totalAmount"]
+    },
+    "Reseller": {
+      "title": "Reseller",
+      "description": "Jewelry reseller/consultant partner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "tier": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "tenantId", "name"]
+    }
+  },
+  "firestore": {
+    "/tenants/{tenantId}/products/{productId}": {
+      "schema": "Product",
+      "description": "Products owned by a specific tenant"
+    },
+    "/tenants/{tenantId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customers managed by a specific tenant"
+    },
+    "/tenants/{tenantId}/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Orders placed within a tenant store"
+    },
+    "/tenants/{tenantId}/resellers/{resellerId}": {
+      "schema": "Reseller",
+      "description": "Reseller network under tenant"
+    }
+  }
+}

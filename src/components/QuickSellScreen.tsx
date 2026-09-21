@@ -340,8 +340,9 @@ export const QuickSellScreen: React.FC<QuickSellScreenProps> = ({
 
       // Clear cart
       setCartItems([]);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Erro ao registrar venda:", e);
+      toast.error(e?.message || "Falha ao registrar venda no ERP. A venda não foi salva.");
     } finally {
       setIsSubmitting(false);
     }

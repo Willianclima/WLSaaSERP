@@ -43,6 +43,7 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"PIX" | "CREDIT_CARD" | "BOLETO">("PIX");
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [togglingModule, setTogglingModule] = useState<string | null>(null);
 
   const fetchSession = async () => {
     try {
@@ -161,6 +162,37 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
       if (onNotify) onNotify(`Falha: ${err.message}`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleModule = async (moduleKey: string, currentEnabled: boolean) => {
+    try {
+      setTogglingModule(moduleKey);
+      const res = await apiClient.request("/api/subscriptions/toggle-module", {
+        method: "POST",
+        headers: {
+          "x-tenant-id": session?.organization?.id,
+        },
+        body: JSON.stringify({
+          moduleKey,
+          enable: !currentEnabled,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (onNotify) {
+          onNotify(
+            `Módulo "${moduleKey}" ${data.isEnabled ? "ativado" : "desativado"} com sucesso!`
+          );
+        }
+        await fetchSession();
+      } else {
+        if (onNotify) onNotify(`Não foi possível alternar módulo: ${data.error}`);
+      }
+    } catch (err: any) {
+      if (onNotify) onNotify(`Erro: ${err.message}`);
+    } finally {
+      setTogglingModule(null);
     }
   };
 
@@ -635,24 +667,59 @@ export const SaaSControlPanel: React.FC<SaaSControlPanelProps> = ({ onNotify }) 
               { key: "security_lgpd", name: "Auditoria & Conformidade LGPD", desc: "Trilha imutável e controle de acessos" },
             ].map((mod) => {
               const isAllowed = currentSub?.allowedModules?.includes(mod.key);
+              const isEnabled = isAllowed; // autorizados pelo plano
+              const isToggling = togglingModule === mod.key;
+
               return (
                 <div
                   key={mod.key}
-                  className={`p-4 rounded-2xl border transition-all ${
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
                     isAllowed
                       ? "bg-emerald-50/40 border-emerald-200 text-stone-900"
                       : "bg-stone-50 border-stone-200 opacity-60 text-stone-400"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold">{mod.name}</span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold">{mod.name}</span>
+                      {isAllowed ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <Lock className="w-4 h-4 text-stone-400 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-500">{mod.desc}</p>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider">
+                      {isAllowed ? (
+                        <span className="text-emerald-700 font-bold">● Ativo no Plano</span>
+                      ) : (
+                        <span className="text-stone-400">Requer Upgrade</span>
+                      )}
+                    </span>
                     {isAllowed ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <button
+                        onClick={() => handleToggleModule(mod.key, isEnabled)}
+                        disabled={isToggling}
+                        className="text-[10px] font-bold px-2 py-1 rounded-md bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Alternar ativação do módulo"
+                      >
+                        {isToggling ? (
+                          <RefreshCw className="w-3 h-3 animate-spin text-stone-500" />
+                        ) : null}
+                        <span>Alternar</span>
+                      </button>
                     ) : (
-                      <Lock className="w-4 h-4 text-stone-400 shrink-0" />
+                      <button
+                        onClick={() => setActiveTab("plans")}
+                        className="text-[10px] font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
+                      >
+                        Fazer Upgrade &rarr;
+                      </button>
                     )}
                   </div>
-                  <p className="text-[11px] text-stone-500">{mod.desc}</p>
                 </div>
               );
             })}

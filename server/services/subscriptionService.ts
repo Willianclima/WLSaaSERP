@@ -5,6 +5,7 @@ import {
   SystemModuleKey,
   OrganizationModuleEntity,
 } from "../types/saas";
+import { auditService } from "./auditService";
 
 export class SubscriptionService {
   /**
@@ -52,6 +53,7 @@ export class SubscriptionService {
 
   /**
    * Simulates upgrading/subscribing to a paid plan with payment webhook confirmation.
+   * AUDITORIA P0 MANDATÓRIA: Qualquer alteração de plano deve ser persistida infalivelmente no PostgreSQL.
    */
   static async simulateSubscriptionPayment(data: {
     organizationId: string;
@@ -59,48 +61,74 @@ export class SubscriptionService {
     paymentMethod: "PIX" | "CREDIT_CARD" | "BOLETO";
   }) {
     const { organizationId, targetPlanId, paymentMethod } = data;
-    const subscription = await subRepo.findByOrgId(organizationId);
-    const plan = await planRepo.findById(targetPlanId);
 
-    if (!subscription || !plan) {
-      throw new Error("Assinatura ou Plano inválido.");
-    }
+    return await auditService.withAudit(
+      {
+        organizationId,
+        action: "PLAN_CHANGED",
+        entity: "SUBSCRIPTION",
+        entityId: organizationId,
+        critical: true,
+        details: `Migração/Ativação de plano para '${targetPlanId}' via ${paymentMethod}`,
+        captureChanges: true,
+      },
+      async () => {
+        const subscription = await subRepo.findByOrgId(organizationId);
+        const plan = await planRepo.findById(targetPlanId);
 
-    const now = new Date();
-    const nextPeriod = new Date(now.getTime() + 30 * 86400000);
+        if (!subscription || !plan) {
+          throw new Error("Assinatura ou Plano inválido.");
+        }
 
-    const updatedSubscription = await subRepo.update(organizationId, {
-      planId: targetPlanId,
-      status: "ACTIVE",
-      paymentMethod,
-      currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-      currentPeriodEnd: nextPeriod.toISOString().replace("T", " ").substring(0, 16),
-      updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
-    });
+        const now = new Date();
+        const nextPeriod = new Date(now.getTime() + 30 * 86400000);
 
-    // Sync enabled modules with the newly chosen plan
-    await moduleRepo.bulkInitialize(organizationId, plan.allowedModules);
+        const updatedSubscription = await subRepo.update(organizationId, {
+          planId: targetPlanId,
+          status: "ACTIVE",
+          paymentMethod,
+          currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
+          currentPeriodEnd: nextPeriod.toISOString().replace("T", " ").substring(0, 16),
+          updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+        });
 
-    return {
-      success: true,
-      message: `Assinatura do plano ${plan.name} ativada com sucesso via ${paymentMethod}!`,
-      subscription: updatedSubscription,
-      plan,
-    };
+        // Sync enabled modules with the newly chosen plan
+        await moduleRepo.bulkInitialize(organizationId, plan.allowedModules);
+
+        return {
+          success: true,
+          message: `Assinatura do plano ${plan.name} ativada com sucesso via ${paymentMethod}!`,
+          subscription: updatedSubscription,
+          plan,
+        };
+      }
+    );
   }
 
   /**
    * Toggle a specific module for a tenant (if permitted by current plan).
    */
   static async toggleModule(organizationId: string, moduleKey: SystemModuleKey, enable: boolean) {
-    const subInfo = await this.getTenantSubscription(organizationId);
-    if (!subInfo.allowedModules.includes(moduleKey)) {
-      throw new Error(
-        `O módulo ${moduleKey} não é permitido no seu plano atual (${subInfo.plan.name}). Faça upgrade para ativá-lo.`
-      );
-    }
+    return await auditService.withAudit(
+      {
+        organizationId,
+        action: "MODULE_TOGGLED",
+        entity: "ORGANIZATION_MODULE",
+        entityId: `${organizationId}:${moduleKey}`,
+        critical: true,
+        details: `Módulo '${moduleKey}' ${enable ? "ativado" : "desativado"} para a organização`,
+      },
+      async () => {
+        const subInfo = await this.getTenantSubscription(organizationId);
+        if (!subInfo.allowedModules.includes(moduleKey)) {
+          throw new Error(
+            `O módulo ${moduleKey} não é permitido no seu plano atual (${subInfo.plan.name}). Faça upgrade para ativá-lo.`
+          );
+        }
 
-    const updated = await moduleRepo.setModuleStatus(organizationId, moduleKey, enable);
-    return { success: true, moduleKey, isEnabled: updated.isEnabled };
+        const updated = await moduleRepo.setModuleStatus(organizationId, moduleKey, enable);
+        return { success: true, moduleKey, isEnabled: updated.isEnabled };
+      }
+    );
   }
 }

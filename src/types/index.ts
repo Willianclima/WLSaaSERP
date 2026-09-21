@@ -574,3 +574,33 @@ export interface CalculatedInstallmentOption {
   isInterestFree: boolean;
 }
 
+export interface StoreSmtpConfig {
+  id?: string;
+  tenantId?: string;
+  enabled: boolean;
+  provider: "CUSTOM" | "GMAIL" | "OUTLOOK" | "AMAZON_SES" | "SENDGRID" | "RESEND";
+  host: string;
+  port: number;
+  encryption: "TLS" | "SSL" | "STARTTLS" | "NONE";
+  username: string;
+  password?: string;
+  fromName: string;
+  fromEmail: string;
+  replyToEmail?: string;
+  // Trigger switches
+  autoSendDigitalWarranty: boolean;
+  autoSendOrderPlaced: boolean;
+  autoSendPaymentApproved: boolean;
+  autoSendOrderDispatched: boolean;
+  autoSendStockAlerts: boolean;
+  // Custom Email Templates (HTML / Liquid)
+  warrantyEmailSubject?: string;
+  warrantyEmailTemplate?: string;
+  // Verification & Health
+  lastTestedAt?: string;
+  lastTestStatus?: "SUCCESS" | "FAILED" | "UNTESTED";
+  lastTestMessage?: string;
+  updatedAt?: string;
+}
+
+

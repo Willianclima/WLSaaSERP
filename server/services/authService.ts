@@ -168,9 +168,6 @@ export class AuthService {
    * Authenticates user via email and returns organization context.
    */
   static async login(email: string, _password?: string, targetOrgId?: string): Promise<AuthSessionResponse> {
-    const isProduction = process.env.NODE_ENV === "production";
-    const allowDevDemoFallback = !isProduction && process.env.ENABLE_DEV_AUTH_DEMO_FALLBACK !== "false";
-
     const emailNormalized = (email || "").trim().toLowerCase();
     let user: UserEntity | null = null;
     if (emailNormalized) {
@@ -178,15 +175,7 @@ export class AuthService {
     }
 
     if (!user) {
-      if (isProduction || !allowDevDemoFallback) {
-        throw new Error("Credenciais inválidas: usuário não encontrado.");
-      }
-      // DEVELOPMENT ONLY: Fallback demo user
-      const allUsers = await userRepo.listAll();
-      user = allUsers.find((u) => u.status === "ACTIVE") || allUsers[0] || null;
-      if (!user) {
-        throw new Error("Nenhum usuário cadastrado no sistema.");
-      }
+      throw new Error("Credenciais inválidas: usuário não encontrado.");
     }
 
     if (user.status !== "ACTIVE") {
@@ -200,29 +189,12 @@ export class AuthService {
     let selectedMembership: OrganizationMemberEntity | undefined;
 
     if (userMemberships.length === 0) {
-      if (isProduction || !allowDevDemoFallback) {
-        throw new Error("Acesso negado: o usuário não possui vínculo ativo com nenhuma organização.");
-      }
-      // DEVELOPMENT ONLY: Auto-link to default seed tenant
-      const allOrgs = await orgRepo.listAll();
-      const lumina = allOrgs[0];
-      if (!lumina) {
-        throw new Error("Nenhuma organização disponível para associação.");
-      }
-      selectedMembership = {
-        id: `mem-fallback-${user.id}`,
-        organizationId: lumina.id,
-        userId: user.id,
-        role: "OWNER",
-        status: "ACTIVE",
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      };
-      await memberRepo.create(selectedMembership);
+      throw new Error("Acesso negado: o usuário não possui vínculo ativo com nenhuma organização.");
     } else {
       if (targetOrgId) {
         selectedMembership = userMemberships.find((m) => m.organizationId === targetOrgId);
         if (!selectedMembership) {
-          if ((isProduction || !allowDevDemoFallback) && !user.isPlatformSuperAdmin) {
+          if (!user.isPlatformSuperAdmin) {
             throw new Error(`Acesso não autorizado: o usuário não é membro da organização informada (${targetOrgId}).`);
           }
           selectedMembership = userMemberships[0];
@@ -237,7 +209,7 @@ export class AuthService {
     }
 
     const organization = await orgRepo.findById(selectedMembership.organizationId);
-    if (!organization || (isProduction && organization.status !== "ACTIVE")) {
+    if (!organization || organization.status !== "ACTIVE") {
       throw new Error("Organização vinculada não encontrada ou inativa.");
     }
     let subscription = await subRepo.findByOrgId(organization.id);
@@ -297,9 +269,11 @@ export class AuthService {
       }
     }
 
+    const jwtToken = AuthService.generateJwtToken(user, organization.id, membership.role, membership.id);
+
     return {
-      token: AuthService.generateSessionToken(user.id, organization.id),
-      jwt: AuthService.generateJwtToken(user, organization.id, membership.role, membership.id),
+      token: jwtToken,
+      jwt: jwtToken,
       user: {
         id: user.id,
         name: user.name,

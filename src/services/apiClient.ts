@@ -144,37 +144,28 @@ export class TenantManager {
         }
       }
 
-      // 4. Inspecionar token (JWT ou formato sess_aura_<userId>_<tenantId>_<timestamp>)
+      // 4. Inspecionar token RFC 7519 JSON Web Token (JWT)
       const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem("aura_auth_token");
-      if (token) {
-        if (token.startsWith("sess_aura_")) {
-          const parts = token.split("_");
-          if (parts.length >= 4 && parts[3]) {
+      if (token && token.split(".").length === 3) {
+        try {
+          const base64Url = token.split(".")[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split("")
+              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+              .join("")
+          );
+          const parsed = JSON.parse(jsonPayload);
+          if (parsed.tenantId || parsed.organizationId) {
             return {
-              organizationId: parts[3],
+              userId: parsed.sub || parsed.userId,
+              organizationId: parsed.tenantId || parsed.organizationId,
+              role: parsed.role,
+              isPlatformSuperAdmin: Boolean(parsed.isPlatformSuperAdmin),
             };
           }
-        } else if (token.split(".").length === 3) {
-          try {
-            const base64Url = token.split(".")[1];
-            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-            const jsonPayload = decodeURIComponent(
-              atob(base64)
-                .split("")
-                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-                .join("")
-            );
-            const parsed = JSON.parse(jsonPayload);
-            if (parsed.tenantId || parsed.organizationId) {
-              return {
-                userId: parsed.sub || parsed.userId,
-                organizationId: parsed.tenantId || parsed.organizationId,
-                role: parsed.role,
-                isPlatformSuperAdmin: Boolean(parsed.isPlatformSuperAdmin),
-              };
-            }
-          } catch {}
-        }
+        } catch {}
       }
     } catch (err) {
       console.warn("[TenantManager] Erro ao ler contexto de autenticação:", err);
@@ -360,10 +351,60 @@ export const defaultTenantSecurityInterceptor = tenantRequestInterceptor;
 export const tenantInterceptor = tenantRequestInterceptor;
 export const requestTenantInterceptor = tenantRequestInterceptor;
 
+export type LoadingStateListener = (state: { isLoading: boolean; activeCount: number }) => void;
+
+/**
+ * Gerenciador de estado global de carregamento acoplado ao ciclo de vida das requisições HTTP.
+ */
+export class GlobalLoadingManager {
+  private static activeCount = 0;
+  private static listeners: Set<LoadingStateListener> = new Set();
+
+  static startRequest(): void {
+    this.activeCount++;
+    this.notify();
+  }
+
+  static endRequest(): void {
+    if (this.activeCount > 0) {
+      this.activeCount--;
+    }
+    this.notify();
+  }
+
+  static getActiveCount(): number {
+    return this.activeCount;
+  }
+
+  static isLoading(): boolean {
+    return this.activeCount > 0;
+  }
+
+  static subscribe(listener: LoadingStateListener): () => void {
+    this.listeners.add(listener);
+    listener({ isLoading: this.isLoading(), activeCount: this.activeCount });
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private static notify(): void {
+    const state = { isLoading: this.isLoading(), activeCount: this.activeCount };
+    this.listeners.forEach((listener) => {
+      try {
+        listener(state);
+      } catch (err) {
+        console.error("[GlobalLoadingManager] Erro no listener:", err);
+      }
+    });
+  }
+}
+
 /**
  * Instala um interceptor global na função window.fetch do navegador.
  * Garante que QUALQUER chamada de API feita no frontend (seja via apiClient ou fetch direto)
- * receba automaticamente o cabeçalho 'x-tenant-id' para imposição inegociável do RLS no backend.
+ * receba automaticamente o cabeçalho 'x-tenant-id' para imposição inegociável do RLS no backend
+ * e rastreie o estado global de carregamento (isGlobalLoading).
  */
 export function installGlobalFetchInterceptor(): void {
   if (typeof window === "undefined" || (window as any).__aura_fetch_interceptor_installed) {
@@ -389,12 +430,18 @@ export function installGlobalFetchInterceptor(): void {
 
       currentInit.headers = currentHeaders;
 
-      // Se o input era um objeto Request, cria uma nova chamada com os headers atualizados
-      if (typeof input !== "string" && !(input instanceof URL)) {
-        return originalFetch(urlString, currentInit);
-      }
+      GlobalLoadingManager.startRequest();
 
-      return originalFetch(input, currentInit);
+      try {
+        // Se o input era um objeto Request, cria uma nova chamada com os headers atualizados
+        if (typeof input !== "string" && !(input instanceof URL)) {
+          return await originalFetch(urlString, currentInit);
+        }
+
+        return await originalFetch(input, currentInit);
+      } finally {
+        GlobalLoadingManager.endRequest();
+      }
     }
 
     return originalFetch(input, init);
@@ -423,6 +470,25 @@ export class ApiClient {
     request: new InterceptorManager<RequestInterceptor>(),
     response: new InterceptorManager<ResponseInterceptor>(),
   };
+
+  /**
+   * Gerenciador de estado de carregamento global integrado com ciclo de requisições
+   */
+  static loading = GlobalLoadingManager;
+
+  /**
+   * Assina o estado global de carregamento do ApiClient
+   */
+  static onLoadingChange(listener: LoadingStateListener): () => void {
+    return GlobalLoadingManager.subscribe(listener);
+  }
+
+  /**
+   * Retorna se há requisições ativas no momento
+   */
+  static isGlobalLoading(): boolean {
+    return GlobalLoadingManager.isLoading();
+  }
 
   private static initialized = false;
 
@@ -500,27 +566,28 @@ export class ApiClient {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.success && data.session?.token) {
-          this.setToken(data.session.token);
+        const activeJwt = data.session?.jwt;
+        if (data.success && activeJwt) {
+          this.setToken(activeJwt);
           this.setTenantId(orgId);
           if (data.session.user && typeof window !== "undefined") {
             localStorage.setItem(USER_KEY, JSON.stringify(data.session.user));
             localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
           }
-          return data.session.token;
+          return activeJwt;
         }
       }
     } catch (err) {
       console.warn("Falha ao renovar sessão automática:", err);
     }
 
-    // Retorna token existente ou gera token sintético alinhado ao tenant
+    // Retorna token existente se for um JWT válido
     const existing = this.getToken();
-    if (existing) return existing;
+    if (existing && existing.split(".").length === 3) {
+      return existing;
+    }
 
-    const fallbackToken = `sess_aura_usr-admin-01_${orgId}_${Date.now()}`;
-    this.setToken(fallbackToken);
-    return fallbackToken;
+    throw new Error(`Sessão não autenticada: Nenhum token JWT válido disponível para o tenant ${orgId}. Faça login novamente.`);
   }
 
   /**

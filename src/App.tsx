@@ -31,7 +31,13 @@ import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { MyStoreShowcase } from "./components/MyStoreShowcase";
 import { PlatformMasterConsole } from "./components/platform/PlatformMasterConsole";
 import { PlatformHeader, ProductMode } from "./components/platform/PlatformHeader";
-import { apiClient } from "./services/apiClient";
+import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
+import { apiClient, GlobalLoadingManager } from "./services/apiClient";
+import {
+  firebaseAuthService,
+  firestoreDataService,
+  testFirestoreConnection,
+} from "./services/firestoreService";
 import { toast } from "./utils/toast";
 
 import {
@@ -49,6 +55,7 @@ import {
   mockCustomers,
   DEFAULT_BRANDING_CONFIG,
   DEFAULT_PAYMENT_SETTINGS,
+  DEFAULT_STORE_SMTP_CONFIG,
 } from "./data/mockData";
 
 import {
@@ -68,6 +75,7 @@ import {
   CreateCustomerDTO,
   UpdateCustomerDTO,
   OrganizationPaymentSettings,
+  StoreSmtpConfig,
 } from "./types";
 import confetti from "canvas-confetti";
 
@@ -144,6 +152,13 @@ export default function App() {
   };
 
   const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
+  const [smtpConfig, setSmtpConfig] = useState<StoreSmtpConfig>(() => {
+    try {
+      const saved = localStorage.getItem("aura_store_smtp_config");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_STORE_SMTP_CONFIG;
+  });
 
   // Dynamic state
   const [products, setProducts] = useState<ProductItem[]>(mockProducts);
@@ -168,6 +183,137 @@ export default function App() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
+
+  // Global loading state synchronized with ApiClient request lifecycle
+  const [isGlobalLoading, setIsGlobalLoading] = useState<boolean>(false);
+  const [activeRequestsCount, setActiveRequestsCount] = useState<number>(0);
+
+  // Real Firebase Auth and Firestore State
+  const [isFirebaseAuthed, setIsFirebaseAuthed] = useState<boolean>(false);
+  const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Validate Firestore connection initially using getDocFromServer
+    testFirestoreConnection().then((connected) => {
+      setIsFirestoreConnected(connected);
+      if (connected) {
+        console.log("[Firebase] Firestore conectado com sucesso ao banco:", selectedTenant.id);
+      }
+    });
+
+    // Listen to Firebase Auth changes
+    const unsubAuth = firebaseAuthService.onAuthChange((user) => {
+      if (user) {
+        setIsFirebaseAuthed(true);
+        setCurrentUser((prev) => ({
+          ...prev,
+          name: user.displayName || prev.name,
+          email: user.email || prev.email,
+          photoUrl: user.photoURL || prev.photoUrl,
+          avatar: user.photoURL || prev.avatar,
+        }));
+      } else {
+        setIsFirebaseAuthed(false);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+    };
+  }, []);
+
+  // Handle Firebase Google Authentication
+  const handleFirebaseGoogleLogin = async () => {
+    try {
+      const user = await firebaseAuthService.signInWithGoogle();
+      showToast(`Bem-vindo, ${user.displayName || user.email}! Conectado via Google/Firebase.`);
+    } catch (err: any) {
+      console.error("[Firebase Auth Error]", err);
+      showToast(`Erro na autenticação Firebase: ${err.message || "Tentativa cancelada"}`);
+    }
+  };
+
+  const handleFirebaseLogout = async () => {
+    try {
+      await firebaseAuthService.signOut();
+      showToast("Desconectado do Firebase.");
+    } catch (err: any) {
+      console.error("[Firebase SignOut Error]", err);
+    }
+  };
+
+  // Real-time Firestore synchronization for the active tenant
+  useEffect(() => {
+    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+
+    // Seed initial collections in Firestore if empty so the user doesn't start blank
+    firestoreDataService.seedInitialDataIfEmpty(
+      tenantId,
+      mockProducts,
+      mockCustomers,
+      mockOrders,
+      mockResellers
+    );
+
+    // Subscribe to Products
+    const unsubProducts = firestoreDataService.subscribeProducts(
+      tenantId,
+      (firestoreProds) => {
+        if (firestoreProds && firestoreProds.length > 0) {
+          setProducts(firestoreProds);
+        }
+      },
+      (err) => console.warn("[Firestore Products Subscription]", err)
+    );
+
+    // Subscribe to Customers
+    const unsubCustomers = firestoreDataService.subscribeCustomers(
+      tenantId,
+      (firestoreCusts) => {
+        if (firestoreCusts && firestoreCusts.length > 0) {
+          setCustomers(firestoreCusts);
+        }
+      },
+      (err) => console.warn("[Firestore Customers Subscription]", err)
+    );
+
+    // Subscribe to Orders
+    const unsubOrders = firestoreDataService.subscribeOrders(
+      tenantId,
+      (firestoreOrders) => {
+        if (firestoreOrders && firestoreOrders.length > 0) {
+          setOrders(firestoreOrders);
+        }
+      },
+      (err) => console.warn("[Firestore Orders Subscription]", err)
+    );
+
+    // Subscribe to Resellers
+    const unsubResellers = firestoreDataService.subscribeResellers(
+      tenantId,
+      (firestoreResellers) => {
+        if (firestoreResellers && firestoreResellers.length > 0) {
+          setResellers(firestoreResellers);
+        }
+      },
+      (err) => console.warn("[Firestore Resellers Subscription]", err)
+    );
+
+    return () => {
+      unsubProducts();
+      unsubCustomers();
+      unsubOrders();
+      unsubResellers();
+    };
+  }, [selectedTenant.id, selectedTenant.slug]);
+
+  useEffect(() => {
+    const unsubscribe = GlobalLoadingManager.subscribe(({ isLoading, activeCount }) => {
+      setIsGlobalLoading(isLoading);
+      setActiveRequestsCount(activeCount);
+    });
+    return unsubscribe;
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -386,7 +532,7 @@ export default function App() {
     showToast(`Nome da loja atualizado para "${newBranding.logoText || 'Lumina'}" com sucesso!`);
   };
 
-  // Add Product handler (Persisted to Backend API)
+  // Add Product handler (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleAddProduct = async (newProd: ProductItem) => {
     try {
       const headers = await getAuthHeaders();
@@ -414,36 +560,24 @@ export default function App() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success && data.data) {
-        await refreshBackendData();
-        showToast(`SKU ${newProd.sku} persistido com sucesso no PostgreSQL & Ledger!`);
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha ao cadastrar produto (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error("API error adding product:", e);
-    }
 
-    // Fallback local update
-    setProducts((prev) => [newProd, ...prev]);
-    const ledgerEntry: InventoryLedgerEntry = {
-      id: `led-${Date.now()}`,
-      productId: newProd.id,
-      sku: newProd.sku,
-      productName: newProd.name,
-      type: "ENTRADA_FORNECEDOR",
-      qtyChange: newProd.stockPhysical,
-      physicalBalanceAfter: newProd.stockPhysical,
-      consignedBalanceAfter: 0,
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-      operator: "Gestor Matriz (Web)",
-      reason: "Cadastro inicial de SKU",
-    };
-    setLedger((prev) => [ledgerEntry, ...prev]);
-    showToast(`SKU ${newProd.sku} cadastrado no Ledger de Estoque!`);
+      await refreshBackendData();
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      firestoreDataService.saveProduct(tenantId, newProd).catch((err) => console.warn("[Firestore Product Save]", err));
+      showToast(`SKU ${newProd.sku} persistido com sucesso no PostgreSQL & Ledger!`);
+    } catch (e: any) {
+      console.error("API error adding product:", e);
+      const msg = e?.message || "Falha ao comunicar com o servidor.";
+      showToast(`❌ Falha ao salvar produto no PostgreSQL: ${msg}`);
+      throw e;
+    }
   };
 
-  // Update existing product details (Photos, Prices, Bath, Status)
+  // Update existing product details (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleUpdateProduct = async (updatedProd: ProductItem): Promise<{ success: boolean; message?: string }> => {
     try {
       const headers = await getAuthHeaders();
@@ -453,22 +587,25 @@ export default function App() {
         body: JSON.stringify(updatedProd),
       });
 
-      if (res.ok) {
-        await refreshBackendData();
-        showToast(`Produto "${updatedProd.name}" atualizado com sucesso!`);
-        return { success: true, message: "Gravado com sucesso no PostgreSQL" };
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha ao atualizar produto (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error("API error updating product:", e);
-    }
 
-    // Local fallback
-    setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
-    showToast(`Produto "${updatedProd.name}" atualizado no catálogo!`);
-    return { success: true, message: "Atualizado no catálogo" };
+      await refreshBackendData();
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      firestoreDataService.saveProduct(tenantId, updatedProd).catch((err) => console.warn("[Firestore Product Update]", err));
+      showToast(`Produto "${updatedProd.name}" atualizado com sucesso no PostgreSQL!`);
+      return { success: true, message: "Gravado com sucesso no PostgreSQL" };
+    } catch (e: any) {
+      console.error("API error updating product:", e);
+      const msg = e?.message || "Falha ao comunicar com o servidor.";
+      showToast(`❌ Falha ao atualizar produto no PostgreSQL: ${msg}`);
+      throw e;
+    }
   };
 
-  // Update Stock manual (Persisted to Backend API)
+  // Update Stock manual (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleUpdateStock = async (productId: string, qty: number, reason: string): Promise<{ success: boolean; message?: string }> => {
     try {
       const headers = await getAuthHeaders();
@@ -484,29 +621,20 @@ export default function App() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
-        await refreshBackendData();
-        showToast(`Ajuste de estoque (${qty > 0 ? "+" : ""}${qty} un) persistido no Ledger!`);
-        return { success: true, message: "Movimentação persistida no PostgreSQL Ledger!" };
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha no ajuste de estoque (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error("API error updating stock:", e);
-    }
 
-    // Fallback
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === productId
-          ? {
-              ...p,
-              stockPhysical: p.stockPhysical + qty,
-              stockAvailable: p.stockAvailable + qty,
-            }
-          : p
-      )
-    );
-    return { success: true, message: "Estoque atualizado" };
+      await refreshBackendData();
+      showToast(`Ajuste de estoque (${qty > 0 ? "+" : ""}${qty} un) persistido no PostgreSQL Ledger!`);
+      return { success: true, message: "Movimentação persistida no PostgreSQL Ledger!" };
+    } catch (e: any) {
+      console.error("API error updating stock:", e);
+      const msg = e?.message || "Falha ao comunicar com o servidor.";
+      showToast(`❌ Falha no ajuste de estoque: ${msg}`);
+      throw e;
+    }
   };
 
   // Reverse Ledger Movement (Immutable Reversal)
@@ -795,7 +923,7 @@ export default function App() {
     showToast(`Garantia ${code} emitida com sucesso para o Pedido ${order.orderNumber}!`);
   };
 
-  // Add Customer (Persisted to Backend API)
+  // Add Customer (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleAddCustomer = async (dto: CreateCustomerDTO) => {
     try {
       const headers = await getAuthHeaders();
@@ -805,94 +933,24 @@ export default function App() {
         body: JSON.stringify(dto),
       });
 
-      const data = await res.json();
-      if (data.success && data.data) {
-        await refreshBackendData();
-        showToast(`Cliente ${dto.fullName} cadastrado no PostgreSQL com sucesso!`);
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha ao cadastrar cliente no ERP (HTTP ${res.status})`);
       }
-    } catch (e) {
+
+      await refreshBackendData();
+      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+      firestoreDataService.saveCustomer(tenantId, data.data).catch((err) => console.warn("[Firestore Customer Save]", err));
+      showToast(`Cliente ${dto.fullName} cadastrado com sucesso no PostgreSQL!`);
+    } catch (e: any) {
       console.error("API error adding customer:", e);
+      const msg = e?.message || "Falha de comunicação com o servidor.";
+      showToast(`❌ Falha ao cadastrar cliente: ${msg}`);
+      throw e;
     }
-
-    // Fallback local update
-    const newCust: Customer = {
-      id: `cust-${Date.now()}`,
-      organizationId: selectedTenant.id,
-      personType: dto.personType,
-      fullName: dto.fullName,
-      name: dto.fullName,
-      cpf: dto.cpf,
-      rg: dto.rg,
-      birthDate: dto.birthDate,
-      gender: dto.gender,
-      companyName: dto.companyName,
-      tradeName: dto.tradeName,
-      cnpj: dto.cnpj,
-      stateRegistration: dto.stateRegistration,
-      isStateRegistrationExempt: dto.isStateRegistrationExempt,
-      primaryEmail: dto.primaryEmail,
-      email: dto.primaryEmail,
-      primaryPhone: dto.primaryPhone,
-      phone: dto.primaryPhone,
-      whatsapp: dto.whatsapp,
-      status: dto.status || "ACTIVE",
-      customerTier: dto.customerTier || "STANDARD",
-      notes: dto.notes,
-      address: dto.initialAddress ? {
-        id: `addr-${Date.now()}`,
-        organizationId: selectedTenant.id,
-        customerId: `cust-${Date.now()}`,
-        type: dto.initialAddress.type,
-        recipientName: dto.initialAddress.recipientName || dto.fullName,
-        zipCode: dto.initialAddress.zipCode,
-        street: dto.initialAddress.street,
-        number: dto.initialAddress.number,
-        complement: dto.initialAddress.complement,
-        neighborhood: dto.initialAddress.neighborhood,
-        city: dto.initialAddress.city,
-        state: dto.initialAddress.state,
-        country: "BRA",
-        isDefault: true,
-        createdAt: new Date().toISOString(),
-      } : undefined,
-      addresses: dto.initialAddress ? [{
-        id: `addr-${Date.now()}`,
-        organizationId: selectedTenant.id,
-        customerId: `cust-${Date.now()}`,
-        type: dto.initialAddress.type,
-        recipientName: dto.initialAddress.recipientName || dto.fullName,
-        zipCode: dto.initialAddress.zipCode,
-        street: dto.initialAddress.street,
-        number: dto.initialAddress.number,
-        complement: dto.initialAddress.complement,
-        neighborhood: dto.initialAddress.neighborhood,
-        city: dto.initialAddress.city,
-        state: dto.initialAddress.state,
-        country: "BRA",
-        isDefault: true,
-        createdAt: new Date().toISOString(),
-      }] : [],
-      contacts: dto.initialContact ? [{
-        id: `cont-${Date.now()}`,
-        organizationId: selectedTenant.id,
-        customerId: `cust-${Date.now()}`,
-        label: dto.initialContact.label,
-        contactName: dto.initialContact.contactName,
-        email: dto.initialContact.email,
-        phone: dto.initialContact.phone,
-        isNfeRecipient: dto.initialContact.isNfeRecipient || false,
-        createdAt: new Date().toISOString(),
-      }] : [],
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 19),
-      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 19),
-    };
-
-    setCustomers((prev) => [newCust, ...prev]);
-    showToast(`Cliente ${dto.fullName} adicionado à lista local.`);
   };
 
-  // Update Customer
+  // Update Customer (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleUpdateCustomer = async (id: string, dto: UpdateCustomerDTO) => {
     try {
       const headers = await getAuthHeaders();
@@ -902,23 +960,22 @@ export default function App() {
         body: JSON.stringify(dto),
       });
 
-      const data = await res.json();
-      if (data.success && data.data) {
-        await refreshBackendData();
-        showToast("Cliente atualizado com sucesso no banco de dados.");
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha ao atualizar cliente no ERP (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error("API error updating customer:", e);
-    }
 
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...dto, updatedAt: new Date().toISOString() } : c))
-    );
-    showToast("Cliente atualizado na lista local.");
+      await refreshBackendData();
+      showToast("Cliente atualizado com sucesso no PostgreSQL.");
+    } catch (e: any) {
+      console.error("API error updating customer:", e);
+      const msg = e?.message || "Falha de comunicação com o servidor.";
+      showToast(`❌ Falha ao atualizar cliente: ${msg}`);
+      throw e;
+    }
   };
 
-  // Soft-Delete / Archive Customer
+  // Soft-Delete / Archive Customer (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleDeleteCustomer = async (id: string) => {
     try {
       const headers = await getAuthHeaders();
@@ -927,25 +984,27 @@ export default function App() {
         headers,
       });
 
-      if (res.ok) {
-        await refreshBackendData();
-        showToast("Cliente arquivado com sucesso no ERP. Histórico preservado.");
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || `Falha ao arquivar cliente no ERP (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error("API error archiving customer:", e);
-    }
 
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: "ARCHIVED" as const, updatedAt: new Date().toISOString() } : c))
-    );
-    showToast("Cliente marcado como arquivado.");
+      await refreshBackendData();
+      showToast("Cliente arquivado com sucesso no ERP. Histórico preservado.");
+    } catch (e: any) {
+      console.error("API error archiving customer:", e);
+      const msg = e?.message || "Falha de comunicação com o servidor.";
+      showToast(`❌ Falha ao arquivar cliente: ${msg}`);
+      throw e;
+    }
   };
 
   // Add Reseller
   const handleAddReseller = (newReseller: Reseller) => {
+    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
+    firestoreDataService.saveReseller(tenantId, newReseller).catch((err) => console.warn("[Firestore Reseller Save]", err));
     setResellers((prev) => [newReseller, ...prev]);
-    showToast(`Revendedora ${newReseller.name} cadastrada com sucesso!`);
+    showToast(`Revendedora ${newReseller.name} cadastrada com sucesso no Firestore & lista local!`);
   };
 
   // Execute MCP Approved Action
@@ -1102,8 +1161,9 @@ export default function App() {
         totalAmount: backendOrder?.totalAmount ?? newOrder.totalAmount,
       };
 
-      // 2. Only after confirmed success, perform local state updates
+      // 2. Only after confirmed success, perform local state updates and Firestore replication
       setOrders((prev) => [confirmedOrder, ...prev]);
+      firestoreDataService.saveOrder(tenantId, confirmedOrder).catch((err) => console.warn("[Firestore Order Save]", err));
 
       const custName = confirmedOrder.customerSnapshot?.name || confirmedOrder.customer?.name || "Cliente Storefront";
       const custDoc = confirmedOrder.customerSnapshot?.document || confirmedOrder.customer?.document || "***.***.***-**";
@@ -1253,7 +1313,7 @@ export default function App() {
     }
   };
 
-  // Quick New Sale Handler for Store Owner (Instant Sale + Stock Decrement + Digital Warranty)
+  // Quick New Sale Handler for Store Owner (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleQuickNewSale = async (saleData: {
     customerName: string;
     customerPhone: string;
@@ -1270,7 +1330,7 @@ export default function App() {
         method: "POST",
         headers,
         body: JSON.stringify({
-          channel: "DIRECT_SALE",
+          channel: "PRESENTIAL_POS",
           customer: {
             name: saleData.customerName,
             phone: saleData.customerPhone,
@@ -1286,142 +1346,39 @@ export default function App() {
         }),
       });
 
-      if (res.ok) {
-        await refreshBackendData();
+      const responseData = await res.json().catch(() => ({}));
+      if (!res.ok || !responseData.success) {
+        throw new Error(
+          responseData.error ||
+          responseData.message ||
+          `Falha ao registrar venda no ERP (HTTP ${res.status})`
+        );
       }
-    } catch (e) {
-      console.warn("Backend order creation error, applying local state update:", e);
+
+      const backendOrder = responseData.data;
+      await refreshBackendData();
+
+      const orderNumber = backendOrder?.orderNumber || `LUM-${Math.floor(1000 + Math.random() * 9000)}`;
+      const warrantyCode = backendOrder?.warrantyCode || `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
+
+      showToast(`Venda ${orderNumber} de R$ ${saleData.totalAmount.toFixed(2)} confirmada e persistida no PostgreSQL!`);
+      return { orderNumber, warrantyCode, newOrder: backendOrder };
+    } catch (e: any) {
+      console.error("Erro ao registrar venda rápida no ERP:", e);
+      const msg = e?.message || "Erro de comunicação com o servidor ao processar a venda.";
+      showToast(`❌ Falha na venda: ${msg}`);
+      throw e;
     }
-
-    const orderNumber = `LUM-${Math.floor(1000 + Math.random() * 9000)}`;
-    const warrantyCode = `GRT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const today = new Date().toISOString().split("T")[0];
-    const expDate = new Date();
-    expDate.setFullYear(expDate.getFullYear() + 1);
-
-    const newOrderId = `ord-${Date.now()}`;
-    const orderItems: any[] = saleData.items.map((i, idx) => {
-      const prod = products.find((p) => p.id === i.productId);
-      return {
-        id: `item-${Date.now()}-${idx}`,
-        organizationId: "org-lumina-01",
-        orderId: newOrderId,
-        productId: i.productId,
-        locationId: "loc-matriz-01",
-        productSnapshot: {
-          productId: i.productId,
-          sku: prod?.sku || "SKU",
-          name: i.name,
-          category: prod?.category || "ANEIS",
-          material: prod?.material || "Liga Nobre",
-          bath: prod?.bath || "OURO_18K",
-          stones: prod?.stones || ["Zircônia Cristal"],
-          price: i.unitPrice,
-          costPrice: prod?.costPrice || i.unitPrice * 0.35,
-          warrantyMonths: prod?.warrantyMonths || 12,
-          isCustomizable: false,
-          imageUrl: prod?.imageUrl || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=600&auto=format&fit=crop&q=80",
-          snapshotTimestamp: new Date().toISOString(),
-        },
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        costPriceSnapshot: prod?.costPrice || i.unitPrice * 0.35,
-        discountAmount: 0,
-        totalAmount: i.quantity * i.unitPrice,
-        createdAt: new Date().toISOString(),
-      };
-    });
-
-    const newOrder: UnifiedOrder = {
-      id: newOrderId,
-      organizationId: "org-lumina-01",
-      orderNumber,
-      customerId: `cust-${Date.now()}`,
-      customerSnapshot: {
-        id: `cust-${Date.now()}`,
-        personType: "PF",
-        name: saleData.customerName,
-        phone: saleData.customerPhone,
-        document: "",
-        email: "",
-      },
-      channel: "PRESENTIAL_POS",
-      status: "PAID",
-      shippingAddress: {
-        recipientName: saleData.customerName,
-        zipCode: "01001-000",
-        street: "Balcão Presencial",
-        number: "S/N",
-        neighborhood: "Centro",
-        city: "São Paulo",
-        state: "SP",
-        country: "BR",
-      },
-      currency: "BRL",
-      subtotalAmount: saleData.subtotalAmount !== undefined ? saleData.subtotalAmount : saleData.totalAmount,
-      discountAmount: 0,
-      shippingAmount: saleData.shippingAmount || 0,
-      totalAmount: saleData.totalAmount,
-      items: orderItems,
-      warrantyCode,
-      notes: saleData.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-
-    // Deduct stock
-    saleData.items.forEach((item) => {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === item.productId
-            ? {
-                ...p,
-                stockPhysical: Math.max(0, p.stockPhysical - item.quantity),
-                stockAvailable: Math.max(0, p.stockAvailable - item.quantity),
-                availableStock: Math.max(0, (p.availableStock ?? p.currentStock ?? 1) - item.quantity),
-              }
-            : p
-        )
-      );
-    });
-
-    // Create digital warranty
-    const newWarranty: DigitalWarranty = {
-      id: `warr-${Date.now()}`,
-      code: warrantyCode,
-      customerName: saleData.customerName,
-      customerPhone: saleData.customerPhone,
-      customerDocument: "",
-      customerEmail: "",
-      orderNumber,
-      sku: saleData.items[0]?.name || "Semijoia",
-      productName: saleData.items.map((i) => i.name).join(", "),
-      bathType: "Ouro 18K",
-      issueDate: today,
-      expirationDate: expDate.toISOString().split("T")[0],
-      status: "VALIDA",
-      channel: "DIRECT_SALE",
-      terms: "Garantia oficial de 12 meses cobrindo integridade do banho e cravação de zircônias.",
-      claimsCount: 0,
-    };
-    setWarranties((prev) => [newWarranty, ...prev]);
-
-    confetti({
-      particleCount: 70,
-      spread: 60,
-      origin: { y: 0.6 },
-    });
-
-    showToast(`Venda de R$ ${saleData.totalAmount.toFixed(2)} concluída! Estoque baixado e garantia emitida.`);
-    return { orderNumber, warrantyCode, newOrder };
   };
 
-  // Direct Payment Confirmation Handler
+  // Direct Payment Confirmation Handler (Strict PostgreSQL Persistence - No Silent Fallback)
   const handleConfirmOrderPayment = async (orderId: string) => {
-    let targetOrder = orders.find((o) => o.id === orderId);
-
     try {
       const res = await apiClient.authenticatedFetch(`/api/orders/${orderId}/transition`, {
         method: "POST",
@@ -1436,105 +1393,29 @@ export default function App() {
         }),
       });
 
-      if (res.ok) {
-        await refreshBackendData();
-      }
-    } catch (e) {
-      console.warn("Transition API fallback:", e);
-    }
-
-    const today = new Date().toISOString().split("T")[0];
-    const expDate = new Date();
-    expDate.setFullYear(expDate.getFullYear() + 1);
-    const generatedWarrantyCode = `GRT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    // Update orders state
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              status: "PAID",
-              paymentStatus: "PAID",
-              warrantyCode: o.warrantyCode || generatedWarrantyCode,
-              updatedAt: new Date().toISOString(),
-            }
-          : o
-      )
-    );
-
-    // If target order has items, deduct stock and register warranty
-    if (targetOrder) {
-      // Deduct stock for items in order
-      if (targetOrder.items && targetOrder.items.length > 0) {
-        targetOrder.items.forEach((item: any) => {
-          const qty = item.quantity || 1;
-          setProducts((prev) =>
-            prev.map((p) =>
-              p.id === item.productId || p.sku === item.sku
-                ? {
-                    ...p,
-                    stockReserved: Math.max(0, (p.stockReserved || 0) - qty),
-                    stockPhysical: Math.max(0, p.stockPhysical - qty),
-                    stockAvailable: Math.max(0, p.stockPhysical - qty - Math.max(0, (p.stockReserved || 0) - qty)),
-                    availableStock: Math.max(0, p.stockPhysical - qty - Math.max(0, (p.stockReserved || 0) - qty)),
-                  }
-                : p
-            )
-          );
-
-          const itemSku = item.productSnapshot?.sku || item.sku || "SKU-N/A";
-          const itemName = item.productSnapshot?.name || item.productName || "Produto Semijoia";
-          const ledgerEntry: InventoryLedgerEntry = {
-            id: `led-${Date.now()}-${item.productId}`,
-            productId: item.productId,
-            sku: itemSku,
-            productName: itemName,
-            type: "SAIDA_VENDA",
-            qtyChange: -qty,
-            physicalBalanceAfter: 0,
-            consignedBalanceAfter: 0,
-            timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-            operator: currentUser?.name || "Vendedora Matriz",
-            reason: `Venda confirmada pedido ${targetOrder.orderNumber} (Baixa definitiva no Ledger)`,
-          };
-          setLedger((prev) => [ledgerEntry, ...prev]);
-        });
+      const responseData = await res.json().catch(() => ({}));
+      if (!res.ok || !responseData.success) {
+        throw new Error(
+          responseData.error ||
+          responseData.message ||
+          `Falha ao confirmar pagamento no ERP (HTTP ${res.status})`
+        );
       }
 
-      // Create and save Digital Warranty
-      const customerName = targetOrder.customerSnapshot?.name || targetOrder.customerName || "Cliente";
-      const customerPhone = targetOrder.customerSnapshot?.phone || targetOrder.customerPhone || "";
-      const piecesNames = targetOrder.items?.map((i: any) => i.productSnapshot?.name || i.name).filter(Boolean).join(", ") || "Semijoia Nobre";
+      await refreshBackendData();
 
-      const newWarranty: DigitalWarranty = {
-        id: `warr-${Date.now()}`,
-        code: targetOrder.warrantyCode || generatedWarrantyCode,
-        customerName,
-        customerPhone,
-        customerDocument: "",
-        customerEmail: "",
-        orderNumber: targetOrder.orderNumber,
-        sku: targetOrder.items?.[0]?.sku || targetOrder.items?.[0]?.productId || "SEM-LUMINA",
-        productName: piecesNames,
-        bathType: "Ouro 18K / Ródio",
-        issueDate: today,
-        expirationDate: expDate.toISOString().split("T")[0],
-        status: "VALIDA",
-        channel: "WHATSAPP",
-        terms: "Garantia de 12 meses cobrindo banho nobre e integridade das pedras.",
-        claimsCount: 0,
-      };
-
-      setWarranties((prev) => [newWarranty, ...prev.filter((w) => w.orderId !== orderId && w.orderNumber !== targetOrder?.orderNumber)]);
+      confetti({
+        particleCount: 50,
+        spread: 50,
+        origin: { y: 0.6 },
+      });
+      showToast("Pagamento confirmado com sucesso no PostgreSQL! Estoque baixado e garantia emitida.");
+    } catch (e: any) {
+      console.error("Erro ao confirmar pagamento no ERP:", e);
+      const msg = e?.message || "Erro de comunicação ao confirmar o pagamento.";
+      showToast(`❌ Falha ao confirmar pagamento: ${msg}`);
+      throw e;
     }
-
-    confetti({
-      particleCount: 50,
-      spread: 50,
-      origin: { y: 0.6 },
-    });
-    showToast("Pagamento confirmado com sucesso! Estoque atualizado (SALE) e garantia emitida.");
   };
 
   // Open consumer storefront with category & optional coupon from landing page
@@ -1672,6 +1553,9 @@ export default function App() {
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
                 pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
+                isFirebaseAuthed={isFirebaseAuthed}
+                onGoogleLogin={handleFirebaseGoogleLogin}
+                onLogout={handleFirebaseLogout}
               />
             </div>
 
@@ -1689,6 +1573,9 @@ export default function App() {
               onOpenShareModal={() => setShowShareModal(true)}
               onOpenNewSale={() => setShowQuickSaleModal(true)}
               onOpenHelp={() => setShowAssistantHelpModal(true)}
+              isFirebaseAuthed={isFirebaseAuthed}
+              onGoogleLogin={handleFirebaseGoogleLogin}
+              onLogout={handleFirebaseLogout}
             />
           </div>
 
@@ -1764,6 +1651,7 @@ export default function App() {
                 tenant={selectedTenant}
                 branding={brandingConfig}
                 paymentSettings={paymentSettings}
+                smtpConfig={smtpConfig}
                 currentUser={currentUser}
                 onUpdateUser={handleUpdateUser}
                 initialSubTab={activeTab === "profile" ? "profile" : undefined}
@@ -1771,6 +1659,13 @@ export default function App() {
                 onUpdatePaymentSettings={(newSettings) => {
                   setPaymentSettings(newSettings);
                   showToast("Políticas de PIX, juros e parcelamento atualizadas com sucesso!");
+                }}
+                onUpdateSmtpConfig={(newSmtp) => {
+                  setSmtpConfig(newSmtp);
+                  try {
+                    localStorage.setItem("aura_store_smtp_config", JSON.stringify(newSmtp));
+                  } catch (e) {}
+                  showToast("Configuração do servidor SMTP e regras de disparo salvas!");
                 }}
                 onNavigateTab={setActiveTab}
               />
@@ -1995,6 +1890,13 @@ export default function App() {
           setShowCriticalPathModal(false);
           setActiveTab("storefront");
         }}
+      />
+
+      {/* Global API Loading Overlay */}
+      <GlobalLoadingOverlay
+        isLoading={isGlobalLoading}
+        activeRequestsCount={activeRequestsCount}
+        message="Sincronizando dados..."
       />
     </div>
   );

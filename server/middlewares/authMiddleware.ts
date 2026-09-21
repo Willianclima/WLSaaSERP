@@ -28,125 +28,84 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Authentication and Multi-Tenant Isolation Middleware.
  *
- * ENVIRONMENTS:
- * 1. DEVELOPMENT (NODE_ENV !== "production" and ENABLE_DEV_AUTH_DEMO_FALLBACK !== "false"):
- *    - Allows developer demo fallback when no authorization token is provided.
- *    - Emits a clear console warning for visibility.
- *
- * 2. PRODUCTION (NODE_ENV === "production"):
- *    - STRICT HARDENING:
- *      * Token/Session is MANDATORY (no token -> 401 Unauthorized)
- *      * Cryptographic signature verified against SESSION_SECRET
- *      * User is MANDATORY (must exist in DB and be ACTIVE)
- *      * Tenant is MANDATORY (explicit x-tenant-id or embedded in verified session)
- *      * Membership is MANDATORY (user must belong to tenant with ACTIVE status, or be platform Super Admin)
- *      * ZERO arbitrary fallbacks to allUsers[0] or allOrgs[0].
+ * STRICT HARDENING ENFORCEMENT (ALL ENVIRONMENTS):
+ * - Token/Session is MANDATORY (no token -> 401 Unauthorized)
+ * - Cryptographic signature verified against SESSION_SECRET
+ * - User is MANDATORY (must exist in DB and be ACTIVE)
+ * - Tenant is MANDATORY (explicit x-tenant-id or embedded in verified session)
+ * - Membership is MANDATORY (user must belong to tenant with ACTIVE status, or be platform Super Admin)
+ * - ZERO arbitrary fallbacks or demo users.
  */
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const isProduction = process.env.NODE_ENV === "production";
-    const allowDevDemoFallback = !isProduction && process.env.ENABLE_DEV_AUTH_DEMO_FALLBACK !== "false";
 
-    const authHeader = req.headers.authorization || (req.headers["x-session-token"] as string);
+    const authHeader = req.headers.authorization;
     const tenantHeader = (req.headers["x-tenant-id"] as string) || (req.query.tenantId as string);
+
+    // -------------------------------------------------------------------------
+    // 1. EXTRACT & VERIFY AUTHORIZATION BEARER TOKEN (STRICT ENFORCEMENT)
+    // -------------------------------------------------------------------------
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_TOKEN_REQUIRED",
+        error: "Acesso não autorizado: cabeçalho 'Authorization: Bearer <token>' válido é obrigatório.",
+      });
+    }
 
     let user: UserEntity | null = null;
     let orgIdFromToken: string | undefined;
 
-    // -------------------------------------------------------------------------
-    // 1. EXTRACT & VERIFY SESSION TOKEN
-    // -------------------------------------------------------------------------
-    if (authHeader) {
-      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const token = authHeader.substring(7).trim();
 
-      // Caso A: Formato JWT padrão RFC 7519
-      if (JwtService.isJwt(token)) {
-        try {
-          const payload = JwtService.verify(token);
-          const userId = payload.userId || payload.sub;
-          orgIdFromToken = payload.tenantId || payload.organizationId;
-          req.jwtPayload = payload;
-          user = await userRepo.findById(userId);
-        } catch (jwtErr: any) {
-          return res.status(401).json({
-            success: false,
-            code: "INVALID_JWT_TOKEN",
-            error: `Token JWT inválido ou expirado: ${jwtErr.message}`,
-          });
-        }
-      }
-      // Caso B: Formato de sessão legada sess_aura_{userId}_{orgId}_{timestamp}_{signature?}
-      else if (token.startsWith("sess_aura_")) {
-        const parts = token.split("_");
-        const userId = parts[2];
-        orgIdFromToken = parts[3];
-        const timestamp = parts[4];
-        const signature = parts[5];
-
-        if (!userId) {
-          return res.status(401).json({
-            success: false,
-            code: "INVALID_TOKEN_PAYLOAD",
-            error: "Token de sessão inválido: identificador de usuário ausente.",
-          });
-        }
-
-        // Cryptographic Signature verification
-        const sessionSecret = getSessionSecret();
-        if (!signature) {
-          // In production, reject unsigned tokens
-          if (isProduction) {
-            return res.status(401).json({
-              success: false,
-              code: "UNSIGNED_TOKEN_REJECTED",
-              error: "Acesso negado: token sem assinatura criptográfica rejeitado em produção.",
-            });
-          }
-        } else {
-          const expectedSig = crypto
-            .createHmac("sha256", sessionSecret)
-            .update(`${userId}_${orgIdFromToken}_${timestamp}`)
-            .digest("hex")
-            .substring(0, 16);
-
-          if (signature !== expectedSig) {
-            return res.status(401).json({
-              success: false,
-              code: "INVALID_TOKEN_SIGNATURE",
-              error: "Token de sessão com assinatura inválida ou adulterada.",
-            });
-          }
-        }
-
-        user = await userRepo.findById(userId);
-      } else {
-        return res.status(401).json({
-          success: false,
-          code: "UNKNOWN_TOKEN_FORMAT",
-          error: "Formato de token de autenticação não reconhecido.",
-        });
-      }
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_TOKEN_REQUIRED",
+        error: "Acesso não autorizado: token de autenticação vazio ou ausente.",
+      });
     }
 
     // -------------------------------------------------------------------------
-    // 2. USER VALIDATION (STRICT IN PRODUCTION, DEMO FALLBACK ONLY IN DEV)
+    // 1. EXTRACT & VERIFY AUTHORIZATION BEARER JWT TOKEN (STRICT ENFORCEMENT)
+    // Pipeline P0: LOGIN -> JWT -> VALIDAÇÃO -> USER -> MEMBERSHIP -> TENANT -> RLS
+    // Mecanismo único oficial: RFC 7519 JSON Web Token (sem suporte a tokens legados).
+    // -------------------------------------------------------------------------
+    if (!JwtService.isJwt(token)) {
+      return res.status(401).json({
+        success: false,
+        code: "JWT_TOKEN_REQUIRED",
+        error: "Formato de token não reconhecido ou legado rejeitado. Um token JWT RFC 7519 válido é estritamente obrigatório.",
+      });
+    }
+
+    try {
+      const payload = JwtService.verify(token);
+      const userId = payload.userId || payload.sub;
+      orgIdFromToken = payload.tenantId || payload.organizationId;
+      req.jwtPayload = payload;
+      user = await userRepo.findById(userId);
+    } catch (jwtErr: any) {
+      return res.status(401).json({
+        success: false,
+        code: "INVALID_JWT_TOKEN",
+        error: `Token JWT inválido ou expirado: ${jwtErr.message}`,
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. USER VALIDATION (STRICT ENFORCEMENT)
     // -------------------------------------------------------------------------
     if (!user) {
-      if (isProduction || !allowDevDemoFallback) {
-        return res.status(401).json({
-          success: false,
-          code: "AUTH_TOKEN_REQUIRED",
-          error: "Acesso não autorizado: token de autenticação e sessão é obrigatório.",
-        });
-      }
-
-      // DEVELOPMENT ONLY: Fallback demo user
-      console.warn("[AuthMiddleware] [MODO DEV ATIVO] Requisição sem token em ambiente de desenvolvimento. Aplicando usuário demo.");
-      const allUsers = await userRepo.listAll();
-      user = allUsers.find((u) => u.status === "ACTIVE") || allUsers[0] || null;
+      return res.status(401).json({
+        success: false,
+        code: "AUTH_TOKEN_REQUIRED",
+        error: "Acesso não autorizado: usuário vinculado ao token não foi encontrado.",
+      });
     }
 
-    if (!user || user.status !== "ACTIVE") {
+    if (user.status !== "ACTIVE") {
       return res.status(401).json({
         success: false,
         code: "USER_INACTIVE_OR_NOT_FOUND",
@@ -224,31 +183,11 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
       // O cabeçalho adulterado JAMAIS é aceito.
       // -----------------------------------------------------------------------
       if (activeMemberships.length === 0) {
-        if (!isProduction && allowDevDemoFallback) {
-          // Dev convenience: auto-seed dev membership
-          const allOrgs = await orgRepo.listAll();
-          const devOrg = allOrgs[0];
-          if (devOrg) {
-            const devMembership = {
-              id: `mem-dev-${user.id}-${devOrg.id}`,
-              organizationId: devOrg.id,
-              userId: user.id,
-              role: "OWNER" as OrganizationRole,
-              status: "ACTIVE" as const,
-              createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-            };
-            await memberRepo.create(devMembership);
-            activeMemberships.push(devMembership);
-          }
-        }
-
-        if (activeMemberships.length === 0) {
-          return res.status(403).json({
-            success: false,
-            code: "NO_ACTIVE_MEMBERSHIPS",
-            error: "Acesso negado: a sua identidade não possui membership ativo em nenhuma organização.",
-          });
-        }
+        return res.status(403).json({
+          success: false,
+          code: "NO_ACTIVE_MEMBERSHIPS",
+          error: "Acesso negado: a sua identidade não possui membership ativo em nenhuma organização.",
+        });
       }
 
       if (requestedTenantId) {

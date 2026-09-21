@@ -18,6 +18,7 @@ import {
   WebhookDeliveryLog,
   Customer,
   OrganizationPaymentSettings,
+  StoreSmtpConfig,
 } from "../types";
 import { DEFAULT_ORGANIZATION_PAYMENT_SETTINGS } from "../utils/pricingEngine";
 
@@ -1742,6 +1743,99 @@ export const mockDomainSSLAuditLogs = INITIAL_DOMAIN_SSL_AUDIT_LOGS;
 export const mockMCPActions = INITIAL_MCP_ACTIONS;
 export const DEFAULT_PAYMENT_SETTINGS: OrganizationPaymentSettings = DEFAULT_ORGANIZATION_PAYMENT_SETTINGS;
 export const mockPaymentSettings = DEFAULT_ORGANIZATION_PAYMENT_SETTINGS;
+
+export const DEFAULT_STORE_SMTP_CONFIG: StoreSmtpConfig = {
+  enabled: true,
+  provider: "CUSTOM",
+  host: "smtp.luminasemijoias.com.br",
+  port: 587,
+  encryption: "STARTTLS",
+  username: "notificacoes@luminasemijoias.com.br",
+  password: "••••••••••••••••",
+  fromName: "Lumina Semijoias & Garantia Digital",
+  fromEmail: "garantia@luminasemijoias.com.br",
+  replyToEmail: "atendimento@luminasemijoias.com.br",
+  autoSendDigitalWarranty: true,
+  autoSendOrderPlaced: true,
+  autoSendPaymentApproved: true,
+  autoSendOrderDispatched: true,
+  autoSendStockAlerts: false,
+  warrantyEmailSubject: "Seu Passaporte de Garantia Digital QR - {{ lojista.nome }} ({{ garantia.codigo }})",
+  warrantyEmailTemplate: `<div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e7e5e4; border-radius: 16px; overflow: hidden;">
+  <!-- Cabeçalho com Identidade da Marca -->
+  <div style="background-color: #1c1917; padding: 28px 24px; text-align: center; border-bottom: 2px solid #f59e0b;">
+    <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-family: Georgia, serif; letter-spacing: 0.5px;">{{ lojista.nome }}</h1>
+    <p style="color: #f59e0b; font-size: 11px; margin: 6px 0 0; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Alta Semijoias &bull; Certificado Oficial</p>
+  </div>
+
+  <!-- Corpo Principal -->
+  <div style="padding: 32px 28px;">
+    <h2 style="color: #1c1917; font-size: 18px; margin: 0 0 12px; font-weight: 700;">Olá, {{ cliente.nome }}! ✨</h2>
+    <p style="color: #57534e; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+      Parabéns pela sua nova aquisição. Suas semijoias foram fundidas em ligas nobres antialérgicas e banhadas a 10 milésimos de Ouro 18K. 
+      Abaixo disponibilizamos seu <strong>Passaporte Digital de Garantia com QR Code Único</strong>:
+    </p>
+
+    <!-- Card de Garantia Digital com QR Code -->
+    <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 14px; padding: 24px; text-align: center; margin: 0 0 24px;">
+      <span style="display: inline-block; background-color: #78350f; color: #fef3c7; font-size: 10px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px;">
+        Garantia Ativa &bull; 12 Meses
+      </span>
+
+      <!-- Box do QR Code -->
+      <div style="background-color: #ffffff; border: 1px solid #fcd34d; border-radius: 12px; width: 140px; margin: 0 auto 14px; padding: 14px;">
+        <img src="{{ garantia.qr_code_url }}" alt="QR Code da Garantia" style="width: 112px; height: 112px; display: block; margin: 0 auto;" />
+        <div style="font-family: monospace; font-size: 11px; color: #78350f; font-weight: bold; margin-top: 6px;">{{ garantia.codigo }}</div>
+      </div>
+
+      <p style="color: #78350f; font-size: 12px; margin: 0; font-weight: 500;">
+        Aponte a câmera do celular para consultar o certificado oficial a qualquer momento.
+      </p>
+    </div>
+
+    <!-- Detalhes do Produto e Cobertura -->
+    <div style="background-color: #fafaf9; border: 1px solid #e7e5e4; border-radius: 12px; padding: 18px; margin-bottom: 24px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #44403c;">
+        <tr>
+          <td style="padding: 6px 0; color: #78716c;">Peça Adquirida:</td>
+          <td style="padding: 6px 0; text-align: right; font-weight: 600;">{{ produto.nome }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #78716c;">Data da Compra:</td>
+          <td style="padding: 6px 0; text-align: right; font-weight: 600;">{{ garantia.data_emissao }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #78716c;">Válido Até:</td>
+          <td style="padding: 6px 0; text-align: right; font-weight: 700; color: #059669;">{{ garantia.data_expiracao }}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #78716c;">Número do Pedido:</td>
+          <td style="padding: 6px 0; text-align: right; font-mono font-weight: 600;">#{{ pedido.numero }}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Botão de Ação / Consulta Online -->
+    <div style="text-align: center; margin: 28px 0 16px;">
+      <a href="{{ garantia.link_consulta }}" style="display: inline-block; background-color: #1c1917; color: #fef08a; font-size: 13px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px;">
+        Visualizar Passaporte Online &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Rodapé do E-mail -->
+  <div style="background-color: #fafaf9; border-top: 1px solid #e7e5e4; padding: 20px 24px; text-align: center; font-size: 11px; color: #a8a29e;">
+    <p style="margin: 0 0 6px;">{{ lojista.nome }} &bull; Atendimento VIP: {{ lojista.whatsapp }}</p>
+    <p style="margin: 0;">E-mail emitido automaticamente pelo ecossistema de Garantia Digital Lumina.</p>
+  </div>
+</div>`,
+  lastTestedAt: "Hoje, 14:32",
+  lastTestStatus: "SUCCESS",
+  lastTestMessage: "Handshake TLS 1.3 autenticado com sucesso. Resposta do servidor: 250 OK 2.0.0",
+  updatedAt: new Date().toISOString(),
+};
+export const mockStoreSmtpConfig = DEFAULT_STORE_SMTP_CONFIG;
+
 
 export const DEFAULT_BRANDING_CONFIG: StoreBrandingConfig = {
   logoType: "TEXT",

@@ -13,6 +13,11 @@ export interface AuditContextParams {
   details?: string | ((result: any, args: any[]) => string);
   captureChanges?: boolean;
   extractChanges?: (args: any[], result: any) => any;
+  /**
+   * Se true, falha de persistência no PostgreSQL ABORTA a operação imediatamente (P0).
+   * Se omitido, auto-determina como crítico baseado na lista de ações P0 de governança.
+   */
+  critical?: boolean;
 }
 
 class AuditService {
@@ -48,6 +53,44 @@ class AuditService {
     return data;
   }
 
+  /**
+   * Lista de ações P0 de alta governança onde a persistência de auditoria no PostgreSQL é OBRIGATÓRIA.
+   * Se o banco falhar na gravação do log de auditoria, a operação inteira falha e é abortada.
+   */
+  private static readonly P0_CRITICAL_ACTIONS = new Set<string>([
+    "SUPER_ADMIN_CONTROLLED_SUPPORT_ACCESS",
+    "ORGANIZATION_SUSPENDED",
+    "ORGANIZATION_ACTIVATED",
+    "PLAN_CHANGED",
+    "SUBSCRIPTION_SIMULATE_PAYMENT",
+    "SUBSCRIPTION_CANCELLED",
+    "MODULE_TOGGLED",
+    "ORGANIZATION_MODULES_BULK_UPDATE",
+    "MEMBER_REMOVED",
+    "MEMBER_ROLE_CHANGED",
+    "PERMISSION_REVOKED",
+    "ORGANIZATION_DELETED",
+    "DATA_PURGE",
+  ]);
+
+  /**
+   * Determina se uma ação específica exige auditoria P0 infalível (PostgreSQL obrigatório).
+   */
+  isCriticalAction(action: string): boolean {
+    if (!action) return false;
+    const normalized = action.toUpperCase().trim();
+    if (AuditService.P0_CRITICAL_ACTIONS.has(normalized)) return true;
+    return (
+      normalized.includes("SUSPEND") ||
+      normalized.includes("PLAN") ||
+      normalized.includes("SUPPORT_ACCESS") ||
+      normalized.includes("PERMISSION") ||
+      normalized.includes("DELETE") ||
+      normalized.includes("REVOKE") ||
+      normalized.includes("SUPER_ADMIN")
+    );
+  }
+
   async logAction(
     organizationId: string,
     userId: string | undefined,
@@ -57,12 +100,15 @@ class AuditService {
     ipAddress?: string,
     userAgent?: string,
     details?: string,
-    changes?: any
+    changes?: any,
+    options?: { requirePersistence?: boolean }
   ): Promise<AuditLogEntity> {
     const id = `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const sanitizedDetails = details ? this.maskSensitiveData(details) : undefined;
     const sanitizedChanges = changes ? this.maskSensitiveData(changes) : undefined;
     const nowIso = new Date().toISOString();
+
+    const isCritical = options?.requirePersistence ?? this.isCriticalAction(action);
 
     const log: AuditLogEntity = {
       id,
@@ -85,7 +131,7 @@ class AuditService {
       this.inMemoryLogs = this.inMemoryLogs.slice(0, 500);
     }
 
-    // Persist asynchronously in PostgreSQL
+    // Persist in PostgreSQL
     try {
       const validUserId = userId && typeof userId === "string" && userId.startsWith("usr-") ? userId : null;
       await query(
@@ -106,8 +152,18 @@ class AuditService {
           nowIso,
         ]
       );
-    } catch (dbErr) {
-      console.warn("Falha ao gravar audit_logs no PostgreSQL (salvo em memória):", dbErr);
+    } catch (dbErr: any) {
+      if (isCritical) {
+        console.error(
+          `[AUDIT P0 FATAL] Falha de persistência no PostgreSQL para ação crítica '${action}'. Operação abortada imediatamente:`,
+          dbErr
+        );
+        throw new Error(
+          `Falha de auditoria crítica P0: Não foi possível persistir o registro de auditoria no PostgreSQL para a ação '${action}'. A operação foi abortada por razões de governança e conformidade. Detalhes: ${dbErr?.message || dbErr}`
+        );
+      }
+
+      console.warn("Falha ao gravar audit_logs no PostgreSQL (salvo em memória para ação não crítica):", dbErr);
     }
 
     return log;
@@ -115,8 +171,8 @@ class AuditService {
 
   /**
    * Wrapper funcional para operações críticas de backend.
-   * Executa a operação e registra automaticamente a alteração na tabela de auditoria
-   * com o carimbo do usuário, timestamp e tenant_id validado via TenantContext (ou parâmetros explícitos).
+   * Executa a operação e registra obrigatoriamente a alteração na tabela de auditoria PostgreSQL.
+   * Se for operação P0/crítica e a persistência no PostgreSQL falhar, a operação inteira falha.
    */
   async withAudit<T>(
     params: AuditContextParams,
@@ -132,6 +188,7 @@ class AuditService {
     const effectiveUserId = params.userId || auditStamp.userId;
     const effectiveIp = params.ipAddress || auditStamp.ipAddress;
     const effectiveUserAgent = params.userAgent || auditStamp.userAgent;
+    const isCritical = params.critical ?? this.isCriticalAction(params.action);
 
     try {
       const result = await operation();
@@ -182,24 +239,36 @@ class AuditService {
           effectiveIp,
           effectiveUserAgent,
           resolvedDetails,
-          changes
+          changes,
+          { requirePersistence: isCritical }
         );
       }
 
       return result;
     } catch (error: any) {
+      // Se o próprio erro foi uma falha de auditoria P0, propaga diretamente sem tentar outro log com falha
+      if (error?.message?.includes("Falha de auditoria crítica P0")) {
+        throw error;
+      }
+
       // Registrar falha crítica se houver tenant conhecido
       if (effectiveOrgId) {
-        await this.logAction(
-          effectiveOrgId,
-          effectiveUserId,
-          `${params.action}_FAILED`,
-          params.entity,
-          typeof params.entityId === "string" ? params.entityId : "ERROR",
-          effectiveIp,
-          effectiveUserAgent,
-          `Falha na operação crítica ${params.action}: ${error.message}`
-        );
+        try {
+          await this.logAction(
+            effectiveOrgId,
+            effectiveUserId,
+            `${params.action}_FAILED`,
+            params.entity,
+            typeof params.entityId === "string" ? params.entityId : "ERROR",
+            effectiveIp,
+            effectiveUserAgent,
+            `Falha na operação crítica ${params.action}: ${error.message}`,
+            undefined,
+            { requirePersistence: false }
+          );
+        } catch (secondaryErr) {
+          console.warn("[AuditService] Não foi possível registrar falha no audit log secundário:", secondaryErr);
+        }
       }
       throw error;
     }
