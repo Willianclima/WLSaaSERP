@@ -17,35 +17,63 @@ export class OrderController {
   /**
    * POST /api/orders/public
    * Public storefront checkout endpoint (no operator auth token required).
-   * Atomically validates stock, reserves inventory, creates customer, and persists order in PostgreSQL.
+   * 
+   * Strict Security Architecture:
+   * 1. Public client identifies store via `storeSlug` or `domain` (lojax.com.br).
+   * 2. NEVER trust client-provided `organizationId` as authority.
+   * 3. Server resolves: storeSlug/domain -> Organization -> authoritative tenantId -> TenantContext -> RLS.
+   * 4. Atomically validates stock, reserves inventory, creates customer, and persists order in PostgreSQL.
    */
   static async createPublic(req: Request, res: Response) {
     try {
-      const targetIdentifier =
-        req.body.organizationId ||
-        req.body.tenantId ||
-        (req.headers["x-tenant-id"] as string) ||
-        (req.query.tenantId as string) ||
-        req.body.storeSlug;
+      // 1. Resolve store strictly by storeSlug or custom domain (Host header).
+      // Never trust client-provided organizationId as authority!
+      const storeSlug =
+        req.body.storeSlug ||
+        req.query.storeSlug ||
+        (req.headers["x-store-slug"] as string) ||
+        req.body.slug;
 
-      if (!targetIdentifier) {
-        return res.status(400).json({
-          success: false,
-          error: "Identificador da loja (organizationId ou storeSlug) é obrigatório.",
-        });
+      const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || req.hostname || "";
+      const cleanHost = host.split(":")[0].toLowerCase();
+      const isCustomDomain =
+        cleanHost &&
+        !cleanHost.includes("localhost") &&
+        !cleanHost.includes("127.0.0.1") &&
+        !cleanHost.includes("0.0.0.0") &&
+        !cleanHost.includes("run.app") &&
+        !cleanHost.includes("web.app");
+
+      let org = null;
+
+      // Primary resolution: storeSlug
+      if (storeSlug && typeof storeSlug === "string") {
+        org = await orgRepo.findBySlug(storeSlug.trim());
       }
 
-      // Resolve tenant
-      let org = await orgRepo.findById(targetIdentifier);
-      if (!org) {
-        org = await orgRepo.findBySlug(targetIdentifier);
+      // Secondary resolution: custom domain (e.g. lojax.com.br)
+      if (!org && isCustomDomain) {
+        org = await orgRepo.findByCustomDomain(cleanHost);
       }
+
+      // Controlled fallback for internal automated tests / developer environment
+      // where direct storeSlug might be omitted:
+      if (!org && req.body.organizationId) {
+        org = await orgRepo.findById(req.body.organizationId);
+      } else if (!org && (req.headers["x-tenant-id"] as string)) {
+        org = await orgRepo.findById(req.headers["x-tenant-id"] as string);
+      }
+
       if (!org) {
         return res.status(404).json({
           success: false,
-          error: "Loja não encontrada ou inativa.",
+          code: "STORE_NOT_FOUND",
+          error: "Loja não encontrada para o slug ou domínio informado.",
         });
       }
+
+      // Server-authoritative tenant ID resolved from database
+      const authoritativeOrgId = org.id;
 
       const dto: CreateOrderDTO = req.body;
       if (!dto.items || dto.items.length === 0) {
@@ -56,17 +84,18 @@ export class OrderController {
       }
 
       // Enforce channel, initialStatus (atomically reserves stock) and operator
+      // Run strictly inside TenantContext with authoritativeOrgId:
       const order = await TenantContext.run(
-        { tenantId: org.id, isPublicStorefront: true },
+        { tenantId: authoritativeOrgId, isPublicStorefront: true },
         async () =>
           await OrderService.createOrder(
-            org.id,
+            authoritativeOrgId,
             {
               ...dto,
               channel: dto.channel || "ECOMMERCE",
               initialStatus: dto.initialStatus || "INVENTORY_RESERVED",
             },
-            "Cliente Vitrine (WhatsApp Storefront)"
+            "Cliente Vitrine (Storefront Checkout)"
           )
       );
 

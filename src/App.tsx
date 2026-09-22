@@ -1112,10 +1112,12 @@ export default function App() {
       metadata: orderData.metadata,
     };
 
+    const storeSlug = selectedTenant.slug || "lumina";
     const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "x-tenant-id": tenantId,
+      "x-store-slug": storeSlug,
     };
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -1124,7 +1126,10 @@ export default function App() {
     const response = await fetch("/api/orders/public", {
       method: "POST",
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        storeSlug,
+      }),
     });
 
     const responseData = await response.json().catch(() => ({}));

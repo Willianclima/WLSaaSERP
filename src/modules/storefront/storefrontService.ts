@@ -134,6 +134,7 @@ export class StorefrontService {
     }>;
     paymentMethod?: string;
     notes?: string;
+    storeSlug?: string;
     subtotalAmount: number;
     discountAmount?: number;
     shippingAmount?: number;
@@ -145,8 +146,10 @@ export class StorefrontService {
         headers: {
           "Content-Type": "application/json",
           "x-tenant-id": orderPayload.tenantId,
+          ...(orderPayload.storeSlug ? { "x-store-slug": orderPayload.storeSlug } : {}),
         },
         body: JSON.stringify({
+          storeSlug: orderPayload.storeSlug,
           organizationId: orderPayload.tenantId,
           channel: "ONLINE_STOREFRONT",
           customer: {

@@ -11,6 +11,10 @@ export interface TenantJwtPayload {
   role: OrganizationRole;
   membershipId?: string;
   isPlatformSuperAdmin?: boolean;
+  isSupportSession?: boolean;
+  supportReason?: string;
+  supportAdminEmail?: string;
+  supportScope?: "FULL_SUPPORT" | "READ_ONLY";
   iat?: number;
   exp?: number;
 }
@@ -30,6 +34,10 @@ export class JwtService {
       role: payload.role,
       membershipId: payload.membershipId,
       isPlatformSuperAdmin: Boolean(payload.isPlatformSuperAdmin),
+      isSupportSession: Boolean(payload.isSupportSession),
+      supportReason: payload.supportReason,
+      supportAdminEmail: payload.supportAdminEmail,
+      supportScope: payload.supportScope || "FULL_SUPPORT",
     };
 
     return jwt.sign(claims, secret, {

@@ -58,19 +58,28 @@ class AuditService {
    * Se o banco falhar na gravação do log de auditoria, a operação inteira falha e é abortada.
    */
   private static readonly P0_CRITICAL_ACTIONS = new Set<string>([
+    "USER_LOGIN",
     "SUPER_ADMIN_CONTROLLED_SUPPORT_ACCESS",
     "ORGANIZATION_SUSPENDED",
     "ORGANIZATION_ACTIVATED",
     "PLAN_CHANGED",
     "SUBSCRIPTION_SIMULATE_PAYMENT",
     "SUBSCRIPTION_CANCELLED",
+    "SUBSCRIPTION_STATUS_UPDATED",
     "MODULE_TOGGLED",
     "ORGANIZATION_MODULES_BULK_UPDATE",
+    "INVENTORY_ADJUSTMENT",
+    "INVENTORY_REVERSAL",
+    "INVENTORY_MOVEMENT",
+    "ORDER_CANCELED",
+    "ORDER_REFUNDED",
+    "ORDER_PAYMENT_CONFIRMED",
     "MEMBER_REMOVED",
     "MEMBER_ROLE_CHANGED",
     "PERMISSION_REVOKED",
     "ORGANIZATION_DELETED",
     "DATA_PURGE",
+    "ISOLATION_VERIFICATION_TEST_PASSED",
   ]);
 
   /**
@@ -83,11 +92,16 @@ class AuditService {
     return (
       normalized.includes("SUSPEND") ||
       normalized.includes("PLAN") ||
-      normalized.includes("SUPPORT_ACCESS") ||
+      normalized.includes("SUPPORT") ||
       normalized.includes("PERMISSION") ||
       normalized.includes("DELETE") ||
       normalized.includes("REVOKE") ||
-      normalized.includes("SUPER_ADMIN")
+      normalized.includes("SUPER_ADMIN") ||
+      normalized.includes("REVERSAL") ||
+      normalized.includes("ESTORNO") ||
+      normalized.includes("ADJUSTMENT") ||
+      normalized.includes("CANCEL") ||
+      normalized.includes("LOGIN")
     );
   }
 
@@ -285,29 +299,70 @@ class AuditService {
         [organizationId, limit]
       );
 
-      if (res.rows && res.rows.length > 0) {
-        return res.rows.map((r: any) => ({
-          id: r.id,
-          organizationId: r.organization_id,
-          userId: r.user_id,
-          action: r.action,
-          entity: r.entity,
-          entityId: r.entity_id,
-          status: r.status,
-          ipAddress: r.ip_address,
-          userAgent: r.user_agent,
-          details: r.details,
-          changes: typeof r.changes === "string" ? JSON.parse(r.changes) : r.changes,
-          createdAt: r.created_at ? new Date(r.created_at).toISOString().replace("T", " ").substring(0, 16) : "",
-        }));
-      }
+      return (res.rows || []).map((r: any) => ({
+        id: r.id,
+        organizationId: r.organization_id,
+        userId: r.user_id,
+        action: r.action,
+        entity: r.entity,
+        entityId: r.entity_id,
+        status: r.status,
+        ipAddress: r.ip_address,
+        userAgent: r.user_agent,
+        details: r.details,
+        changes: typeof r.changes === "string" ? JSON.parse(r.changes) : r.changes,
+        createdAt: r.created_at ? new Date(r.created_at).toISOString().replace("T", " ").substring(0, 16) : "",
+      }));
     } catch (err) {
-      console.warn("Falha ao consultar audit_logs do PostgreSQL, retornando buffer:", err);
+      console.error("[AUDIT] Erro ao consultar audit_logs do PostgreSQL:", err);
+      return [];
     }
+  }
 
-    return this.inMemoryLogs
-      .filter((l) => l.organizationId === organizationId)
-      .slice(0, limit);
+  async listGlobalLogs(limit = 100, filters?: { organizationId?: string; action?: string }): Promise<AuditLogEntity[]> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+
+      if (filters?.organizationId) {
+        values.push(filters.organizationId);
+        conditions.push(`organization_id = $${values.length}`);
+      }
+      if (filters?.action) {
+        values.push(filters.action);
+        conditions.push(`action = $${values.length}`);
+      }
+
+      values.push(limit);
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const res = await query(
+        `SELECT id, organization_id, user_id, action, entity, entity_id, status, ip_address, user_agent, details, changes, created_at
+         FROM audit_logs
+         ${whereClause}
+         ORDER BY created_at DESC
+         LIMIT $${values.length}`,
+        values
+      );
+
+      return (res.rows || []).map((r: any) => ({
+        id: r.id,
+        organizationId: r.organization_id,
+        userId: r.user_id,
+        action: r.action,
+        entity: r.entity,
+        entityId: r.entity_id,
+        status: r.status,
+        ipAddress: r.ip_address,
+        userAgent: r.user_agent,
+        details: r.details,
+        changes: typeof r.changes === "string" ? JSON.parse(r.changes) : r.changes,
+        createdAt: r.created_at ? new Date(r.created_at).toISOString().replace("T", " ").substring(0, 19) : "",
+      }));
+    } catch (err) {
+      console.error("[AUDIT] Erro ao consultar audit_logs globais do PostgreSQL:", err);
+      return [];
+    }
   }
 }
 

@@ -148,6 +148,9 @@ export async function jwtTenantRlsMiddleware(
 
     req.user = user;
     const isSuperAdmin = Boolean(user.isPlatformSuperAdmin);
+    const isSupportSession = Boolean(tokenPayload?.isSupportSession);
+    const supportReason = tokenPayload?.supportReason;
+    const supportScope = tokenPayload?.supportScope || "FULL_SUPPORT";
 
     // -------------------------------------------------------------------------
     // 3. VALIDAÇÃO E ENFORCEMENT DO TENANT_ID A PARTIR DO MEMBERSHIP NO JWT
@@ -161,41 +164,57 @@ export async function jwtTenantRlsMiddleware(
 
       // Se o cabeçalho tentar sobrescrever o tenant do JWT:
       if (targetTenantId && sanitizedHeaderTenant !== targetTenantId) {
-        // Super admins de plataforma têm permissão para inspecionar qualquer tenant
-        if (isSuperAdmin) {
+        // 1. Verifica se a identidade autenticada possui membership legítimo no tenant solicitado
+        const memberships = await memberRepo.listByUser(user.id);
+        const hasMembership = memberships.some(
+          (m) => m.organizationId === sanitizedHeaderTenant && m.status === "ACTIVE"
+        );
+
+        if (hasMembership) {
           targetTenantId = sanitizedHeaderTenant;
-        } else {
-          // Verifica se o usuário autenticado possui membership ativo no tenant solicitado
-          const memberships = await memberRepo.listByUser(user.id);
-          const hasMembership = memberships.some(
-            (m) => m.organizationId === sanitizedHeaderTenant && m.status === "ACTIVE"
+        } else if (isSupportSession && tokenPayload?.tenantId === sanitizedHeaderTenant) {
+          // Sessão de suporte controlada especificamente autorizada para este tenant
+          targetTenantId = sanitizedHeaderTenant;
+        } else if (isSuperAdmin) {
+          // P0 CONTROLLED SUPPORT: Super Admin NÃO tem passe livre automático.
+          // Deve obrigatoriamente iniciar sessão de suporte escopada com motivo e auditoria.
+          await auditService.logAction(
+            sanitizedHeaderTenant,
+            user.id,
+            "SUPER_ADMIN_UNAUTHORIZED_DIRECT_TENANT_ACCESS_BLOCKED",
+            "ORGANIZATION",
+            sanitizedHeaderTenant,
+            req.ip,
+            req.headers["user-agent"] as string,
+            `Super Admin (${user.email}) tentou acessar tenant '${sanitizedHeaderTenant}' via cabeçalho direto sem sessão de suporte auditada. Bloqueado.`
           );
 
-          if (!hasMembership) {
-            await auditService.logAction(
-              sanitizedHeaderTenant,
-              user.id,
-              "SECURITY_UNAUTHORIZED_TENANT_ACCESS",
-              "RLS_BARRIER",
-              targetTenantId || "unknown",
-              req.ip,
-              req.headers["user-agent"] as string,
-              JSON.stringify({
-                jwtTenantId: targetTenantId,
-                attemptedTenantId: sanitizedHeaderTenant,
-                reason: "Spoofing attempt blocked: user has no active membership in target organization",
-              })
-            );
+          return res.status(403).json({
+            success: false,
+            code: "CONTROLLED_SUPPORT_SESSION_REQUIRED",
+            error: `Acesso negado: Administradores da plataforma devem iniciar uma sessão de suporte técnico controlada com motivo obrigatório e auditoria em PostgreSQL para acessar os dados da organização '${sanitizedHeaderTenant}'.`,
+          });
+        } else {
+          await auditService.logAction(
+            sanitizedHeaderTenant,
+            user.id,
+            "SECURITY_UNAUTHORIZED_TENANT_ACCESS",
+            "RLS_BARRIER",
+            targetTenantId || "unknown",
+            req.ip,
+            req.headers["user-agent"] as string,
+            JSON.stringify({
+              jwtTenantId: targetTenantId,
+              attemptedTenantId: sanitizedHeaderTenant,
+              reason: "Spoofing attempt blocked: user has no active membership in target organization",
+            })
+          );
 
-            return res.status(403).json({
-              success: false,
-              code: "UNAUTHORIZED_TENANT_ACCESS",
-              error: `Acesso não autorizado: a identidade autenticada (${user.email}) não possui membership ativo na organização '${sanitizedHeaderTenant}'. Bloqueado na barreira de Membership.`,
-            });
-          }
-
-          // Se possuir membership ativo, autoriza a troca de contexto
-          targetTenantId = sanitizedHeaderTenant;
+          return res.status(403).json({
+            success: false,
+            code: "UNAUTHORIZED_TENANT_ACCESS",
+            error: `Acesso não autorizado: a identidade autenticada (${user.email}) não possui membership ativo na organização '${sanitizedHeaderTenant}'. Bloqueado na barreira de Membership.`,
+          });
         }
       } else if (!targetTenantId) {
         targetTenantId = sanitizedHeaderTenant;
@@ -206,7 +225,7 @@ export async function jwtTenantRlsMiddleware(
     if (!targetTenantId) {
       const memberships = await memberRepo.listByUser(user.id);
       const activeMembership = memberships.find((m) => m.status === "ACTIVE");
-      if (!activeMembership && !isSuperAdmin) {
+      if (!activeMembership && !isSupportSession) {
         return res.status(403).json({
           success: false,
           code: "MEMBERSHIP_REQUIRED",
@@ -229,7 +248,14 @@ export async function jwtTenantRlsMiddleware(
 
     // Validação estrita do Membership da identidade no banco de dados
     const membership = await memberRepo.findByOrgAndUser(validatedTenantId, user.id);
-    if (!membership && !isSuperAdmin) {
+    if (!membership && !isSupportSession) {
+      if (isSuperAdmin) {
+        return res.status(403).json({
+          success: false,
+          code: "CONTROLLED_SUPPORT_SESSION_REQUIRED",
+          error: `Acesso negado: Administradores da plataforma devem iniciar uma sessão de suporte técnico controlada com motivo obrigatório para acessar o tenant '${validatedTenantId}'.`,
+        });
+      }
       return res.status(403).json({
         success: false,
         code: "MEMBERSHIP_NOT_FOUND",
@@ -237,12 +263,24 @@ export async function jwtTenantRlsMiddleware(
       });
     }
 
-    if (membership && membership.status !== "ACTIVE" && !isSuperAdmin) {
+    if (membership && membership.status !== "ACTIVE" && !isSupportSession) {
       return res.status(403).json({
         success: false,
         code: "MEMBERSHIP_SUSPENDED",
         error: "O seu acesso a esta organização está inativo ou suspenso.",
       });
+    }
+
+    // Se for sessão de suporte em modo SOMENTE LEITURA, bloquear operações de escrita
+    if (isSupportSession && supportScope === "READ_ONLY") {
+      const mutationMethods = ["POST", "PUT", "PATCH", "DELETE"];
+      if (mutationMethods.includes(req.method.toUpperCase())) {
+        return res.status(403).json({
+          success: false,
+          code: "SUPPORT_READ_ONLY_VIOLATION",
+          error: "Sessão de suporte técnico sob escopo SOMENTE LEITURA. Operações de modificação de dados não são permitidas.",
+        });
+      }
     }
 
     const organization = await orgRepo.findById(validatedTenantId);
@@ -254,9 +292,9 @@ export async function jwtTenantRlsMiddleware(
       });
     }
 
-    const effectiveRole: OrganizationRole = isSuperAdmin
-      ? "SUPER_ADMIN"
-      : membership?.role || "VENDEDOR";
+    const effectiveRole: OrganizationRole = isSupportSession
+      ? (supportScope === "READ_ONLY" ? "VENDEDOR" : "OWNER")
+      : (membership?.role || "VENDEDOR");
 
     // -------------------------------------------------------------------------
     // 4. ATRIBUIÇÃO AO OBJETO REQUEST
@@ -342,6 +380,10 @@ export async function jwtTenantRlsMiddleware(
         ipAddress: req.ip || (req.headers["x-forwarded-for"] as string) || "127.0.0.1",
         userAgent: (req.headers["user-agent"] as string) || "Aura Web Client",
         isSuperAdmin,
+        isSupportSession,
+        supportReason,
+        supportScope,
+        supportAdminEmail: tokenPayload?.supportAdminEmail,
       },
       () => {
         next();

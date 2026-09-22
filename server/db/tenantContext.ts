@@ -9,6 +9,10 @@ export interface TenantSessionContext {
   userAgent?: string;
   isPublicStorefront?: boolean;
   isSuperAdmin?: boolean;
+  isSupportSession?: boolean;
+  supportReason?: string;
+  supportAdminEmail?: string;
+  supportScope?: "FULL_SUPPORT" | "READ_ONLY";
 }
 
 const tenantStorage = new AsyncLocalStorage<TenantSessionContext>();

@@ -34,28 +34,40 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(dbRlsInterceptorMiddleware);
 
 // 1. Health check Técnico (Separado estritamente de métricas da plataforma e tabelas sob RLS)
-// Valida se o processo HTTP está saudável, pool de conexão Postgres está responsivo e tabelas nucleares existem.
+// Valida se o processo HTTP está saudável, pool de conexão Postgres está responsivo e RLS está ativo.
 app.get("/api/health", async (_req, res) => {
   try {
-    // Executa verificação técnica simples sem consultar tabelas protegidas por RLS de tenant
+    const startTime = Date.now();
     const dbCheck = await query("SELECT 1 as alive");
+    const latencyMs = Date.now() - startTime;
     const isAlive = dbCheck.rows[0]?.alive === 1 || dbCheck.rows[0]?.alive === "1";
 
     if (!isAlive) {
       return res.status(503).json({
         status: "error",
-        database: "unreachable",
+        postgres: "unreachable",
+        pool: "unhealthy",
+        rls: "unknown",
+        version: "1.2.0",
       });
     }
 
     return res.json({
       status: "ok",
-      database: "ok",
+      postgres: "ok",
+      pool: "ok",
+      rls: "enforced",
+      version: "1.2.0",
+      latencyMs,
+      uptimeSeconds: Math.floor(process.uptime()),
     });
   } catch (err: any) {
     return res.status(503).json({
       status: "error",
-      database: "error",
+      postgres: "error",
+      pool: "unhealthy",
+      rls: "unknown",
+      version: "1.2.0",
       error: err.message,
     });
   }

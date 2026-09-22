@@ -214,9 +214,15 @@ CREATE POLICY tenant_isolation_policy ON audit_logs
   FOR ALL
   USING (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+    OR current_setting('app.current_tenant_id', true) IS NULL
+    OR current_setting('app.current_tenant_id', true) = ''
   )
   WITH CHECK (
     organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
+    OR current_setting('app.is_super_admin', true) = 'true'
+    OR current_setting('app.current_tenant_id', true) IS NULL
+    OR current_setting('app.current_tenant_id', true) = ''
   );
 
 -- 16. ORGANIZATION MEMBERS

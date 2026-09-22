@@ -1,16 +1,18 @@
 import { query } from "./postgres";
 import { dbStore, INITIAL_PLANS } from "./store";
+import { TenantContext } from "./tenantContext";
 
 export async function seedPostgresIfNeeded(): Promise<void> {
-  try {
-    const check = await query("SELECT count(*) as count FROM order_items");
-    const count = parseInt(check.rows[0]?.count || "0", 10);
-    if (count > 0) {
-      console.log(`[PostgreSQL Seeder] Database already populated (${count} order items found).`);
-      return;
-    }
+  return TenantContext.run({ isSuperAdmin: true }, async () => {
+    try {
+      const check = await query("SELECT count(*) as count FROM order_items");
+      const count = parseInt(check.rows[0]?.count || "0", 10);
+      if (count > 0) {
+        console.log(`[PostgreSQL Seeder] Database already populated (${count} order items found).`);
+        return;
+      }
 
-    console.log("[PostgreSQL Seeder] Seeding initial baseline data into PostgreSQL...");
+      console.log("[PostgreSQL Seeder] Seeding initial baseline data into PostgreSQL...");
 
     // 1. Plans
     for (const plan of INITIAL_PLANS) {
@@ -402,4 +404,5 @@ export async function seedPostgresIfNeeded(): Promise<void> {
   } catch (error) {
     console.error("[PostgreSQL Seeder Error]", error);
   }
+  });
 }

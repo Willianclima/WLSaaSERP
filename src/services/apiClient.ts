@@ -15,6 +15,8 @@ const TENANT_KEY = "aura_current_tenant_id";
 const USER_KEY = "aura_current_user";
 const USER_PROFILE_KEY = "aura_user_profile";
 const SESSION_KEY = "aura_current_session";
+const SUPPORT_SESSION_KEY = "aura_active_support_session";
+const PRE_SUPPORT_SESSION_KEY = "aura_pre_support_session";
 const DEFAULT_TENANT_ID = "org-lumina-01";
 
 export interface SessionInfo {
@@ -884,6 +886,161 @@ export class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Erro ao alternar módulo.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Inicia sessão de suporte controlada no backend (SUPER_ADMIN).
+   * Exige motivo obrigatório (>= 10 chars), tenant de destino e escopo.
+   * Salva a sessão e injeta o token escopado do tenant de suporte.
+   */
+  static async startControlledSupportSession(params: {
+    targetOrganizationId: string;
+    reason: string;
+    scope?: "FULL_SUPPORT" | "READ_ONLY";
+    durationMinutes?: number;
+  }): Promise<any> {
+    const res = await this.post("/api/platform/support/impersonate", params);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao iniciar sessão de suporte.`);
+    }
+    const data = await res.json();
+    if (data.success && data.token && typeof window !== "undefined") {
+      // Guarda token e tenant anteriores para restauração posterior
+      const prevToken = this.getToken();
+      const prevTenant = this.getTenantId();
+      localStorage.setItem(
+        PRE_SUPPORT_SESSION_KEY,
+        JSON.stringify({ token: prevToken, tenantId: prevTenant })
+      );
+
+      // Ativa token e tenant da sessão de suporte
+      localStorage.setItem(SUPPORT_SESSION_KEY, JSON.stringify(data.session));
+      this.setToken(data.token);
+      this.setTenantId(params.targetOrganizationId);
+    }
+    return data;
+  }
+
+  /**
+   * Encerra a sessão de suporte técnico e restaura o token e tenant do Super Admin.
+   */
+  static endControlledSupportSession(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const preRaw = localStorage.getItem(PRE_SUPPORT_SESSION_KEY);
+      if (preRaw) {
+        const pre = JSON.parse(preRaw);
+        if (pre.token) this.setToken(pre.token);
+        if (pre.tenantId) this.setTenantId(pre.tenantId);
+      }
+      localStorage.removeItem(SUPPORT_SESSION_KEY);
+      localStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
+    } catch (e) {
+      console.warn("Erro ao encerrar sessão de suporte:", e);
+    }
+  }
+
+  /**
+   * Retorna os metadados da sessão de suporte ativa, se houver.
+   */
+  static getActiveSupportSession(): any | null {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(SUPPORT_SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Busca detalhes completos de uma organização para o Super Admin.
+   */
+  static async getPlatformOrganizationDetail(orgId: string): Promise<any> {
+    const res = await this.get(`/api/platform/organizations/${orgId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao carregar detalhes da organização.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Atualiza a assinatura de um tenant a partir da Central de Comando (SUPER_ADMIN).
+   */
+  static async updatePlatformOrganizationSubscription(
+    orgId: string,
+    data: { targetPlanId?: string; status?: string; extendTrialDays?: number }
+  ): Promise<any> {
+    const res = await this.put(`/api/platform/organizations/${orgId}/subscription`, data);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao atualizar assinatura.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Consulta os logs de auditoria globais da plataforma persistidos no PostgreSQL.
+   */
+  static async getPlatformAuditLogs(params?: {
+    organizationId?: string;
+    action?: string;
+    limit?: number;
+  }): Promise<any> {
+    const queryParams = new URLSearchParams();
+    if (params?.organizationId) queryParams.set("organizationId", params.organizationId);
+    if (params?.action) queryParams.set("action", params.action);
+    if (params?.limit) queryParams.set("limit", String(params.limit));
+
+    const path = `/api/platform/audit-logs${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+    const res = await this.get(path);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao buscar trilha de auditoria.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Executa a rotina de validação automatizada de isolamento PostgreSQL (Tenant A vs Tenant B).
+   */
+  static async verifyPostgresIsolation(): Promise<any> {
+    const res = await this.post("/api/platform/security/verify-isolation", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao executar teste de isolamento.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Executa o teste real de concorrência e reserva de estoque:
+   * Consumidor -> /api/orders/public -> Tenant -> RLS -> Inventory Reservation -> Order -> PostgreSQL
+   * Cenário: 2 Consumidores simultâneos disputando 1 única unidade de 1 produto.
+   */
+  static async verifyConcurrencyReservation(): Promise<any> {
+    const res = await this.post("/api/platform/security/verify-concurrency", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao executar teste de concorrência e reserva.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Executa o Teste Definitivo do Fluxo Comercial Integrado:
+   * SUPER_ADMIN -> LOJA A -> PRODUTO/ESTOQUE -> CATÁLOGO -> CONSUMIDOR -> CARRINHO -> PEDIDO ->
+   * RESERVA -> CONFIRMAÇÃO PAGAMENTO -> VENDA/LEDGER -> GARANTIA DIGITAL -> WHATSAPP -> CENTRAL DE COMANDO
+   */
+  static async verifyCommercialFlow(): Promise<any> {
+    const res = await this.post("/api/platform/security/verify-commercial-flow", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao executar teste definitivo do fluxo comercial.`);
     }
     return res.json();
   }
