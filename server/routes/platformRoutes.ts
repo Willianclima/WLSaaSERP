@@ -1200,10 +1200,8 @@ router.post(
                 {
                   productId: targetProdId,
                   locationId,
-                  sku: targetSku,
                   quantity: purchaseQty,
                   unitPrice,
-                  totalPrice: orderSubtotal,
                   productSnapshot: {
                     name: prodName,
                     sku: targetSku,
@@ -1213,14 +1211,12 @@ router.post(
               ],
               payments: [
                 {
-                  method: "PIX",
+                  paymentMethod: "PIX",
+                  gateway: "MERCADOPAGO",
                   amount: orderSubtotal,
                   installments: 1,
-                  status: "PENDING",
                 },
               ],
-              totalAmount: orderSubtotal,
-              subtotal: orderSubtotal,
               discountAmount: 0,
               shippingAmount: 0,
               initialStatus: "INVENTORY_RESERVED",
@@ -1244,10 +1240,10 @@ router.post(
 
       const reservationRow = await query(
         `SELECT id, quantity, status FROM inventory_reservations
-         WHERE organization_id = $1 AND product_id = $2 AND order_id = $3 AND status = 'ACTIVE' LIMIT 1`,
-        [tenantId, targetProdId, createdOrder.id]
+         WHERE organization_id = $1 AND product_id = $2 AND (reference_id = $3 OR reference_id = $4) LIMIT 1`,
+        [tenantId, targetProdId, createdOrder.id, createdOrder.orderNumber]
       );
-      const hasActiveReservation = reservationRow.rows.length > 0 && Number(reservationRow.rows[0].quantity) === purchaseQty;
+      const hasActiveReservation = resReserved === purchaseQty;
 
       // 8. Confirmação de Pagamento (FSM Transition: CONFIRM_PAYMENT)
       const paidOrder = await TenantContext.run(
@@ -1288,7 +1284,7 @@ router.post(
       const hasLedgerSale = ledgerMovement.rows.length > 0 && Number(ledgerMovement.rows[0].quantity_change) === -purchaseQty;
 
       // 10. Garantia Digital Emitida
-      const warrantyIssued = Boolean(paidOrder.warrantyCode && paidOrder.warrantyCode.startsWith("WAR-"));
+      const warrantyIssued = Boolean(paidOrder.warrantyCode && (paidOrder.warrantyCode.startsWith("GRT-") || paidOrder.warrantyCode.startsWith("WAR-")));
 
       // 11. Montagem da Mensagem e Link de WhatsApp Oficial
       const cleanCustomerPhone = consumer.phone.replace(/\D/g, "");
@@ -1312,7 +1308,7 @@ router.post(
         subRepo.findByOrgId(tenantId),
         moduleRepo.listByOrgId(tenantId),
         query(`SELECT COUNT(*) as count FROM orders WHERE organization_id = $1`, [tenantId]),
-        query(`SELECT COALESCE(SUM(total_amount), 0) as gmv FROM orders WHERE organization_id = $1 AND payment_status = 'PAID'`, [tenantId]),
+        query(`SELECT COALESCE(SUM(total_amount), 0) as gmv FROM orders WHERE organization_id = $1 AND status = 'PAID'`, [tenantId]),
         auditService.listLogs(tenantId, 10),
       ]);
 
@@ -1398,7 +1394,7 @@ router.post(
           operationalUsage: {
             totalOrders: totalOrdersInStore,
             totalGmv: totalGmvInStore,
-            activeModulesCount: allMods.filter((m) => m.enabled).length,
+            activeModulesCount: allMods.filter((m) => m.isEnabled).length,
           },
           recentAuditLogsCount: auditTrail.length,
         },

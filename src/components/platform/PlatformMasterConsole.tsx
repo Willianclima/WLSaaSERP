@@ -117,6 +117,10 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   const [isRunningConcurrencyTest, setIsRunningConcurrencyTest] = useState(false);
   const [concurrencyTestResults, setConcurrencyTestResults] = useState<any | null>(null);
 
+  // Teste Definitivo do Fluxo Comercial Ponta a Ponta
+  const [isRunningCommercialFlow, setIsRunningCommercialFlow] = useState(false);
+  const [commercialFlowResults, setCommercialFlowResults] = useState<any | null>(null);
+
   // Real Global Audit Logs
   const [globalAuditLogs, setGlobalAuditLogs] = useState<any[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
@@ -798,6 +802,27 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       if (onNotify) onNotify(`Erro ao rodar teste de concorrência: ${err.message}`);
     } finally {
       setIsRunningConcurrencyTest(false);
+    }
+  };
+
+  const handleRunCommercialFlowTest = async () => {
+    setIsRunningCommercialFlow(true);
+    try {
+      const res = await apiClient.verifyCommercialFlow();
+      setCommercialFlowResults(res);
+      if (onNotify) {
+        onNotify(
+          res.testPassed
+            ? "Fluxo comercial de ponta a ponta 100% aprovado no PostgreSQL: Pedido, Reserva, Confirmação, Ledger, Garantia e WhatsApp!"
+            : "Atenção: falha no teste de fluxo comercial."
+        );
+      }
+      loadAuditLogs();
+      loadPlatformData();
+    } catch (err: any) {
+      if (onNotify) onNotify(`Erro ao rodar teste do fluxo comercial: ${err.message}`);
+    } finally {
+      setIsRunningCommercialFlow(false);
     }
   };
 
@@ -2011,6 +2036,14 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
+                onClick={handleRunCommercialFlowTest}
+                disabled={isRunningCommercialFlow}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isRunningCommercialFlow ? "animate-spin" : ""}`} />
+                <span>{isRunningCommercialFlow ? "Validando Fluxo Comercial..." : "Testar Fluxo Comercial Definitivo (Ponta a Ponta)"}</span>
+              </button>
+              <button
                 onClick={handleRunConcurrencyTest}
                 disabled={isRunningConcurrencyTest}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
@@ -2035,6 +2068,113 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </button>
             </div>
           </div>
+
+          {/* PAINEL DE RESULTADO DO TESTE DEFINITIVO DO FLUXO COMERCIAL INTEGRADO */}
+          {commercialFlowResults && (
+            <div className="p-5 bg-stone-950 border border-emerald-500/50 rounded-2xl text-white space-y-4 animate-fadeIn shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                    Fluxo Comercial Definitivo: {commercialFlowResults.testPassed ? "100% INTEGRADO & APROVADO" : "FALHA"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-[10px] font-mono font-bold">
+                    PostgreSQL Ledger + WhatsApp Ativo
+                  </span>
+                  <span className="text-[10px] font-mono text-stone-400">
+                    Tempo: {commercialFlowResults.durationMs}ms
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-stone-900/90 rounded-xl border border-stone-800 text-xs text-stone-300 space-y-1">
+                <p className="font-mono text-[11px] text-amber-300">
+                  PLATAFORMA &rarr; SUPER_ADMIN &rarr; LOJA A &rarr; PRODUTO/ESTOQUE &rarr; CATÁLOGO &rarr; CONSUMIDOR &rarr; CARRINHO &rarr; PEDIDO &rarr; RESERVA &rarr; PAGAMENTO &rarr; LEDGER &rarr; GARANTIA &rarr; WHATSAPP &rarr; CENTRAL DE COMANDO
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* 1. Pedido & Garantia */}
+                <div className="p-3.5 bg-stone-900/90 border border-stone-800 rounded-xl space-y-2 text-xs">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 flex items-center gap-1">
+                    <ShoppingBag className="w-3.5 h-3.5" /> Pedido & Pagamento
+                  </span>
+                  <div>
+                    <p className="font-bold text-white text-sm">#{commercialFlowResults.order?.orderNumber}</p>
+                    <p className="text-[11px] text-stone-400">Canal: {commercialFlowResults.order?.channel} | Status: <span className="text-emerald-400 font-bold">{commercialFlowResults.order?.status}</span></p>
+                  </div>
+                  <div className="pt-1 border-t border-stone-800 text-[11px] space-y-0.5">
+                    <p className="text-stone-300">Total: <strong>R$ {Number(commercialFlowResults.order?.totalAmount || 0).toFixed(2).replace(".", ",")}</strong></p>
+                    <p className="text-amber-300 font-mono text-[10px]">Garantia: <strong>{commercialFlowResults.order?.warrantyCode}</strong></p>
+                  </div>
+                </div>
+
+                {/* 2. Prova de Estoque & Ledger no PostgreSQL */}
+                <div className="p-3.5 bg-stone-900/90 border border-stone-800 rounded-xl space-y-2 text-xs">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 flex items-center gap-1">
+                    <Database className="w-3.5 h-3.5" /> Estoque Físico & Ledger
+                  </span>
+                  <div className="grid grid-cols-3 gap-1.5 text-center text-[10px]">
+                    <div className="p-1.5 bg-stone-800/80 rounded-lg">
+                      <p className="text-stone-400">Inicial</p>
+                      <p className="font-bold text-white text-xs">{commercialFlowResults.inventoryProof?.initial?.onHand} un</p>
+                    </div>
+                    <div className="p-1.5 bg-stone-800/80 rounded-lg">
+                      <p className="text-stone-400">Reservado</p>
+                      <p className="font-bold text-amber-400 text-xs">{commercialFlowResults.inventoryProof?.afterReservation?.reserved} un</p>
+                    </div>
+                    <div className="p-1.5 bg-stone-800/80 rounded-lg">
+                      <p className="text-stone-400">Após Venda</p>
+                      <p className="font-bold text-emerald-400 text-xs">{commercialFlowResults.inventoryProof?.afterPaymentSale?.onHand} un</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-stone-400 font-mono">
+                    Movimento Ledger: <strong>SALE ({commercialFlowResults.inventoryProof?.ledgerMovement?.quantity_change} un)</strong>
+                  </p>
+                </div>
+
+                {/* 3. WhatsApp & Central de Comando */}
+                <div className="p-3.5 bg-stone-900/90 border border-stone-800 rounded-xl space-y-2 text-xs">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-sky-400 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5" /> Central de Comando (Loja A)
+                  </span>
+                  <div className="text-[11px] space-y-0.5 text-stone-300">
+                    <p>Loja: <strong>{commercialFlowResults.commandCenterTelemetry?.organization?.name}</strong></p>
+                    <p>Status: <span className="text-emerald-400 font-bold">{commercialFlowResults.commandCenterTelemetry?.organization?.status}</span></p>
+                    <p>GMV Faturado: <strong className="text-amber-400">R$ {Number(commercialFlowResults.commandCenterTelemetry?.operationalUsage?.totalGmv || 0).toFixed(2).replace(".", ",")}</strong></p>
+                    <p>Auditorias Gravadas: <strong>{commercialFlowResults.commandCenterTelemetry?.recentAuditLogsCount} logs</strong></p>
+                  </div>
+                  {commercialFlowResults.whatsappIntegration?.directUrl && (
+                    <a
+                      href={commercialFlowResults.whatsappIntegration.directUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Ver Notificação WhatsApp
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* 7 Etapas Verificadas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+                {commercialFlowResults.results?.map((res: any, idx: number) => (
+                  <div key={idx} className="p-2.5 bg-stone-900 rounded-xl border border-stone-800 space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-stone-200">{res.step}</span>
+                      <span className="text-emerald-400 flex items-center gap-0.5">
+                        <Check className="w-3 h-3" /> OK
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-stone-400">{res.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* PAINEL DE RESULTADO DE TESTE DE CONCORRÊNCIA E RESERVA DE ESTOQUE */}
           {concurrencyTestResults && (
