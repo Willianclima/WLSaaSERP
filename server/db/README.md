@@ -6,7 +6,7 @@
 >
 > Todas as entidades de negócio — Organizações, Usuários, Assinaturas, Produtos, Estoque (Físico e Reservado), Movimentações Contábeis (Ledger), Clientes (PF/PJ), Pedidos, Pagamentos e Logs de Auditoria — residem e são transacionadas no PostgreSQL com Row Level Security (RLS) e isolamento multi-inquilino estrito.
 >
-> O Firebase não é utilizado como banco concorrente para dados transacionais ou de catálogo, servindo unicamente para suporte de infraestrutura do runtime AI Studio.
+> O Firebase e Firestore foram completamente removidos da arquitetura (Sprint 1.3). Toda a persistência operacional, transacional e analítica é 100% relacional no PostgreSQL.
 
 ---
 

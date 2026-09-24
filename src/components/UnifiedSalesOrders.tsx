@@ -154,25 +154,25 @@ export const UnifiedSalesOrders: React.FC<UnifiedSalesOrdersProps> = ({
 
   // Merge runtime orders if any (PostgreSQL orders first)
   const normalizedRuntimeOrders = (orders || []).map((o: any) => {
-    const isPaid = o.status === "PAID" || o.status === "PAGO" || o.paymentStatus === "PAID";
-    const isShipped = o.status === "SHIPPED" || o.status === "ENVIADO" || o.status === "FULFILLMENT_PENDING";
-    const isDelivered = o.status === "DELIVERED" || o.status === "ENTREGUE" || o.status === "FULFILLED";
-    const isCancelled = o.status === "CANCELLED" || o.status === "CANCELADO";
+    const isPaid = o.status === "PAID" || o.status === "PAGO" || o.paymentStatus === "PAID" || o.paymentStatus === "CONFIRMADO";
+    const isPreparing = o.status === "FULFILLMENT_PENDING" || o.status === "PROCESSING" || o.fulfillmentStatus === "PROCESSING";
+    const isDelivered = o.status === "DELIVERED" || o.status === "ENTREGUE" || o.status === "FULFILLED" || o.fulfillmentStatus === "DELIVERED";
+    const isCancelled = o.status === "CANCELLED" || o.status === "CANCELADO" || o.status === "CANCELED" || o.status === "EXPIRED";
 
-    let statusLabel = "Aguardando Pagamento";
+    let statusLabel = "Pagamento pendente";
     let statusColor = "amber";
-    if (isPaid) {
-      statusLabel = "Pago";
-      statusColor = "emerald";
-    } else if (isShipped) {
-      statusLabel = "Enviado";
-      statusColor = "blue";
-    } else if (isDelivered) {
-      statusLabel = "Entregue";
-      statusColor = "emerald";
-    } else if (isCancelled) {
+    if (isCancelled) {
       statusLabel = "Cancelado";
       statusColor = "rose";
+    } else if (isDelivered) {
+      statusLabel = "Pedido concluído";
+      statusColor = "emerald";
+    } else if (isPreparing) {
+      statusLabel = "Preparando pedido";
+      statusColor = "blue";
+    } else if (isPaid) {
+      statusLabel = "Pagamento confirmado";
+      statusColor = "emerald";
     }
 
     return {

@@ -1,23 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Home,
+  Store,
   Gem,
   ShoppingBag,
   Users,
   Package,
-  Store,
+  UserCheck,
+  ShieldCheck,
   Settings,
   Plus,
-  ExternalLink,
-  ShieldCheck,
   ArrowRight,
   LogOut,
-  Sparkles,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Award,
+  Palette,
+  Eye,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 import { mockCurrentUser } from "../data/mockData";
 
-interface SidebarNavigationProps {
+export interface SidebarNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   tenant?: TenantStore;
@@ -29,8 +34,6 @@ interface SidebarNavigationProps {
   onOpenShareModal?: () => void;
   onOpenPlatformConsole?: () => void;
   pendingOrdersCount?: number;
-  isFirebaseAuthed?: boolean;
-  onGoogleLogin?: () => void;
   onLogout?: () => void;
 }
 
@@ -49,62 +52,12 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   const storeName = branding?.logoText || tenant?.name || "Lumina Semijoias";
   const storeSubtext = branding?.logoSubtext || "SEMIJOIAS NOBRES";
 
-  // Mapeamento dos 7 menus essenciais da cliente
-  const navItems = [
-    {
-      id: "ownerHome",
-      aliasIds: ["dashboard", "home"],
-      label: "Início",
-      icon: Home,
-      badge: null,
-    },
-    {
-      id: "products",
-      aliasIds: ["catalog"],
-      label: "Produtos",
-      icon: Gem,
-      badge: null,
-    },
-    {
-      id: "orders",
-      aliasIds: ["vender", "sales"],
-      label: "Pedidos",
-      icon: ShoppingBag,
-      badge: pendingOrdersCount > 0 ? `${pendingOrdersCount}` : null,
-    },
-    {
-      id: "customers",
-      aliasIds: [],
-      label: "Clientes",
-      icon: Users,
-      badge: null,
-    },
-    {
-      id: "inventory",
-      aliasIds: ["stock", "consignments", "adjustments"],
-      label: "Estoque",
-      icon: Package,
-      badge: null,
-    },
-    {
-      id: "myStore",
-      aliasIds: ["storefront"],
-      label: "Minha Loja",
-      icon: Store,
-      badge: "Online",
-    },
-    {
-      id: "storeSettings",
-      aliasIds: ["profile", "settings"],
-      label: "Configurações",
-      icon: Settings,
-      badge: null,
-    },
-  ];
+  // Estados de expansão para os sub-menus
+  const isMyStoreActive = ["myStore", "storefront", "products", "catalog"].includes(activeTab);
+  const isSalesActive = ["orders", "vender", "sales", "customers"].includes(activeTab);
 
-  const isCurrentActive = (item: typeof navItems[0]) => {
-    return activeTab === item.id || item.aliasIds.includes(activeTab);
-  };
+  const [expandedMyStore, setExpandedMyStore] = useState(true);
+  const [expandedSales, setExpandedSales] = useState(true);
 
   return (
     <aside className="w-64 bg-white border-r border-stone-200/80 flex flex-col justify-between shrink-0 min-h-screen select-none font-sans">
@@ -160,7 +113,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
           </div>
         </div>
 
-        {/* Ação Rápida Comercial: + Nova Venda */}
+        {/* Ação Rápida Comercial: + Nova Venda & + Peça */}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => {
@@ -183,74 +136,276 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
             title="Cadastrar nova semijoia"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Produto</span>
+            <span>Nova Peça</span>
           </button>
         </div>
 
-        {/* 7 Menus Essenciais da Cliente */}
+        {/* ========================================================================= */}
+        {/* NAVEGAÇÃO REORGANIZADA CONFORME SPRINT 1.4                                 */}
+        {/* ========================================================================= */}
         <nav className="space-y-1 pt-1">
-          {navItems.map((item) => {
-            const active = isCurrentActive(item);
-            const Icon = item.icon;
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => onTabChange(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                  active
-                    ? "bg-stone-900 text-white font-bold shadow-xs"
-                    : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+          {/* 1. INÍCIO */}
+          <button
+            onClick={() => onTabChange("ownerHome")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "ownerHome" || activeTab === "dashboard" || activeTab === "home"
+                ? "bg-stone-900 text-white font-bold shadow-xs"
+                : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Home
+                className={`w-4 h-4 ${
+                  activeTab === "ownerHome" || activeTab === "dashboard" || activeTab === "home"
+                    ? "text-amber-400"
+                    : "text-stone-500"
                 }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon
-                    className={`w-4 h-4 transition-colors ${
-                      active ? "text-amber-400" : "text-stone-500"
-                    }`}
-                  />
-                  <span className="text-sm">{item.label}</span>
-                </div>
+              />
+              <span className="text-sm">Início</span>
+            </div>
+          </button>
 
-                {item.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      active
-                        ? "bg-amber-400 text-stone-950"
-                        : item.badge === "Online"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-rose-100 text-rose-800"
-                    }`}
-                  >
-                    {item.badge}
+          {/* 2. MINHA LOJA (COM SUBMENUS: Catálogo, Produtos, Personalizar loja) */}
+          <div className="pt-1">
+            <button
+              onClick={() => {
+                onTabChange("myStore");
+                setExpandedMyStore(!expandedMyStore);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                activeTab === "myStore"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : isMyStoreActive
+                  ? "bg-stone-100 text-stone-900 font-bold"
+                  : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Store
+                  className={`w-4 h-4 ${
+                    activeTab === "myStore" ? "text-amber-400" : "text-stone-500"
+                  }`}
+                />
+                <span className="text-sm">Minha Loja</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                  Online
+                </span>
+                {expandedMyStore ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                )}
+              </div>
+            </button>
+
+            {/* Sub-itens Minha Loja */}
+            {expandedMyStore && (
+              <div className="pl-7 pr-2 py-1 space-y-0.5 border-l-2 border-stone-100 ml-4 mt-1">
+                <button
+                  onClick={() => onTabChange("storefront")}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    activeTab === "storefront"
+                      ? "text-amber-700 font-bold bg-amber-50"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-3.5 h-3.5 text-stone-400" />
+                    <span>Catálogo Público</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-stone-400" />
+                </button>
+
+                <button
+                  onClick={() => onTabChange("products")}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    activeTab === "products" || activeTab === "catalog"
+                      ? "text-amber-700 font-bold bg-amber-50"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                >
+                  <Gem className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Produtos</span>
+                </button>
+
+                <button
+                  onClick={() => onTabChange("storeSettings")}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    activeTab === "storeSettings"
+                      ? "text-amber-700 font-bold bg-amber-50"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                >
+                  <Palette className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Personalizar Loja</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3. VENDAS (COM SUBMENUS: Pedidos, Clientes) */}
+          <div className="pt-1">
+            <button
+              onClick={() => {
+                onTabChange("orders");
+                setExpandedSales(!expandedSales);
+              }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                activeTab === "orders" || activeTab === "vender" || activeTab === "sales"
+                  ? "bg-stone-900 text-white font-bold shadow-xs"
+                  : isSalesActive
+                  ? "bg-stone-100 text-stone-900 font-bold"
+                  : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShoppingBag
+                  className={`w-4 h-4 ${
+                    activeTab === "orders" || activeTab === "vender" || activeTab === "sales"
+                      ? "text-amber-400"
+                      : "text-stone-500"
+                  }`}
+                />
+                <span className="text-sm">Vendas</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {pendingOrdersCount > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-400 text-stone-950">
+                    {pendingOrdersCount}
                   </span>
                 )}
-              </button>
-            );
-          })}
+                {expandedSales ? (
+                  <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                )}
+              </div>
+            </button>
+
+            {/* Sub-itens Vendas */}
+            {expandedSales && (
+              <div className="pl-7 pr-2 py-1 space-y-0.5 border-l-2 border-stone-100 ml-4 mt-1">
+                <button
+                  onClick={() => onTabChange("orders")}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    activeTab === "orders" || activeTab === "vender" || activeTab === "sales"
+                      ? "text-amber-700 font-bold bg-amber-50"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                >
+                  <span>Pedidos</span>
+                  {pendingOrdersCount > 0 && (
+                    <span className="text-[10px] font-bold px-1 rounded-full bg-amber-200 text-amber-900">
+                      {pendingOrdersCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => onTabChange("customers")}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                    activeTab === "customers"
+                      ? "text-amber-700 font-bold bg-amber-50"
+                      : "text-stone-600 hover:text-stone-900 hover:bg-stone-100"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-stone-400" />
+                  <span>Clientes</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 4. ESTOQUE */}
+          <button
+            onClick={() => onTabChange("inventory")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "inventory" || activeTab === "stock" || activeTab === "adjustments"
+                ? "bg-stone-900 text-white font-bold shadow-xs"
+                : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Package
+                className={`w-4 h-4 ${
+                  activeTab === "inventory" || activeTab === "stock"
+                    ? "text-amber-400"
+                    : "text-stone-500"
+                }`}
+              />
+              <span className="text-sm">Estoque</span>
+            </div>
+          </button>
+
+          {/* 5. REVENDEDORAS */}
+          <button
+            onClick={() => onTabChange("resellers")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "resellers" || activeTab === "commercialNetwork"
+                ? "bg-stone-900 text-white font-bold shadow-xs"
+                : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <UserCheck
+                className={`w-4 h-4 ${
+                  activeTab === "resellers" || activeTab === "commercialNetwork"
+                    ? "text-amber-400"
+                    : "text-stone-500"
+                }`}
+              />
+              <span className="text-sm">Revendedoras</span>
+            </div>
+          </button>
+
+          {/* 6. GARANTIAS */}
+          <button
+            onClick={() => onTabChange("warranties")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "warranties"
+                ? "bg-stone-900 text-white font-bold shadow-xs"
+                : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Award
+                className={`w-4 h-4 ${
+                  activeTab === "warranties" ? "text-amber-400" : "text-stone-500"
+                }`}
+              />
+              <span className="text-sm">Garantias</span>
+            </div>
+          </button>
+
+          {/* 7. CONFIGURAÇÕES */}
+          <button
+            onClick={() => onTabChange("storeSettings")}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "storeSettings" || activeTab === "profile" || activeTab === "settings"
+                ? "bg-stone-900 text-white font-bold shadow-xs"
+                : "text-stone-700 hover:text-stone-950 hover:bg-stone-100/70"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Settings
+                className={`w-4 h-4 ${
+                  activeTab === "storeSettings" ? "text-amber-400" : "text-stone-500"
+                }`}
+              />
+              <span className="text-sm">Configurações</span>
+            </div>
+          </button>
         </nav>
       </div>
 
-      {/* Footer: Status da Loja & Perfil */}
+      {/* Footer: Perfil & Sair */}
       <div className="p-4 border-t border-stone-100 space-y-3">
-        {/* Link direto para a Loja Pública (Instagram / WhatsApp) */}
-        <button
-          onClick={() => onTabChange("myStore")}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-emerald-50 hover:bg-emerald-100/70 text-emerald-900 border border-emerald-200/60 font-medium transition-colors cursor-pointer group"
-          title="Ver o link compartilhável do catálogo público"
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Link da Minha Loja</span>
-          </div>
-          <ExternalLink className="w-3 h-3 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
-        </button>
-
-        {/* Perfil da Lojista */}
-        <div className="flex items-center justify-between pt-1 text-xs text-stone-600">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-full bg-stone-200 flex items-center justify-center font-bold text-stone-800 text-[11px] shrink-0">
-              {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "L"}
+        <div className="flex items-center justify-between p-2 rounded-xl bg-stone-50 border border-stone-200/50 text-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-stone-900 text-amber-300 font-bold flex items-center justify-center text-xs shrink-0">
+              {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "M"}
             </div>
             <div className="min-w-0">
               <span className="font-semibold text-stone-900 block truncate leading-tight">
@@ -276,4 +431,5 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     </aside>
   );
 };
+
 export default SidebarNavigation;

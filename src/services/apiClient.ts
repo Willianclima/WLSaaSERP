@@ -256,6 +256,22 @@ export class TenantManager {
   }
 
   /**
+   * Encerra a sessão ativa e remove credenciais do cliente.
+   */
+  static logout(): void {
+    this.cachedTenantId = null;
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TENANT_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(USER_PROFILE_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SUPPORT_SESSION_KEY);
+      localStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
+    }
+  }
+
+  /**
    * Injeta o cabeçalho 'x-tenant-id' de forma segura em um objeto de cabeçalhos,
    * baseando-se estritamente no contexto de autenticação do usuário atual.
    */
@@ -517,6 +533,14 @@ export class ApiClient {
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem("aura_auth_token", token);
     }
+  }
+
+  /**
+   * Encerra a sessão ativa do usuário e remove todas as credenciais locais.
+   */
+  static logout(): void {
+    this.cachedToken = null;
+    TenantManager.logout();
   }
 
   static getTenantId(): string {

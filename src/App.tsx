@@ -39,11 +39,6 @@ import {
   OnboardingWizardModal,
 } from "./modules";
 
-import {
-  firebaseAuthService,
-  firestoreDataService,
-  testFirestoreConnection,
-} from "./services/firestoreService";
 import { toast } from "./utils/toast";
 
 import {
@@ -193,60 +188,6 @@ export default function App() {
   // Global loading state synchronized with ApiClient request lifecycle
   const [isGlobalLoading, setIsGlobalLoading] = useState<boolean>(false);
   const [activeRequestsCount, setActiveRequestsCount] = useState<number>(0);
-
-  // Real Firebase Auth and Firestore State
-  const [isFirebaseAuthed, setIsFirebaseAuthed] = useState<boolean>(false);
-  const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
-
-  useEffect(() => {
-    // Validate Firestore connection initially using getDocFromServer
-    testFirestoreConnection().then((connected) => {
-      setIsFirestoreConnected(connected);
-      if (connected) {
-        console.log("[Firebase] Firestore conectado com sucesso ao banco:", selectedTenant.id);
-      }
-    });
-
-    // Listen to Firebase Auth changes
-    const unsubAuth = firebaseAuthService.onAuthChange((user) => {
-      if (user) {
-        setIsFirebaseAuthed(true);
-        setCurrentUser((prev) => ({
-          ...prev,
-          name: user.displayName || prev.name,
-          email: user.email || prev.email,
-          photoUrl: user.photoURL || prev.photoUrl,
-          avatar: user.photoURL || prev.avatar,
-        }));
-      } else {
-        setIsFirebaseAuthed(false);
-      }
-    });
-
-    return () => {
-      unsubAuth();
-    };
-  }, []);
-
-  // Handle Firebase Google Authentication
-  const handleFirebaseGoogleLogin = async () => {
-    try {
-      const user = await firebaseAuthService.signInWithGoogle();
-      showToast(`Bem-vindo, ${user.displayName || user.email}! Conectado via Google/Firebase.`);
-    } catch (err: any) {
-      console.error("[Firebase Auth Error]", err);
-      showToast(`Erro na autenticação Firebase: ${err.message || "Tentativa cancelada"}`);
-    }
-  };
-
-  const handleFirebaseLogout = async () => {
-    try {
-      await firebaseAuthService.signOut();
-      showToast("Desconectado do Firebase.");
-    } catch (err: any) {
-      console.error("[Firebase SignOut Error]", err);
-    }
-  };
 
   // PostgreSQL is the authoritative Single Source of Truth for core ERP data.
   // Hydrates products, inventory ledger, customers, and orders on tenant change.
@@ -514,8 +455,6 @@ export default function App() {
       }
 
       await refreshBackendData();
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      firestoreDataService.saveProduct(tenantId, newProd).catch((err) => console.warn("[Firestore Product Save]", err));
       showToast(`SKU ${newProd.sku} persistido com sucesso no PostgreSQL & Ledger!`);
     } catch (e: any) {
       console.error("API error adding product:", e);
@@ -541,8 +480,6 @@ export default function App() {
       }
 
       await refreshBackendData();
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      firestoreDataService.saveProduct(tenantId, updatedProd).catch((err) => console.warn("[Firestore Product Update]", err));
       showToast(`Produto "${updatedProd.name}" atualizado com sucesso no PostgreSQL!`);
       return { success: true, message: "Gravado com sucesso no PostgreSQL" };
     } catch (e: any) {
@@ -887,8 +824,6 @@ export default function App() {
       }
 
       await refreshBackendData();
-      const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-      firestoreDataService.saveCustomer(tenantId, data.data).catch((err) => console.warn("[Firestore Customer Save]", err));
       showToast(`Cliente ${dto.fullName} cadastrado com sucesso no PostgreSQL!`);
     } catch (e: any) {
       console.error("API error adding customer:", e);
@@ -949,10 +884,8 @@ export default function App() {
 
   // Add Reseller
   const handleAddReseller = (newReseller: Reseller) => {
-    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-    firestoreDataService.saveReseller(tenantId, newReseller).catch((err) => console.warn("[Firestore Reseller Save]", err));
     setResellers((prev) => [newReseller, ...prev]);
-    showToast(`Revendedora ${newReseller.name} cadastrada com sucesso no Firestore & lista local!`);
+    showToast(`Revendedora ${newReseller.name} cadastrada com sucesso!`);
   };
 
   // Execute MCP Approved Action
@@ -1114,9 +1047,8 @@ export default function App() {
         totalAmount: backendOrder?.totalAmount ?? newOrder.totalAmount,
       };
 
-      // 2. Only after confirmed success, perform local state updates and Firestore replication
+      // 2. Only after confirmed success, perform local state updates
       setOrders((prev) => [confirmedOrder, ...prev]);
-      firestoreDataService.saveOrder(tenantId, confirmedOrder).catch((err) => console.warn("[Firestore Order Save]", err));
 
       const custName = confirmedOrder.customerSnapshot?.name || confirmedOrder.customer?.name || "Cliente Storefront";
       const custDoc = confirmedOrder.customerSnapshot?.document || confirmedOrder.customer?.document || "***.***.***-**";
@@ -1506,9 +1438,10 @@ export default function App() {
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
                 pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
-                isFirebaseAuthed={isFirebaseAuthed}
-                onGoogleLogin={handleFirebaseGoogleLogin}
-                onLogout={handleFirebaseLogout}
+                onLogout={() => {
+                  apiClient.logout();
+                  showToast("Sessão encerrada com sucesso.");
+                }}
               />
             </div>
 
@@ -1526,9 +1459,6 @@ export default function App() {
               onOpenShareModal={() => setShowShareModal(true)}
               onOpenNewSale={() => setShowQuickSaleModal(true)}
               onOpenHelp={() => setShowAssistantHelpModal(true)}
-              isFirebaseAuthed={isFirebaseAuthed}
-              onGoogleLogin={handleFirebaseGoogleLogin}
-              onLogout={handleFirebaseLogout}
             />
           </div>
 
@@ -1557,6 +1487,7 @@ export default function App() {
                 tenant={selectedTenant}
                 branding={brandingConfig}
                 products={products}
+                orders={orders}
                 onOpenStorefront={() => setActiveTab("storefront")}
                 onNavigateTab={setActiveTab}
                 onOpenShareModal={() => setShowShareModal(true)}
