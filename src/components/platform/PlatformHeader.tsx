@@ -68,16 +68,16 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
           <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center font-serif font-black text-stone-950 text-xs shadow-sm">
-                W
+                A
               </span>
               <div>
-                <span className="font-bold text-white text-xs tracking-tight">WLSaaSERP</span>
+                <span className="font-bold text-white text-xs tracking-tight">AURA SaaS</span>
                 <span className="ml-2 px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[9px] font-bold uppercase tracking-wider">
                   {currentMode === "PLATFORM_OWNER"
-                    ? "Nível 1 · Plataforma"
+                    ? "Camada 1 · Plataforma"
                     : currentMode === "TENANT_STORE"
-                    ? "Nível 2 · Loja"
-                    : "Nível 3 · Consumidor"}
+                    ? "Camada 2 · ERP do Cliente"
+                    : "Camada 3 · Loja Pública"}
                 </span>
               </div>
             </div>
@@ -86,16 +86,16 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
             <button
               onClick={() => setShowArchitectureModal(true)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-[11px] font-semibold border border-stone-800 transition-colors cursor-pointer"
-              title="Entenda a distinção entre os 3 Níveis (Willian, Loja e Consumidor)"
+              title="Entenda a separação entre as 3 Camadas: AURA (Willian), ERP (Lojista) e Loja Pública (Consumidor)"
             >
               <Info className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">3 Níveis da Arquitetura</span>
+              <span className="hidden sm:inline">3 Camadas do Sistema</span>
             </button>
           </div>
 
           {/* Center: The Three Levels Switcher */}
           <div className="flex items-center bg-stone-900 border border-stone-800 p-1 rounded-2xl w-full sm:w-auto justify-center overflow-x-auto scrollbar-none">
-            {/* Nível 1: Plataforma (Willian / SUPER_ADMIN) */}
+            {/* Camada 1: Plataforma (Willian / SUPER_ADMIN) */}
             <button
               onClick={() => onSwitchMode("PLATFORM_OWNER")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -103,13 +103,13 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
                   ? "bg-amber-400 text-stone-950 shadow-sm"
                   : "text-stone-300 hover:text-white"
               }`}
-              title="Nível 1 — Willian: Dono da plataforma, SUPER_ADMIN (organizações, planos, SaaS, auditoria)"
+              title="Camada 1 — AURA PLATFORM (Willian / SUPER_ADMIN): Organizações, Planos, Assinaturas, Trials, Módulos, Suporte, Auditoria"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Nível 1 · Plataforma</span>
+              <span>Camada 1 · AURA</span>
             </button>
 
-            {/* Nível 2: Cliente WLSaaSERP (Loja de Semijoias) */}
+            {/* Camada 2: ERP do Cliente (Lojista / Piloto 01) */}
             <button
               onClick={() => onSwitchMode("TENANT_STORE")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -117,13 +117,13 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
                   ? "bg-amber-400 text-stone-950 shadow-sm"
                   : "text-stone-300 hover:text-white"
               }`}
-              title="Nível 2 — Cliente WLSaaSERP: Loja de Semijoias (produtos, estoque, vendedores, revendedoras, pedidos)"
+              title="Camada 2 — ERP DO CLIENTE (Lojista): Início, Produtos, Pedidos, Clientes, Estoque, Minha Loja, Configurações"
             >
               <Building2 className="w-3.5 h-3.5" />
-              <span>Nível 2 · Loja</span>
+              <span>Camada 2 · ERP da Loja</span>
             </button>
 
-            {/* Nível 3: Consumidor da Loja (Comprador Final) */}
+            {/* Camada 3: Loja Pública (Consumidor Final) */}
             <button
               onClick={() => onSwitchMode("STORE_CONSUMER")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -131,10 +131,10 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
                   ? "bg-amber-400 text-stone-950 shadow-sm"
                   : "text-stone-300 hover:text-white"
               }`}
-              title="Nível 3 — Consumidor da loja: Quem compra a semijoia (Catálogo → Produto → Carrinho → WhatsApp/pagamento)"
+              title="Camada 3 — LOJA PÚBLICA (Consumidor): Catálogo → Produto → Carrinho → WhatsApp → Pedido"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Nível 3 · Consumidor</span>
+              <span>Camada 3 · Loja Pública</span>
             </button>
           </div>
 

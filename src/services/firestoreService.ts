@@ -1,3 +1,16 @@
+/**
+ * ============================================================================
+ * ⚠️ AURA SAAS ARCHITECTURE: DEPRECATION NOTICE - FIRESTORE DATA SERVICE
+ * ============================================================================
+ * Conforme estabelecido na consolidação da arquitetura Sprint 1.2.1:
+ * - O PostgreSQL (Cloud SQL) é a ÚNICA fonte oficial da verdade (Single Source of Truth)
+ *   para todas as entidades essenciais de ERP: organizações, produtos, pedidos,
+ *   inventário/ledger e clientes, operando com Row Level Security (RLS) estrito.
+ * - Este serviço de Firestore permanece APENAS como adaptador legados ou para
+ *   replicação opcional, NÃO devendo concorrer com as rotas PostgreSQL da plataforma.
+ * ============================================================================
+ */
+
 import {
   collection,
   doc,

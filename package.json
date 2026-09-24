@@ -9,6 +9,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "db:migrate": "tsx server/db/migrator.ts",
+    "db:seed": "tsx server/db/seeder.ts",
     "test:stress": "tsx server/modules/inventory/inventoryStressTest.ts"
   },
   "dependencies": {

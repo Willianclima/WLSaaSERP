@@ -1,22 +1,11 @@
 /**
- * SQL DDL and Migration to Enable Row Level Security (RLS) on PostgreSQL
- * Multi-tenant isolation for Semi-joias ERP & SaaS platform
+ * DEPRECATED - AVISO DE CONSOLIDAÇÃO (Sprint 1.2.1)
  * 
- * Strict Security Architecture (P0):
- * IDENTIDADE -> MEMBERSHIP -> TENANT CONTEXT -> RLS -> POSTGRESQL
+ * As políticas de Row Level Security (RLS) foram consolidadas na migração oficial:
+ *   /server/db/migrations/007_strict_rls_policies.sql
+ * e integradas ao /server/db/schema.sql.
  * 
- * Strategy:
- * 1. ENABLE ROW LEVEL SECURITY on all tenant-specific tables.
- * 2. FORCE ROW LEVEL SECURITY so table owners and superusers cannot bypass RLS.
- * 3. CREATE POLICY for tenant isolation:
- *    organization_id = NULLIF(current_setting('app.current_tenant_id', true), '')
- * 
- * CRITICAL SECURITY PRINCIPLE:
- * Super Admin DOES NOT bypass RLS on tenant tables.
- * Super Admin has platform administrative control (organizations, plans, modules, infrastructure),
- * but tenant-scoped tables (products, orders, customers, inventory, etc.) are ALWAYS strictly isolated by RLS.
- * For technical support, Super Admin enters an explicitly scoped and AUDITED session
- * where app.current_tenant_id is set to that specific tenant, preventing any cross-tenant data leak.
+ * Utilize 'npm run db:migrate' para aplicar e manter as políticas no PostgreSQL.
  */
 
 export const RLS_MIGRATION_DDL = `

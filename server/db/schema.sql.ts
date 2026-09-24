@@ -1,7 +1,11 @@
 /**
- * Relational Database Schema (PostgreSQL DDL)
- * Multi-Tenant Architecture for SaaS & Semi-joias ERP
- * Modules: Customers (PF/PJ), Orders, Order Items (Snapshots), Payments, FSM Audit
+ * DEPRECATED - AVISO DE CONSOLIDAÇÃO (Sprint 1.2.1)
+ * 
+ * Este arquivo foi substituído pelas migrações oficiais em:
+ *   /server/db/migrations/001_... a 007_...
+ * e pelo snapshot canônico em /server/db/schema.sql.
+ * 
+ * Utilize 'npm run db:migrate' para evoluir o banco de dados.
  */
 
 export const SCHEMA_CUSTOMERS_ORDERS_DDL = `

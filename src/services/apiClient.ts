@@ -1044,6 +1044,20 @@ export class ApiClient {
     }
     return res.json();
   }
+
+  /**
+   * Executa o Teste Definitivo do Piloto 01 (12 Etapas):
+   * CRIAR CLIENTE -> TRIAL 30 DIAS -> ONBOARDING -> 10 PRODUTOS -> PUBLICAR CATÁLOGO ->
+   * CLIENTE FINAL -> PEDIDO -> RESERVA -> PAGAMENTO -> VENDA -> ESTOQUE -> GARANTIA
+   */
+  static async verifyPilotFlow(): Promise<any> {
+    const res = await this.post("/api/platform/security/verify-pilot-flow", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao executar teste definitivo do piloto.`);
+    }
+    return res.json();
+  }
 }
 
 // Inicializa a cadeia padrão de interceptors de requisição (tenantRequestInterceptor)

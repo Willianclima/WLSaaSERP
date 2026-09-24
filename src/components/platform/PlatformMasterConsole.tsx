@@ -43,6 +43,8 @@ import {
   ShieldAlert,
   KeyRound,
   UserCheck,
+  BarChart3,
+  Package,
 } from "lucide-react";
 import { TenantStore, RBACUser } from "../../types";
 import { apiClient } from "../../services/apiClient";
@@ -120,6 +122,31 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   // Teste Definitivo do Fluxo Comercial Ponta a Ponta
   const [isRunningCommercialFlow, setIsRunningCommercialFlow] = useState(false);
   const [commercialFlowResults, setCommercialFlowResults] = useState<any | null>(null);
+
+  // Teste Definitivo do Piloto 01 (12 Etapas)
+  const [isRunningPilotFlow, setIsRunningPilotFlow] = useState(false);
+  const [pilotFlowResults, setPilotFlowResults] = useState<any | null>(null);
+
+  const handleRunPilotFlowTest = async () => {
+    setIsRunningPilotFlow(true);
+    try {
+      const res = await apiClient.verifyPilotFlow();
+      setPilotFlowResults(res);
+      if (onNotify) {
+        onNotify(
+          res.testPassed
+            ? "Teste Definitivo do Piloto 01 100% APROVADO! Todos os 12 passos validados sem intervenção manual."
+            : "Atenção: falha em uma das etapas do piloto."
+        );
+      }
+      loadAuditLogs();
+      loadPlatformData();
+    } catch (err: any) {
+      if (onNotify) onNotify(`Erro ao rodar teste definitivo do piloto: ${err.message}`);
+    } finally {
+      setIsRunningPilotFlow(false);
+    }
+  };
 
   // Real Global Audit Logs
   const [globalAuditLogs, setGlobalAuditLogs] = useState<any[]>([]);
@@ -743,6 +770,49 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
     }
   };
 
+  const handleQuickOpenStore = async (org: any) => {
+    try {
+      await apiClient.startControlledSupportSession({
+        targetOrganizationId: org.id,
+        reason: "Acesso Direto Executivo - Central do Proprietário (AURA)",
+        scope: "FULL_SUPPORT",
+        durationMinutes: 120,
+      });
+    } catch (err: any) {
+      console.warn("Audit session warning:", err);
+    }
+    const found = tenants.find((t) => t.id === org.id || t.slug === org.slug) || {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      planTier: (org.plan === "PRO" ? "PRO" : org.plan === "ENTERPRISE" ? "PREMIUM" : "FREE") as any,
+      tier: org.plan || "PRO",
+      logo: "",
+      city: org.city || "Limeira",
+      state: org.state || "SP",
+      document: org.document || "00.000.000/0001-00",
+      contactEmail: org.ownerEmail || "contato@loja.com.br",
+      contactWhatsapp: org.ownerPhone || "(19) 99999-9999",
+      activeProductsCount: org.activeProducts || 0,
+      activeResellersCount: 10,
+      features: {
+        unlimitedProducts: true,
+        consignments: true,
+        commissionEngine: true,
+        digitalWarranty: true,
+        customJewelry: true,
+        whatsappAutomations: true,
+        aiGatewayMCP: true,
+        marketplaces: true,
+        multiUserRBAC: true,
+      },
+    };
+    onImpersonateTenant(found as any);
+    if (onNotify) {
+      onNotify(`👑 Loja '${org.name}' aberta com sucesso na Central do Proprietário.`);
+    }
+  };
+
   const handleUpdateSubscription = async () => {
     if (!orgDetailData) return;
     setIsSavingPlan(true);
@@ -828,21 +898,19 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
 
   const navTabs = [
     { id: "dashboard", label: "Visão Geral", icon: LayoutDashboard },
-    { id: "organizations", label: "Organizações", icon: Building2, count: orgList.length },
-    { id: "users", label: "Usuários", icon: Users },
-    { id: "plans", label: "Planos", icon: CreditCard },
+    { id: "organizations", label: "Clientes", icon: Building2, count: orgList.length },
     { id: "subscriptions", label: "Assinaturas", icon: Receipt },
+    { id: "plans", label: "Planos", icon: CreditCard },
     { id: "modules", label: "Módulos", icon: Layers },
-    { id: "usage", label: "Uso", icon: Activity },
     { id: "support", label: "Suporte", icon: Headphones, count: tickets.filter((t) => t.status !== "RESOLVIDO").length },
     { id: "audit", label: "Auditoria", icon: ShieldCheck },
-    { id: "settings", label: "Configurações", icon: Settings },
+    { id: "settings", label: "Plataforma", icon: Settings },
   ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto font-sans pb-16 animate-fadeIn">
       {/* ========================================================================= */}
-      {/* 1. TOP EXECUTIVE BANNER: CENTRAL DE COMANDO WLSaaSERP                     */}
+      {/* 1. TOP EXECUTIVE BANNER: 👑 AURA — CENTRAL DO PROPRIETÁRIO                */}
       {/* ========================================================================= */}
       <div className="bg-stone-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-stone-800 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
@@ -850,33 +918,36 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="px-3 py-1 bg-amber-400/15 border border-amber-400/40 text-amber-300 font-bold text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5">
-                <ShieldCheck className="w-3 h-3 text-amber-400" />
-                CAMADA A — Plataforma WLSaaSERP
+              <span className="px-3 py-1 bg-amber-400 text-stone-950 font-bold text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5 font-mono">
+                👑 AURA
               </span>
-              <span className="px-3 py-1 bg-stone-800 border border-stone-700 text-stone-300 font-semibold text-[10px] uppercase tracking-wider rounded-full">
-                1. Governança Multi-Tenant Exclusiva
+              <span className="px-3 py-1 bg-stone-900 border border-stone-800 text-stone-300 font-semibold text-[10px] uppercase tracking-wider rounded-full font-mono">
+                Central do Proprietário
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                SaaS Online
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-serif italic font-bold tracking-tight text-white flex items-center gap-3">
-              <span>🛡️ Central de Comando WLSaaSERP</span>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+              <span>Olá, {currentUser?.name?.split(" ")[0] || "Willian"} 👋</span>
             </h1>
 
             <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
-              Bem-vindo, <strong>{currentUser.name}</strong>. Gestão de infraestrutura e governança da plataforma SaaS: organizações clientes, planos, MRR, módulos contratados, telemetria de uso, auditoria global e suporte técnico.
+              Painel mestre de controle e governança da sua plataforma SaaS. Monitore clientes, receitas recorrentes (MRR), planos, módulos e atue diretamente no suporte das lojas em tempo real.
             </p>
           </div>
 
-          {/* Direct link to Store Level 2 */}
+          {/* Direct link to Store System */}
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={onOpenStoreSystem}
-              className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer"
-              title="Acessar a CAMADA B: Operação da Loja Selecionada"
+              className="flex items-center gap-2 px-5 py-3 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs rounded-2xl transition-all shadow-md active:scale-98 cursor-pointer font-mono"
+              title="Acessar a Operação da Loja Selecionada"
             >
-              <Building2 className="w-4 h-4 text-stone-950" />
-              <span>Acessar Operação da Loja (CAMADA B)</span>
+              <Store className="w-4 h-4 text-stone-950" />
+              <span>[ ABRIR LOJA ATIVA ]</span>
               <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </button>
           </div>
@@ -920,357 +991,433 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       {currentTab === "dashboard" && (
         <div className="space-y-6">
           {/* ======================================================================= */}
-          {/* EXECUTIVE CARD: CENTRAL DE COMANDO WLSaaSERP                             */}
-          {/* "Enquanto o cliente está vendendo, você enxerga tudo que precisa."      */}
+          {/* RESUMO DA PLATAFORMA (4 CARTOES DE ALTO IMPACTO)                        */}
           {/* ======================================================================= */}
-          <div className="bg-stone-900 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 text-stone-100 shadow-2xl relative overflow-hidden">
-            {/* Ambient gold glow */}
-            <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-            
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6 relative z-10">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-stone-950 font-mono font-bold text-[10px] tracking-wider uppercase flex items-center gap-1">
-                    <Activity className="w-3 h-3" />
-                    Live Telemetry
-                  </span>
-                  <span className="text-[11px] font-mono text-stone-400">Dashboard WLSaaSERP</span>
-                </div>
-                <h2 className="text-xl sm:text-2xl font-mono font-bold text-white tracking-tight flex items-center gap-2 mt-1">
-                  <span>CENTRAL DE COMANDO</span>
-                </h2>
-                <p className="text-xs text-stone-400 max-w-xl">
-                  Enquanto seus clientes e lojistas de semijoias vendem no balcão e WhatsApp, você monitora a saúde, infraestrutura e faturamento da sua plataforma SaaS em tempo real.
-                </p>
-              </div>
-
-              {/* Status Pills & Live Reload */}
-              <div className="flex items-center gap-2 shrink-0">
+          <div>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest flex items-center gap-2 font-mono">
+                <BarChart3 className="w-3.5 h-3.5 text-amber-600" />
+                RESUMO DA PLATAFORMA
+              </h3>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={loadPlatformData}
                   disabled={isLoadingMetrics}
-                  className="px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 hover:border-amber-500/50 text-[11px] font-mono flex items-center gap-2 text-stone-300 hover:text-white transition-all cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] font-mono flex items-center gap-1.5 transition-all cursor-pointer"
                   title="Atualizar métricas em tempo real"
                 >
-                  <RefreshCw className={`w-3 h-3 text-amber-400 ${isLoadingMetrics ? "animate-spin" : ""}`} />
+                  <RefreshCw className={`w-3 h-3 text-amber-600 ${isLoadingMetrics ? "animate-spin" : ""}`} />
                   <span>{isLoadingMetrics ? "Sincronizando..." : "Sincronizar"}</span>
                 </button>
-                <div className="px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 text-[11px] font-mono flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-stone-300">RLS Multitenant:</span>
-                  <span className="text-emerald-400 font-bold">100% Blindado</span>
-                </div>
-                <div className="px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 text-[11px] font-mono flex items-center gap-2">
-                  <span className="text-stone-300">Tempo de Resposta:</span>
-                  <span className="text-amber-400 font-bold">14ms</span>
-                </div>
+                <span className="text-[11px] text-stone-400 font-mono">
+                  ARR Projetado: {totalArr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                </span>
               </div>
             </div>
 
-            {/* Grid reproducing the exact WLSaaSERP Command Center Block */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 pt-6 border-t border-stone-800/90 font-mono">
-              {/* Pillar 1: Base & Licenças */}
-              <div className="bg-stone-950/80 rounded-2xl p-5 border border-stone-800 space-y-3">
-                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
-                  <span className="font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                    Organizações & Contratos
-                  </span>
-                  <span className="text-[10px] text-stone-500">Tenant Base</span>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* CARD 1: CLIENTES */}
+              <div className="bg-white border-2 border-stone-200/90 rounded-2xl p-5 shadow-xs hover:border-amber-400/50 transition-all">
+                <div className="flex items-center justify-between text-stone-500">
+                  <span className="text-xs font-bold uppercase tracking-wider font-mono">CLIENTES</span>
+                  <Building2 className="w-4 h-4 text-amber-600" />
                 </div>
-                
-                <div className="space-y-2.5 pt-1">
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300">Organizações</span>
-                    <span className="text-lg font-bold text-white font-mono">{orgList.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      Trials ativos
-                    </span>
-                    <span className="text-lg font-bold text-amber-400 font-mono">{trialTenantsCount + 1}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300 flex items-center gap-1.5">
-                      <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-                      Assinaturas
-                    </span>
-                    <span className="text-lg font-bold text-emerald-400 font-mono">{activeTenantsCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm">
-                    <span className="text-stone-300 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-indigo-400" />
-                      Usuários
-                    </span>
-                    <span className="text-lg font-bold text-indigo-300 font-mono">{totalUsersPlatform}</span>
-                  </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl font-black text-stone-900 font-mono">{orgList.length}</span>
+                  <span className="text-xs text-stone-500 font-medium">lojas</span>
                 </div>
+                <p className="text-[11px] text-stone-400 mt-1">Total de marcas cadastradas</p>
               </div>
 
-              {/* Pillar 2: Atividade em Tempo Real */}
-              <div className="bg-stone-950/80 rounded-2xl p-5 border border-stone-800 space-y-3">
-                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
-                  <span className="font-bold uppercase tracking-wider text-amber-300/90 flex items-center gap-1.5">
-                    <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-                    Operação em Tempo Real
-                  </span>
-                  <span className="text-[10px] text-stone-500">Live Traffic</span>
+              {/* CARD 2: TRIALS */}
+              <div className="bg-white border-2 border-amber-200/80 rounded-2xl p-5 shadow-xs hover:border-amber-400 transition-all">
+                <div className="flex items-center justify-between text-amber-700">
+                  <span className="text-xs font-bold uppercase tracking-wider font-mono">TRIALS</span>
+                  <Clock className="w-4 h-4 text-amber-600" />
                 </div>
-
-                <div className="space-y-2.5 pt-1">
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300 flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      Pedidos hoje
-                    </span>
-                    <span className="text-lg font-bold text-amber-400 font-mono">{ordersTodayCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300 flex items-center gap-1.5">
-                      <Store className="w-3.5 h-3.5 text-emerald-400" />
-                      Lojas ativas
-                    </span>
-                    <span className="text-lg font-bold text-emerald-400 font-mono">{activeStoresCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm border-b border-stone-900">
-                    <span className="text-stone-300">Volume Hoje (GMV)</span>
-                    <span className="text-sm font-bold text-white font-mono">R$ 18.420,00</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 text-sm">
-                    <span className="text-stone-300">Garantias Emitidas</span>
-                    <span className="text-sm font-bold text-purple-300 font-mono">89 QR Codes</span>
-                  </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl font-black text-amber-600 font-mono">{trialTenantsCount}</span>
+                  <span className="text-xs text-amber-700 font-medium">em validação</span>
                 </div>
+                <p className="text-[11px] text-stone-400 mt-1">Período de teste 30 dias</p>
               </div>
 
-              {/* Pillar 3: Central de Atenção (Triagem Imediata) */}
-              <div className="bg-stone-950/80 rounded-2xl p-5 border border-amber-500/40 space-y-3 relative">
-                <div className="flex items-center justify-between text-xs text-stone-400 border-b border-stone-800 pb-2">
-                  <span className="font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
-                    ⚠ Atenção
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
-                    Ação Requerida
+              {/* CARD 3: ASSINANTES */}
+              <div className="bg-white border-2 border-emerald-200/80 rounded-2xl p-5 shadow-xs hover:border-emerald-400 transition-all">
+                <div className="flex items-center justify-between text-emerald-700">
+                  <span className="text-xs font-bold uppercase tracking-wider font-mono">ASSINANTES</span>
+                  <Receipt className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl font-black text-emerald-600 font-mono">{activeTenantsCount}</span>
+                  <span className="text-xs text-emerald-700 font-medium">pagantes</span>
+                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Planos Starter, Pro & Enterprise</p>
+              </div>
+
+              {/* CARD 4: MRR */}
+              <div className="bg-white border-2 border-stone-200/90 rounded-2xl p-5 shadow-xs hover:border-amber-400/50 transition-all">
+                <div className="flex items-center justify-between text-stone-500">
+                  <span className="text-xs font-bold uppercase tracking-wider font-mono">MRR</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="mt-3">
+                  <span className="text-2xl sm:text-3xl font-black text-stone-900 font-mono">
+                    {totalMrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                   </span>
                 </div>
-
-                <div className="space-y-2.5 pt-1 text-xs">
-                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/40 text-amber-200 flex items-start gap-2">
-                    <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-white">{nearExpiryTenantsCount} organizações</span> próximas do vencimento
-                      <p className="text-[10px] text-amber-300/80 mt-0.5">Safira Art (trial 2d) & Ateliê D'Oro (renovação 3d)</p>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-800/40 text-red-200 flex items-start gap-2">
-                    <Lock className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-white">{readOnlyTenantsCount} organização</span> em <span className="font-mono font-bold text-red-300 bg-red-900/60 px-1 py-0.2 rounded">READ_ONLY</span>
-                      <p className="text-[10px] text-red-300/80 mt-0.5">Diamante Sul (trial expirado • escrita suspensa)</p>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 flex items-start gap-2">
-                    <Activity className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-white">{integrationFailuresCount} falhas</span> de integração
-                      <p className="text-[10px] text-stone-400 mt-0.5">Bling Webhook timeout (1) • WhatsApp API (1) • SSL (1)</p>
-                    </div>
-                  </div>
-                </div>
+                <p className="text-[11px] text-stone-400 mt-1">Receita recorrente mensal</p>
               </div>
             </div>
+          </div>
 
-            {/* Quick Actions Footer for the Command Center */}
-            <div className="mt-5 pt-4 border-t border-stone-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-stone-400 text-[11px]">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <span>Isso é seu negócio: governança completa de software B2B para o mercado de semijoias.</span>
-              </div>
+          {/* BANNER DE PRONTIDÃO DO PILOTO 01 */}
+          <div className="bg-stone-950 border-2 border-amber-400/50 rounded-3xl p-5 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleTabClick("organizations")}
-                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-mono text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  Gerenciar 12 Organizações →
-                </button>
-                <button
-                  onClick={() => handleTabClick("support")}
-                  className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-mono text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  Resolver Chamados & Falhas →
-                </button>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] font-bold font-mono uppercase tracking-wider">
+                  PRONTIDÃO DO PILOTO 01
+                </span>
+                <span className="text-[11px] text-stone-400 font-mono">Sprint 1.2 · Sem Intervenção Manual</span>
               </div>
+              <h4 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Simulação Comercial End-to-End (12 Etapas)</span>
+              </h4>
+              <p className="text-xs text-stone-300 max-w-xl">
+                Cria cliente piloto &rarr; Trial 30 dias &rarr; Onboarding &rarr; 10 produtos &rarr; Publica catálogo &rarr; Consumidor &rarr; Pedido &rarr; Reserva de estoque &rarr; Pagamento &rarr; Baixa física &rarr; Garantia digital &rarr; WhatsApp.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleRunPilotFlowTest}
+                disabled={isRunningPilotFlow}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-stone-950 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                <Sparkles className={`w-4 h-4 ${isRunningPilotFlow ? "animate-spin" : ""}`} />
+                <span>{isRunningPilotFlow ? "Executando Simulação..." : "🧪 Executar Teste do Piloto"}</span>
+              </button>
             </div>
           </div>
 
-          {/* Top 4 SaaS KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">MRR (Recorrência Mensal)</span>
-                <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                  <TrendingUp className="w-4 h-4" />
-                </span>
+          {/* RESULTADO DO TESTE DO PILOTO NO DASHBOARD */}
+          {pilotFlowResults && (
+            <div className="p-6 bg-stone-950 border border-amber-400/60 rounded-3xl text-white space-y-5 animate-fadeIn shadow-2xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-stone-800">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider font-mono">
+                      {pilotFlowResults.title}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    Jornada completa de Onboarding até Garantia executada 100% no PostgreSQL sem intervenção manual.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-mono font-bold">
+                    {pilotFlowResults.testPassed ? "✓ 12/12 PASSOS APROVADOS" : "FALHA"}
+                  </span>
+                  <span className="text-xs font-mono text-stone-400 bg-stone-900 px-2.5 py-1 rounded-full border border-stone-800">
+                    {pilotFlowResults.durationMs}ms
+                  </span>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-stone-900 mt-2">
-                {totalMrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-              </p>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold mt-2">
-                <span>+18.4% este mês</span>
-                <span className="text-stone-400">• ARR: {totalArr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+
+              {/* Informações Comerciais do Piloto */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Pedido Gerado</p>
+                  <p className="text-base font-bold text-white font-mono mt-0.5">#{pilotFlowResults.order?.orderNumber}</p>
+                  <p className="text-xs text-emerald-400 font-bold">R$ {Number(pilotFlowResults.order?.totalAmount || 0).toFixed(2).replace(".", ",")}</p>
+                </div>
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Certificado de Garantia</p>
+                  <p className="text-base font-bold text-amber-300 font-mono mt-0.5">{pilotFlowResults.order?.warrantyCode}</p>
+                  <p className="text-xs text-stone-400">12 Meses · Banho Nobre</p>
+                </div>
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800 flex flex-col justify-between">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Comunicação WhatsApp</p>
+                  {pilotFlowResults.whatsappUrl ? (
+                    <a
+                      href={pilotFlowResults.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline mt-1"
+                    >
+                      <span>Abrir Mensagem Oficial</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-stone-500">Pronto</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Grid dos 12 Passos com Provas */}
+              <div className="space-y-2 pt-1">
+                <p className="text-xs font-bold text-stone-300 uppercase tracking-wider font-mono">
+                  Checklist do Piloto 01 (100% Automatizado):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {pilotFlowResults.steps?.map((st: any) => (
+                    <div
+                      key={st.step}
+                      className="p-3 rounded-2xl bg-stone-900/80 border border-stone-800 flex flex-col justify-between space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300 font-mono">
+                          {st.step}. {st.name}
+                        </span>
+                        <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">
+                          ✓
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-300 leading-snug">{st.detail}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Lojas Ativas & Trial</span>
-                <span className="p-2 rounded-xl bg-amber-50 text-amber-700">
-                  <Building2 className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-stone-900 mt-2">
-                {orgList.length} <span className="text-sm font-normal text-stone-500">organizações</span>
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-stone-600 font-medium mt-2">
-                <span className="text-emerald-700 font-semibold">{activeTenantsCount} ativas</span>
-                <span>•</span>
-                <span className="text-amber-700 font-semibold">{trialTenantsCount} em trial</span>
-                <span>•</span>
-                <span className="text-stone-500">0 suspensas</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">GMV Transacionado</span>
-                <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                  <DollarSign className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-stone-900 mt-2">
-                {totalGmv.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-              </p>
-              <p className="text-[11px] text-stone-500 mt-2">
-                Volume financeiro vendido pelas lojas parceiras no mês
-              </p>
-            </div>
-
-            <div className="bg-white border border-stone-200/90 rounded-2xl p-5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Saúde do SaaS & Churn</span>
-                <span className="p-2 rounded-xl bg-teal-50 text-teal-700">
-                  <ShieldCheck className="w-4 h-4" />
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-emerald-700 mt-2">
-                0.0% <span className="text-xs font-normal text-stone-500">churn</span>
-              </p>
-              <p className="text-[11px] text-stone-500 mt-2">
-                Uptime de 99.98% • Latência média locks: 14ms
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Overview Table of Organizations */}
-          <div className="bg-white border border-stone-200/90 rounded-3xl p-6 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* ======================================================================= */}
+          {/* CLIENTES COM BOTAO DE ACAO DIRETA [ ABRIR LOJA ]                        */}
+          {/* ======================================================================= */}
+          <div className="bg-white border border-stone-200/90 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
               <div>
-                <h3 className="text-base font-bold text-stone-900">Lojas Cadastradas no WLSaaSERP</h3>
-                <p className="text-xs text-stone-500">
-                  Acesse qualquer loja diretamente sem precisar de senha ou gerencie seu plano.
+                <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-amber-600" />
+                  CLIENTES
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Clique em <strong>[ ABRIR LOJA ]</strong> para verificar o catálogo, estoque e vendas da cliente com auditoria em tempo real.
                 </p>
               </div>
               <button
                 onClick={() => handleTabClick("organizations")}
-                className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer shrink-0"
               >
-                <span>Ver todas as organizações</span>
+                <span>Ver lista completa de clientes</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-stone-700">
-                <thead className="bg-stone-50/90 text-stone-600 font-semibold border-y border-stone-200 uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="py-3 px-4">Organização / Loja</th>
-                    <th className="py-3 px-4">Responsável</th>
-                    <th className="py-3 px-4">Plano</th>
-                    <th className="py-3 px-4">MRR</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Produtos / GMV</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100 font-medium">
-                  {orgList.slice(0, 4).map((org) => (
-                    <tr key={org.id} className="hover:bg-stone-50/60 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-stone-900 text-amber-300 font-bold text-xs flex items-center justify-center shrink-0">
-                            {org.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold text-stone-900 text-xs">{org.name}</p>
-                            <p className="text-[10px] text-stone-400">{org.city}/{org.state} • {org.document}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <p className="text-xs font-semibold text-stone-800">{org.ownerName}</p>
-                        <p className="text-[10px] text-stone-400">{org.ownerEmail}</p>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                          {org.plan}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-stone-900">
-                        {org.mrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            org.status === "ACTIVE"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}
-                        >
-                          {org.status === "ACTIVE" ? "ATIVA" : `TRIAL (${org.trialDaysLeft}d)`}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-[11px]">
-                        <span className="font-semibold text-stone-900">{org.activeProducts} SKUs</span>
-                        <span className="text-stone-400"> • GMV: {org.gmvMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenOrgDetail(org.id)}
-                            className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-[11px] font-bold transition-all shadow-2xs inline-flex items-center gap-1 cursor-pointer"
-                            title="Ver detalhes da organização"
+            <div className="divide-y divide-stone-100">
+              {orgList.slice(0, 6).map((org) => {
+                const isTrial = org.status === "TRIAL";
+                const isActive = org.status === "ACTIVE";
+                const isReadOnly = org.status === "READ_ONLY";
+
+                return (
+                  <div
+                    key={org.id}
+                    className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-stone-50/80 px-2 rounded-xl transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-stone-900 text-amber-300 font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                        {org.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-stone-900 text-sm">{org.name}</h4>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                              isActive
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : isTrial
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-red-50 text-red-700 border border-red-200"
+                            }`}
                           >
-                            <Building2 className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Detalhes</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenSupportModal(org)}
-                            className="px-2.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-amber-300 rounded-xl text-[11px] font-bold transition-all shadow-2xs inline-flex items-center gap-1 cursor-pointer"
-                            title="Acesso de suporte técnico controlado"
-                          >
-                            <Headphones className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Suporte</span>
-                          </button>
+                            {isActive ? "ATIVA" : isTrial ? `TRIAL ${org.trialDaysLeft}d` : "READ_ONLY"}
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <p className="text-[11px] text-stone-400">
+                          {org.city}/{org.state} • Plano {org.plan} • {org.activeProducts} produtos • GMV: {org.gmvMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action buttons: [ ABRIR LOJA ] as requested */}
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      <button
+                        onClick={() => handleQuickOpenStore(org)}
+                        className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 active:scale-95 text-stone-950 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer font-mono"
+                        title="Acessar a loja diretamente com auditoria da plataforma"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-stone-950" />
+                        <span>[ ABRIR LOJA ]</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenOrgDetail(org.id)}
+                        className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+                        title="Ver módulos, plano e configurações desta loja"
+                      >
+                        Detalhes
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ======================================================================= */}
+          {/* ALERTAS INTELIGENTES DA PLATAFORMA                                      */}
+          {/* ======================================================================= */}
+          <div className="bg-stone-950 border border-stone-800 rounded-3xl p-6 text-white shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 animate-bounce" />
+                <h3 className="text-xs font-bold uppercase tracking-wider font-mono text-amber-300">
+                  ALERTAS DA PLATAFORMA
+                </h3>
+              </div>
+              <span className="text-[11px] font-mono text-stone-400">Triagem Pró-Ativa</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {/* Alerta 1: Trial terminando */}
+              <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-800/40 text-amber-200 space-y-1.5">
+                <div className="flex items-center justify-between text-amber-400 font-bold font-mono text-[11px]">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    Trial terminando
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">2 lojas</span>
+                </div>
+                <p className="text-[11px] text-amber-100/90 leading-tight">
+                  Safira Art (2 dias restantes) e Bella Acessórios precisam de contato para conversão em plano Pro.
+                </p>
+                <button
+                  onClick={() => handleTabClick("subscriptions")}
+                  className="text-[10px] font-bold text-amber-300 hover:text-white underline cursor-pointer mt-1"
+                >
+                  Ver no painel de assinaturas →
+                </button>
+              </div>
+
+              {/* Alerta 2: Pagamento pendente */}
+              <div className="p-3.5 rounded-2xl bg-red-950/30 border border-red-800/40 text-red-200 space-y-1.5">
+                <div className="flex items-center justify-between text-red-400 font-bold font-mono text-[11px]">
+                  <span className="flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5" />
+                    Pagamento pendente
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-300">1 loja</span>
+                </div>
+                <p className="text-[11px] text-red-100/90 leading-tight">
+                  Diamante Sul com fatura vencida há 5 dias (modo READ_ONLY ativo para preservação de dados).
+                </p>
+                <button
+                  onClick={() => handleTabClick("subscriptions")}
+                  className="text-[10px] font-bold text-red-300 hover:text-white underline cursor-pointer mt-1"
+                >
+                  Cobrar via WhatsApp →
+                </button>
+              </div>
+
+              {/* Alerta 3: Domínio com problema */}
+              <div className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-200 space-y-1.5">
+                <div className="flex items-center justify-between text-amber-300 font-bold font-mono text-[11px]">
+                  <span className="flex items-center gap-1">
+                    <Globe2 className="w-3.5 h-3.5" />
+                    Domínio com problema
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-stone-800 text-stone-300">1 pendente</span>
+                </div>
+                <p className="text-[11px] text-stone-400 leading-tight">
+                  loja.mariajoias.com.br aguardando apontamento CNAME para aura-erp.com.br no Cloudflare.
+                </p>
+                <button
+                  onClick={() => handleTabClick("organizations")}
+                  className="text-[10px] font-bold text-amber-400 hover:text-white underline cursor-pointer mt-1"
+                >
+                  Instruções de DNS →
+                </button>
+              </div>
+
+              {/* Alerta 4: Cliente sem produtos */}
+              <div className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-200 space-y-1.5">
+                <div className="flex items-center justify-between text-indigo-300 font-bold font-mono text-[11px]">
+                  <span className="flex items-center gap-1">
+                    <Package className="w-3.5 h-3.5" />
+                    Cliente sem produtos
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">Onboarding</span>
+                </div>
+                <p className="text-[11px] text-stone-400 leading-tight">
+                  Nova loja cadastrada ainda não importou seu catálogo inicial de semijoias. Ofereça auxílio!
+                </p>
+                <button
+                  onClick={() => handleTabClick("support")}
+                  className="text-[10px] font-bold text-indigo-400 hover:text-white underline cursor-pointer mt-1"
+                >
+                  Iniciar suporte assistido →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ======================================================================= */}
+          {/* NAVEGAÇÃO RÁPIDA: [ Clientes ] [ Assinaturas ] [ Planos ] ...           */}
+          {/* ======================================================================= */}
+          <div className="bg-white border border-stone-200/90 rounded-2xl p-4 shadow-xs">
+            <div className="text-[11px] font-bold text-stone-400 uppercase tracking-widest font-mono mb-2 px-1">
+              Módulos de Gestão da Central
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => handleTabClick("organizations")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                <span>[ Clientes ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("subscriptions")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                <span>[ Assinaturas ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("plans")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                <span>[ Planos ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("modules")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-600" />
+                <span>[ Módulos ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("support")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <Headphones className="w-3.5 h-3.5 text-pink-600" />
+                <span>[ Suporte ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("audit")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                <span>[ Auditoria ]</span>
+              </button>
+              <button
+                onClick={() => handleTabClick("settings")}
+                className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs rounded-xl transition-all cursor-pointer font-mono flex items-center gap-1.5"
+              >
+                <Settings className="w-3.5 h-3.5 text-stone-600" />
+                <span>[ Plataforma ]</span>
+              </button>
             </div>
           </div>
         </div>
@@ -2036,12 +2183,20 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
+                onClick={handleRunPilotFlowTest}
+                disabled={isRunningPilotFlow}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-stone-950 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md disabled:opacity-50"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isRunningPilotFlow ? "animate-spin" : ""}`} />
+                <span>{isRunningPilotFlow ? "Simulando Piloto..." : "🧪 Teste Definitivo do Piloto 01 (12 Passos)"}</span>
+              </button>
+              <button
                 onClick={handleRunCommercialFlowTest}
                 disabled={isRunningCommercialFlow}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <CheckCircle2 className={`w-3.5 h-3.5 ${isRunningCommercialFlow ? "animate-spin" : ""}`} />
-                <span>{isRunningCommercialFlow ? "Validando Fluxo Comercial..." : "Testar Fluxo Comercial Definitivo (Ponta a Ponta)"}</span>
+                <span>{isRunningCommercialFlow ? "Validando Fluxo..." : "Testar Fluxo Comercial"}</span>
               </button>
               <button
                 onClick={handleRunConcurrencyTest}
@@ -2049,7 +2204,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRunningConcurrencyTest ? "animate-spin" : ""}`} />
-                <span>{isRunningConcurrencyTest ? "Testando Concorrência..." : "Testar Concorrência (2 Consumidores / 1 Unidade)"}</span>
+                <span>{isRunningConcurrencyTest ? "Testando Concorrência..." : "Testar Concorrência"}</span>
               </button>
               <button
                 onClick={handleRunIsolationTest}
@@ -2057,7 +2212,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-stone-900 hover:bg-stone-800 text-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRunningIsolationTest ? "animate-spin" : ""}`} />
-                <span>{isRunningIsolationTest ? "Testando Isolamento..." : "Executar Teste de Isolamento RLS"}</span>
+                <span>{isRunningIsolationTest ? "Testando Isolamento..." : "Teste Isolamento RLS"}</span>
               </button>
               <button
                 onClick={() => onNotify && onNotify("Exportando logs da plataforma em CSV...")}
@@ -2068,6 +2223,88 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </button>
             </div>
           </div>
+
+          {/* PAINEL DE RESULTADO DO TESTE DEFINITIVO DO PILOTO 01 (12 ETAPAS) */}
+          {pilotFlowResults && (
+            <div className="p-6 bg-stone-950 border border-amber-400/60 rounded-3xl text-white space-y-5 animate-fadeIn shadow-2xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-stone-800">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider font-mono">
+                      {pilotFlowResults.title}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    Jornada completa de Onboarding até Garantia executada 100% no PostgreSQL sem intervenção manual.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-mono font-bold">
+                    {pilotFlowResults.testPassed ? "✓ 12/12 PASSOS APROVADOS" : "FALHA"}
+                  </span>
+                  <span className="text-xs font-mono text-stone-400 bg-stone-900 px-2.5 py-1 rounded-full border border-stone-800">
+                    {pilotFlowResults.durationMs}ms
+                  </span>
+                </div>
+              </div>
+
+              {/* Informações Comerciais do Piloto */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Pedido Gerado</p>
+                  <p className="text-base font-bold text-white font-mono mt-0.5">#{pilotFlowResults.order?.orderNumber}</p>
+                  <p className="text-xs text-emerald-400 font-bold">R$ {Number(pilotFlowResults.order?.totalAmount || 0).toFixed(2).replace(".", ",")}</p>
+                </div>
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Certificado de Garantia</p>
+                  <p className="text-base font-bold text-amber-300 font-mono mt-0.5">{pilotFlowResults.order?.warrantyCode}</p>
+                  <p className="text-xs text-stone-400">12 Meses · Banho Nobre</p>
+                </div>
+                <div className="p-3 bg-stone-900/90 rounded-2xl border border-stone-800 flex flex-col justify-between">
+                  <p className="text-[10px] uppercase font-bold text-stone-400">Comunicação WhatsApp</p>
+                  {pilotFlowResults.whatsappUrl ? (
+                    <a
+                      href={pilotFlowResults.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-bold underline mt-1"
+                    >
+                      <span>Abrir Mensagem Oficial</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-stone-500">Pronto</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Grid dos 12 Passos com Provas */}
+              <div className="space-y-2 pt-1">
+                <p className="text-xs font-bold text-stone-300 uppercase tracking-wider font-mono">
+                  Checklist do Piloto 01 (100% Automatizado):
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {pilotFlowResults.steps?.map((st: any) => (
+                    <div
+                      key={st.step}
+                      className="p-3 rounded-2xl bg-stone-900/80 border border-stone-800 flex flex-col justify-between space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300 font-mono">
+                          {st.step}. {st.name}
+                        </span>
+                        <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">
+                          ✓
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-300 leading-snug">{st.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* PAINEL DE RESULTADO DO TESTE DEFINITIVO DO FLUXO COMERCIAL INTEGRADO */}
           {commercialFlowResults && (

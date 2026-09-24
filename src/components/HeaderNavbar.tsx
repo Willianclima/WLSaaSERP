@@ -70,12 +70,13 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
   const storeName = branding?.logoText || tenant.name || "Lumina Semijoias";
 
-  // The 5 primary commercial areas + Configurações
+  // Os 7 menus essenciais da cliente
   const mainNavTabs = [
     { id: "ownerHome", label: "Início", icon: Home },
-    { id: "vender", label: "Vender", icon: ShoppingBag },
-    { id: "catalog", label: "Produtos", icon: Package },
+    { id: "products", label: "Produtos", icon: Package },
+    { id: "orders", label: "Pedidos", icon: ShoppingBag },
     { id: "customers", label: "Clientes", icon: Users },
+    { id: "inventory", label: "Estoque", icon: Layers },
     { id: "myStore", label: "Minha Loja", icon: Store },
     { id: "storeSettings", label: "Configurações", icon: Sliders },
   ];
@@ -260,9 +261,11 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               const isActive =
                 activeTab === tab.id ||
                 (tab.id === "ownerHome" && (activeTab === "dashboard" || activeTab === "home")) ||
-                (tab.id === "vender" && (activeTab === "vender" || activeTab === "orders" || activeTab === "sales" || activeTab === "financial" || activeTab === "commissions" || activeTab === "payments")) ||
-                (tab.id === "catalog" && (activeTab === "inventory" || activeTab === "products" || activeTab === "stock" || activeTab === "adjustments")) ||
-                (tab.id === "myStore" && (activeTab === "myStore" || activeTab === "storefront"));
+                (tab.id === "products" && activeTab === "catalog") ||
+                (tab.id === "orders" && (activeTab === "vender" || activeTab === "sales")) ||
+                (tab.id === "inventory" && (activeTab === "stock" || activeTab === "consignments" || activeTab === "adjustments")) ||
+                (tab.id === "myStore" && activeTab === "storefront") ||
+                (tab.id === "storeSettings" && activeTab === "profile");
               return (
                 <button
                   key={tab.id}

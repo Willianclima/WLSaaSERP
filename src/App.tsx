@@ -1,38 +1,44 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { SidebarNavigation } from "./components/SidebarNavigation";
-import { WireframeProductsCatalog } from "./components/WireframeProductsCatalog";
 import { HeaderNavbar } from "./components/HeaderNavbar";
-import { OwnerStoreHome } from "./components/OwnerStoreHome";
-import { QuickNewSaleModal } from "./components/QuickNewSaleModal";
-import { QuickSellScreen } from "./components/QuickSellScreen";
-import { QuickNewProductModal } from "./components/QuickNewProductModal";
 import { DashboardOverview } from "./components/DashboardOverview";
 import { ArchitectureView } from "./components/ArchitectureView";
-import { CatalogInventoryLedger } from "./components/CatalogInventoryLedger";
-import { ConsignmentsManager } from "./components/ConsignmentsManager";
 import { CommissionEngine } from "./components/CommissionEngine";
 import { DigitalWarrantyManager } from "./components/DigitalWarrantyManager";
 import { CustomJewelryStudio } from "./components/CustomJewelryStudio";
-import { UnifiedSalesOrders } from "./components/UnifiedSalesOrders";
 import { ResellersNetworkManager } from "./components/ResellersNetworkManager";
 import { CommercialNetworkModule } from "./components/CommercialNetworkModule";
 import { AIGatewayMCPCopilot } from "./components/AIGatewayMCPCopilot";
 import { SecurityAuditLGPD } from "./components/SecurityAuditLGPD";
 import { StorefrontBuyerExperience } from "./components/StorefrontBuyerExperience";
 import { LandingHomeExperience } from "./components/LandingHomeExperience";
-import { StoreSettingsPanel } from "./components/StoreSettingsPanel";
 import { SaaSControlPanel } from "./components/SaaSControlPanel";
-import { CustomerManager } from "./components/CustomerManager";
-import { ShareCatalogModal } from "./components/ShareCatalogModal";
-import { OnboardingWizardModal } from "./components/OnboardingWizardModal";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { CriticalPathModal } from "./components/CriticalPathModal";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
-import { MyStoreShowcase } from "./components/MyStoreShowcase";
-import { PlatformMasterConsole } from "./components/platform/PlatformMasterConsole";
-import { PlatformHeader, ProductMode } from "./components/platform/PlatformHeader";
 import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
+
+// Modular Domain Architecture (Platform, Store, Catalog, Orders, Customers, Inventory, Onboarding)
+import {
+  PlatformMasterConsole,
+  PlatformHeader,
+  ProductMode,
+  OwnerStoreHome,
+  StoreSettingsPanel,
+  MyStoreShowcase,
+  WireframeProductsCatalog,
+  QuickNewProductModal,
+  ShareCatalogModal,
+  UnifiedSalesOrders,
+  QuickNewSaleModal,
+  QuickSellScreen,
+  CustomerManager,
+  CatalogInventoryLedger,
+  ConsignmentsManager,
+  OnboardingWizardModal,
+} from "./modules";
+
 import {
   firebaseAuthService,
   firestoreDataService,
@@ -242,69 +248,11 @@ export default function App() {
     }
   };
 
-  // Real-time Firestore synchronization for the active tenant
+  // PostgreSQL is the authoritative Single Source of Truth for core ERP data.
+  // Hydrates products, inventory ledger, customers, and orders on tenant change.
   useEffect(() => {
-    const tenantId = selectedTenant.slug.includes("lumina") ? "org-lumina-01" : selectedTenant.id;
-
-    // Seed initial collections in Firestore if empty so the user doesn't start blank
-    firestoreDataService.seedInitialDataIfEmpty(
-      tenantId,
-      mockProducts,
-      mockCustomers,
-      mockOrders,
-      mockResellers
-    );
-
-    // Subscribe to Products
-    const unsubProducts = firestoreDataService.subscribeProducts(
-      tenantId,
-      (firestoreProds) => {
-        if (firestoreProds && firestoreProds.length > 0) {
-          setProducts(firestoreProds);
-        }
-      },
-      (err) => console.warn("[Firestore Products Subscription]", err)
-    );
-
-    // Subscribe to Customers
-    const unsubCustomers = firestoreDataService.subscribeCustomers(
-      tenantId,
-      (firestoreCusts) => {
-        if (firestoreCusts && firestoreCusts.length > 0) {
-          setCustomers(firestoreCusts);
-        }
-      },
-      (err) => console.warn("[Firestore Customers Subscription]", err)
-    );
-
-    // Subscribe to Orders
-    const unsubOrders = firestoreDataService.subscribeOrders(
-      tenantId,
-      (firestoreOrders) => {
-        if (firestoreOrders && firestoreOrders.length > 0) {
-          setOrders(firestoreOrders);
-        }
-      },
-      (err) => console.warn("[Firestore Orders Subscription]", err)
-    );
-
-    // Subscribe to Resellers
-    const unsubResellers = firestoreDataService.subscribeResellers(
-      tenantId,
-      (firestoreResellers) => {
-        if (firestoreResellers && firestoreResellers.length > 0) {
-          setResellers(firestoreResellers);
-        }
-      },
-      (err) => console.warn("[Firestore Resellers Subscription]", err)
-    );
-
-    return () => {
-      unsubProducts();
-      unsubCustomers();
-      unsubOrders();
-      unsubResellers();
-    };
+    refreshBackendData();
+    checkOnboardingStatus();
   }, [selectedTenant.id, selectedTenant.slug]);
 
   useEffect(() => {
