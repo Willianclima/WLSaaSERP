@@ -83,6 +83,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   onNotify,
 }) => {
   const [currentTab, setCurrentTab] = useState<PlatformTab>(activeSubTab);
+  const [dataSourceMode, setDataSourceMode] = useState<"REAL" | "DEMO">("REAL");
   const [companySubFilter, setCompanySubFilter] = useState<CompanySubFilter>("TODAS");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>("ALL");
@@ -636,20 +637,40 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
     loadPlatformData();
   }, []);
 
-  // Global platform metrics (authoritative from PostgreSQL and rich orgList)
-  const totalMrr = platformMetrics ? platformMetrics.mrr : orgList.reduce((acc, o) => acc + (o.status === "ACTIVE" ? o.mrr : 0), 0);
-  const totalArr = totalMrr * 12;
-  const totalGmv = platformMetrics ? platformMetrics.gmv : orgList.reduce((acc, o) => acc + o.gmvMonth, 0);
-  const activeTenantsCount = orgList.filter((o) => o.status === "ACTIVE").length; // 5
-  const trialTenantsCount = orgList.filter((o) => o.status === "TRIAL").length; // 4
-  const pastDueTenantsCount = orgList.filter((o) => o.status === "PAST_DUE").length; // 2
-  const suspendedTenantsCount = orgList.filter((o) => o.status === "SUSPENDED").length; // 1
+  // Real PostgreSQL Metrics (strictly from database, zero mock assumptions)
+  const realMrr = platformMetrics ? (platformMetrics.mrr || 0) : 0;
+  const realArr = realMrr * 12;
+  const realGmv = platformMetrics ? (platformMetrics.totalGmv || 0) : 0;
+  const realActiveTenantsCount = platformMetrics ? (platformMetrics.activeOrganizations || 0) : 0;
+  const realTrialTenantsCount = platformMetrics ? (platformMetrics.trialTenantsCount || 0) : 0;
+  const realPastDueTenantsCount = platformMetrics ? (platformMetrics.pastDueTenantsCount || 0) : 0;
+  const realSuspendedTenantsCount = platformMetrics ? (platformMetrics.suspendedTenantsCount || 0) : 0;
+  const realTotalUsers = platformMetrics ? (platformMetrics.totalUsers || 0) : 0;
+  const realOrdersToday = platformMetrics ? (platformMetrics.ordersToday || 0) : 0;
+
+  // Demo / Simulation Dataset (used strictly when DEMO mode is actively toggled)
+  const demoMrr = orgList.reduce((acc, o) => acc + (o.status === "ACTIVE" ? o.mrr : 0), 0);
+  const demoArr = demoMrr * 12;
+  const demoGmv = orgList.reduce((acc, o) => acc + o.gmvMonth, 0);
+  const demoActiveTenantsCount = orgList.filter((o) => o.status === "ACTIVE").length; // 5
+  const demoTrialTenantsCount = orgList.filter((o) => o.status === "TRIAL").length; // 4
+  const demoPastDueTenantsCount = orgList.filter((o) => o.status === "PAST_DUE").length; // 2
+  const demoSuspendedTenantsCount = orgList.filter((o) => o.status === "SUSPENDED").length; // 1
+
+  // Active view metrics strictly bound to dataSourceMode
+  const totalMrr = dataSourceMode === "REAL" ? realMrr : demoMrr;
+  const totalArr = dataSourceMode === "REAL" ? realArr : demoArr;
+  const totalGmv = dataSourceMode === "REAL" ? realGmv : demoGmv;
+  const activeTenantsCount = dataSourceMode === "REAL" ? realActiveTenantsCount : demoActiveTenantsCount;
+  const trialTenantsCount = dataSourceMode === "REAL" ? realTrialTenantsCount : demoTrialTenantsCount;
+  const pastDueTenantsCount = dataSourceMode === "REAL" ? realPastDueTenantsCount : demoPastDueTenantsCount;
+  const suspendedTenantsCount = dataSourceMode === "REAL" ? realSuspendedTenantsCount : demoSuspendedTenantsCount;
   const readOnlyTenantsCount = orgList.filter((o) => o.status === "READ_ONLY" || o.status === "SUSPENDED").length;
   const nearExpiryTenantsCount = orgList.filter((o) => o.status === "TRIAL" && o.trialDaysLeft > 0 && o.trialDaysLeft <= 5).length;
-  const activeStoresCount = orgList.length; // 12
-  const ordersTodayCount = platformMetrics ? platformMetrics.ordersToday : 127;
+  const activeStoresCount = dataSourceMode === "REAL" ? (platformMetrics?.totalOrganizations || 0) : orgList.length;
+  const ordersTodayCount = dataSourceMode === "REAL" ? realOrdersToday : 127;
   const integrationFailuresCount = 0;
-  const totalUsersPlatform = 42;
+  const totalUsersPlatform = dataSourceMode === "REAL" ? realTotalUsers : 42;
 
   const handleToggleModule = async (orgId: string, moduleKey: string) => {
     // Determine new value
@@ -949,6 +970,52 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
             <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
               Painel mestre de controle e governança da sua plataforma SaaS. Monitore clientes, receitas recorrentes (MRR), planos, módulos e atue diretamente no suporte das lojas em tempo real.
             </p>
+
+            {/* SELETOR EXCLUSIVO: DADOS REAIS vs AMBIENTE DEMO */}
+            <div className="pt-2 flex items-center gap-2">
+              <span className="text-[11px] font-mono text-stone-400 font-bold uppercase tracking-wider">
+                Fonte de Dados:
+              </span>
+              <div className="inline-flex p-1 bg-stone-900 border border-stone-800 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setDataSourceMode("REAL")}
+                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    dataSourceMode === "REAL"
+                      ? "bg-emerald-500 text-stone-950 shadow-sm"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                  title="Exibe dados estritamente reais consultados do PostgreSQL oficial"
+                >
+                  <span className={`w-2 h-2 rounded-full ${dataSourceMode === "REAL" ? "bg-stone-950 animate-pulse" : "bg-emerald-500"}`} />
+                  <span>DADOS REAIS</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDataSourceMode("DEMO")}
+                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    dataSourceMode === "DEMO"
+                      ? "bg-amber-400 text-stone-950 shadow-sm"
+                      : "text-stone-400 hover:text-white"
+                  }`}
+                  title="Exibe ambiente de demonstração com carteira simulada para investidores/testes"
+                >
+                  <span className={`w-2 h-2 rounded-full ${dataSourceMode === "DEMO" ? "bg-stone-950" : "bg-amber-400"}`} />
+                  <span>AMBIENTE DEMO</span>
+                </button>
+              </div>
+
+              {dataSourceMode === "REAL" ? (
+                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                  ✓ Base oficial PostgreSQL · Zero números fictícios
+                </span>
+              ) : (
+                <span className="text-[10px] text-amber-300 font-mono bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20">
+                  ⚡ Simulação de carteira de 12 lojas para demonstração
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Direct link to Store System */}
@@ -1018,7 +1085,12 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </div>
               <div className="flex items-center gap-3">
                 <span className="px-3.5 py-1.5 bg-stone-950 border border-stone-800 rounded-xl font-mono text-xs text-stone-300">
-                  <strong className="text-white text-sm font-black mr-1">{orgList.length}</strong> organizações
+                  <strong className="text-white text-sm font-black mr-1">
+                    {dataSourceMode === "REAL" ? activeStoresCount : orgList.length}
+                  </strong> organizações
+                  {dataSourceMode === "REAL" && (
+                    <span className="ml-1 text-[10px] text-emerald-400 font-bold">(PostgreSQL)</span>
+                  )}
                 </span>
                 <button
                   onClick={() => {
@@ -1135,9 +1207,16 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
 
           {/* TELEMETRIA FINANCEIRA DO SAAS: MRR, ARR, GMV, CONVERSAO */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xs">
+            <div className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xs relative overflow-hidden">
               <div className="flex items-center justify-between text-stone-400">
-                <span className="text-xs font-bold uppercase tracking-wider font-mono">MRR RECORRENTE</span>
+                <span className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <span>MRR RECORRENTE</span>
+                  {dataSourceMode === "REAL" ? (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">REAL</span>
+                  ) : (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono font-bold">DEMO</span>
+                  )}
+                </span>
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="mt-3">
@@ -1145,12 +1224,21 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   {totalMrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                 </span>
               </div>
-              <p className="text-[11px] text-stone-400 mt-1">Faturamento mensal fixo</p>
+              <p className="text-[11px] text-stone-400 mt-1">
+                {dataSourceMode === "REAL" ? "Faturamento mensal ativo no banco" : "Projeção com 12 lojas simuladas"}
+              </p>
             </div>
 
             <div className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between text-stone-400">
-                <span className="text-xs font-bold uppercase tracking-wider font-mono">ARR PROJETADO</span>
+                <span className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <span>ARR PROJETADO</span>
+                  {dataSourceMode === "REAL" ? (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">REAL</span>
+                  ) : (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono font-bold">DEMO</span>
+                  )}
+                </span>
                 <Receipt className="w-4 h-4 text-indigo-400" />
               </div>
               <div className="mt-3">
@@ -1158,12 +1246,21 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   {totalArr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                 </span>
               </div>
-              <p className="text-[11px] text-stone-400 mt-1">Projeção 12 meses de SaaS</p>
+              <p className="text-[11px] text-stone-400 mt-1">
+                {dataSourceMode === "REAL" ? "Projeção 12m da carteira oficial" : "Projeção 12m do portfólio demo"}
+              </p>
             </div>
 
             <div className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xs">
               <div className="flex items-center justify-between text-stone-400">
-                <span className="text-xs font-bold uppercase tracking-wider font-mono">GMV DAS LOJAS</span>
+                <span className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <span>GMV DAS LOJAS</span>
+                  {dataSourceMode === "REAL" ? (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">REAL</span>
+                  ) : (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-mono font-bold">DEMO</span>
+                  )}
+                </span>
                 <ShoppingBag className="w-4 h-4 text-amber-400" />
               </div>
               <div className="mt-3">
@@ -1171,7 +1268,9 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   {totalGmv.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                 </span>
               </div>
-              <p className="text-[11px] text-stone-400 mt-1">Volume de vendas das clientes</p>
+              <p className="text-[11px] text-stone-400 mt-1">
+                {dataSourceMode === "REAL" ? "Vendas computadas em pedidos reais" : "Volume transacionado simulado"}
+              </p>
             </div>
 
             <div className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xs">
@@ -1181,9 +1280,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </div>
               <div className="mt-3 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-lg font-bold text-white font-mono">RLS 100% ATIVO</span>
+                <span className="text-lg font-bold text-white font-mono">
+                  {dataSourceMode === "REAL" ? "POSTGRES ATIVO" : "DEMO ISOLADO"}
+                </span>
               </div>
-              <p className="text-[11px] text-emerald-400 mt-1">Zero localStorage/mock</p>
+              <p className="text-[11px] text-emerald-400 mt-1">
+                {dataSourceMode === "REAL" ? "Source of Truth único & auditado" : "Simulador visual de apresentação"}
+              </p>
             </div>
           </div>
 
@@ -1552,6 +1655,15 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                 <span className="px-2.5 py-0.5 rounded-full bg-stone-800 text-amber-300 text-xs font-mono font-bold border border-stone-700">
                   {orgList.length} organizações
                 </span>
+                {dataSourceMode === "REAL" ? (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30">
+                    Base Real PostgreSQL
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold border border-amber-400/30">
+                    Ambiente Demo Ativo
+                  </span>
+                )}
               </div>
               <p className="text-xs text-stone-400 mt-1">
                 Base oficial no PostgreSQL · Multi-Tenant com RLS ativo · Zero dados voláteis
