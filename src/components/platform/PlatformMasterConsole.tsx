@@ -957,10 +957,17 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               <span className="px-3 py-1 bg-stone-900 border border-stone-800 text-stone-300 font-semibold text-[10px] uppercase tracking-wider rounded-full font-mono">
                 Central do Proprietário
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                SaaS Online
-              </span>
+              {dataSourceMode === "REAL" ? (
+                <span className="px-3 py-1 rounded-full bg-emerald-500 text-stone-950 font-mono text-[10px] font-black tracking-wider flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-stone-950 animate-pulse" />
+                  🟢 PRODUÇÃO — DADOS REAIS
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-full bg-amber-400 text-stone-950 font-mono text-[10px] font-black tracking-wider flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-stone-950" />
+                  🟡 DEMONSTRAÇÃO — DADOS FICTÍCIOS
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">

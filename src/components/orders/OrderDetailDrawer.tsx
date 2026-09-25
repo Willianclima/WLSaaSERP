@@ -386,6 +386,29 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
           {/* OS BOTÕES OPERACIONAIS DIRETOS (CONFIRMAR, WHATSAPP, CANCELAR)             */}
           {/* ========================================================================= */}
           <div className="p-6 border-t border-stone-200 bg-white space-y-2.5 sticky bottom-0">
+            {isPaid && (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-2 animate-fadeIn">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                  <span>Venda Finalizada com Sucesso!</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] text-emerald-800">
+                  <p>✓ Pagamento confirmado</p>
+                  <p>✓ Estoque baixado</p>
+                  <p>✓ Pedido finalizado</p>
+                  <p>✓ Garantia gerada {order.warrantyCode ? `(${order.warrantyCode})` : ""}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenWhatsApp}
+                  className="w-full mt-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4 text-white" />
+                  <span>ENVIAR CONFIRMAÇÃO PELO WHATSAPP</span>
+                </button>
+              </div>
+            )}
+
             {isAwaitingPayment && (
               <button
                 onClick={handleConfirmPaidSale}
@@ -397,13 +420,15 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
               </button>
             )}
 
-            <button
-              onClick={handleOpenWhatsApp}
-              className="w-full py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs shadow-xs transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-              <span>FALAR NO WHATSAPP</span>
-            </button>
+            {!isPaid && (
+              <button
+                onClick={handleOpenWhatsApp}
+                className="w-full py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs shadow-xs transition-all active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-400" />
+                <span>FALAR NO WHATSAPP</span>
+              </button>
+            )}
 
             {isAwaitingPayment && (
               <button

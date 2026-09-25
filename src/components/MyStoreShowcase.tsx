@@ -184,13 +184,13 @@ export const MyStoreShowcase: React.FC<MyStoreShowcaseProps> = ({
               <span>COMPARTILHAR WHATSAPP</span>
             </button>
 
-            {/* Botão 4: [ COMPARTILHAR INSTAGRAM ] */}
+            {/* Botão 4: [ COPIAR PARA INSTAGRAM ] */}
             <button
               onClick={() => setShowInstagramModal(true)}
               className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold text-xs shadow-xs transition-all active:scale-98 cursor-pointer"
             >
               <Instagram className="w-4 h-4" />
-              <span>COMPARTILHAR INSTAGRAM</span>
+              <span>COPIAR PARA INSTAGRAM</span>
             </button>
           </div>
         </div>

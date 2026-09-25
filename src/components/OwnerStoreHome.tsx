@@ -112,6 +112,29 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
     return qty <= 0;
   });
 
+  // Verificação de Prontidão da Loja (Saúde da Loja)
+  const checklist = {
+    hasStoreName: Boolean(branding?.logoText || tenant?.name),
+    hasWhatsapp: Boolean(tenant?.whatsapp || (tenant as any)?.contactWhatsapp),
+    hasLogo: Boolean(branding?.logoUrl || branding?.logoType === "IMAGE" || branding?.logoText),
+    hasTenProducts: products.length >= 10,
+    hasPublishedCatalog: products.some((p) => p.publicationStatus === "PUBLISHED" || (p.stockAvailable ?? 0) > 0),
+    hasInstagram: Boolean(branding?.instagramHandle && branding.instagramHandle.trim() !== "" && branding.instagramHandle !== "@minhaloja"),
+  };
+
+  const checklistItems = [
+    { label: "Nome da loja", done: checklist.hasStoreName },
+    { label: "WhatsApp configurado", done: checklist.hasWhatsapp },
+    { label: "Identidade visual / Logo", done: checklist.hasLogo },
+    { label: "10 produtos cadastrados", done: checklist.hasTenProducts, subtext: `${products.length}/10 peças` },
+    { label: "Catálogo público ativo", done: checklist.hasPublishedCatalog },
+    { label: "Instagram vinculado", done: checklist.hasInstagram },
+  ];
+
+  const completedCount = checklistItems.filter((i) => i.done).length;
+  const healthPercent = Math.round((completedCount / checklistItems.length) * 100);
+  const isStoreReady = healthPercent >= 80;
+
   const handleCopyLink = () => {
     const url = `${window.location.origin}/#storefront`;
     navigator.clipboard.writeText(url);
@@ -171,7 +194,7 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. OS 3 CARDS ESSENCIAIS: VENDAS, ESTOQUE, CLIENTES                       */}
+      {/* 2. OS 3 CARDS ESSENCIAIS: VENDAS (R$), PRODUTOS, CLIENTES                 */}
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Card 1: 💰 VENDAS */}
@@ -189,35 +212,35 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-extrabold text-stone-900 tracking-tight">
-              {paidOrders.length}
+            <div className="text-3xl font-extrabold text-stone-900 tracking-tight font-serif">
+              {formattedSalesRevenue}
             </div>
             <div className="text-xs font-medium text-stone-500 mt-1">
-              Total faturado: <span className="font-bold text-stone-900">{formattedSalesRevenue}</span>
+              Faturado em pedidos confirmados
             </div>
           </div>
         </div>
 
-        {/* Card 2: 📦 ESTOQUE */}
+        {/* Card 2: 📦 PRODUTOS */}
         <div
-          onClick={() => onNavigateTab("inventory")}
+          onClick={() => onNavigateTab("products")}
           className="bg-white rounded-3xl p-6 border border-stone-200/90 shadow-xs hover:border-amber-300 hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-              <span>📦</span>
-              <span>Estoque</span>
+              <span>💎</span>
+              <span>Produtos</span>
             </span>
             <span className="text-[11px] font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-full">
-              {products.length} modelo(s)
+              {totalStockPieces} peças
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-extrabold text-stone-900 tracking-tight">
-              {totalStockPieces} <span className="text-sm font-normal text-stone-400">peças</span>
+            <div className="text-3xl font-extrabold text-stone-900 tracking-tight font-serif">
+              {products.length}
             </div>
             <div className="text-xs font-medium text-stone-500 mt-1">
-              Prontas para pronta entrega no showroom
+              Modelos ativos prontos no catálogo
             </div>
           </div>
         </div>
@@ -237,13 +260,98 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-extrabold text-stone-900 tracking-tight">
+            <div className="text-3xl font-extrabold text-stone-900 tracking-tight font-serif">
               {customers.length || 1}
             </div>
             <div className="text-xs font-medium text-stone-500 mt-1">
               Base de clientes fidelizadas na loja
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2.1 SAÚDE DA LOJA & CHECKLIST DE ATIVAÇÃO                                 */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-3xl p-6 border border-stone-200/90 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-stone-500 font-mono">
+                CONFIGURAÇÃO DA LOJA
+              </span>
+              {isStoreReady ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  🟢 Sua loja está pronta para vender
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  🟡 Falta pouco para sua loja ficar pronta
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Etapas essenciais para começar a receber pedidos e compartilhar nas redes sociais.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className="text-lg font-bold font-mono text-stone-900">{healthPercent}%</span>
+              <span className="text-[10px] text-stone-400 block font-mono">concluído</span>
+            </div>
+            <button
+              onClick={() => onNavigateTab("storeSettings")}
+              className="px-3.5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs font-mono"
+            >
+              [ CONTINUAR CONFIGURAÇÃO ]
+            </button>
+          </div>
+        </div>
+
+        {/* Barra de Progresso */}
+        <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+          <div
+            className={`h-full transition-all duration-500 rounded-full ${
+              isStoreReady ? "bg-emerald-500" : "bg-amber-500"
+            }`}
+            style={{ width: `${healthPercent}%` }}
+          />
+        </div>
+
+        {/* Grid de Itens do Checklist */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1">
+          {checklistItems.map((item, idx) => (
+            <div
+              key={idx}
+              className={`p-3 rounded-2xl border text-xs flex flex-col justify-between transition-all ${
+                item.done
+                  ? "bg-emerald-50/50 border-emerald-200 text-stone-800"
+                  : "bg-stone-50 border-stone-200 text-stone-400"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-base">{item.done ? "✓" : "○"}</span>
+                {item.done && (
+                  <span className="text-[9px] font-bold font-mono text-emerald-700 bg-emerald-100/70 px-1 rounded">
+                    OK
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className={`block font-semibold leading-tight text-[11px] ${item.done ? "text-stone-900" : "text-stone-500"}`}>
+                  {item.label}
+                </span>
+                {item.subtext && (
+                  <span className="text-[10px] font-mono text-stone-400 block mt-0.5">
+                    {item.subtext}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

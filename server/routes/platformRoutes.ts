@@ -10,6 +10,21 @@ import { OrderService } from "../modules/orders/order.service";
 
 const router = Router();
 
+// Middleware de isolamento estrito: impede que requisições originadas em modo DEMO alterem dados de produção
+const enforceDemoWriteProtection = (req: AuthenticatedRequest, res: any, next: any) => {
+  const isDemoModeHeader = req.headers["x-aura-data-source"] === "DEMO" || req.query.mode === "DEMO";
+  if (isDemoModeHeader && req.method !== "GET") {
+    return res.status(403).json({
+      success: false,
+      code: "DEMO_WRITE_FORBIDDEN",
+      error: "OPERAÇÃO BLOQUEADA: O modo DEMO é estritamente isolado para consulta/simulação e não tem permissão para alterar o banco PostgreSQL de produção.",
+    });
+  }
+  next();
+};
+
+router.use(enforceDemoWriteProtection);
+
 /**
  * GET /api/platform/dashboard
  * Central de Comando Executiva da Plataforma SaaS.
