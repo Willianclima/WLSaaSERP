@@ -1355,7 +1355,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-150 ${
+      productMode === "PLATFORM_OWNER"
+        ? "bg-[#090a0f] text-stone-100 selection:bg-amber-400 selection:text-stone-950"
+        : "bg-[#FAF9F6] text-stone-900 selection:bg-amber-100 selection:text-amber-900"
+    }`}>
       {/* Toast Notification */}
       {toastMessage && (
         <div className={`fixed bottom-6 right-6 z-50 ${toastMessage.startsWith("❌") ? "bg-rose-950 border-rose-800 text-rose-100" : "bg-stone-900 border-stone-800 text-white"} border px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-medium animate-bounce`}>
