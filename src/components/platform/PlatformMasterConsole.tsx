@@ -1784,6 +1784,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <th className="py-3 px-4">Loja & Domínio</th>
                   <th className="py-3 px-4">Proprietária / Contato</th>
                   <th className="py-3 px-4">Plano</th>
+                  <th className="py-3 px-4">Uso & Catálogo</th>
                   <th className="py-3 px-4">MRR / Fatura</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Módulos Ativos</th>
@@ -1837,6 +1838,16 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-stone-950 text-amber-300 border border-stone-700 font-mono">
                             {org.plan}
                           </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-[11px]">
+                          <div className="space-y-0.5">
+                            <span className="text-white font-bold block">
+                              {org.activeProducts || 0} produtos
+                            </span>
+                            <span className="text-stone-400 text-[10px] block">
+                              {org.activeOrdersMonth || 0} pedidos no mês
+                            </span>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4 font-bold text-white font-mono">
                           {org.mrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
