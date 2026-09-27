@@ -8,6 +8,11 @@ export class AccessControlService {
    * while OWNER, LOJA_ADMIN, GERENTE_COMERCIAL, VENDEDOR are tenant-scoped roles (organization_members.role).
    */
   static hasRole(userRole: OrganizationRole, requiredRoles: OrganizationRole[], isPlatformSuperAdmin = false): boolean {
+    // Se a rota exige explicitamente SUPER_ADMIN, apenas administradores mestres da plataforma são autorizados
+    if (requiredRoles.includes("SUPER_ADMIN")) {
+      return Boolean(isPlatformSuperAdmin || userRole === "SUPER_ADMIN");
+    }
+
     // Platform Super Admin can access platform management and supervised support features (all audited)
     if (isPlatformSuperAdmin) {
       return true;

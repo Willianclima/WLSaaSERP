@@ -96,8 +96,8 @@ export function interceptClientWithRls(client: pg.PoolClient): pg.PoolClient {
     const context = TenantContext.get();
     const tenantId = context?.tenantId;
 
-    if (tenantId && !contextApplied) {
-      const sanitized = tenantId.replace(/[^a-zA-Z0-9_\-]/g, "");
+    if ((tenantId || context?.isSuperAdmin) && !contextApplied) {
+      const sanitized = (tenantId || "").replace(/[^a-zA-Z0-9_\-]/g, "");
       const isSuper = context?.isSuperAdmin ? "true" : "false";
 
       await originalQuery.call(
@@ -107,6 +107,7 @@ export function interceptClientWithRls(client: pg.PoolClient): pg.PoolClient {
       );
       try {
         await originalQuery.call(this, `SET LOCAL app.current_tenant_id = '${sanitized}'`);
+        await originalQuery.call(this, `SET LOCAL app.is_super_admin = '${isSuper}'`);
       } catch {
         // SET LOCAL outside transaction is harmless
       }

@@ -82,6 +82,45 @@ router.get("/me", authMiddleware, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// GET /api/auth/validate-session - Strict RBAC session validation
+// Returns verified user credentials, role claims, and platform permissions
+router.get("/validate-session", authMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.user!;
+    const tenant = req.tenant;
+    const userRole = req.userRole;
+    const isSuperAdmin = Boolean(user.isPlatformSuperAdmin || userRole === "SUPER_ADMIN");
+
+    return res.json({
+      success: true,
+      valid: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: userRole || (isSuperAdmin ? "SUPER_ADMIN" : "OWNER"),
+        isPlatformSuperAdmin: isSuperAdmin,
+        phone: user.phone,
+      },
+      organization: tenant
+        ? {
+            id: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            status: tenant.status,
+          }
+        : null,
+      permissions: {
+        canAccessPlatformOwner: isSuperAdmin,
+        canAccessStoreERP: Boolean(tenant || isSuperAdmin),
+        effectiveRole: userRole,
+      },
+    });
+  } catch (error: any) {
+    return res.status(401).json({ success: false, valid: false, error: error.message });
+  }
+});
+
 // POST /api/auth/switch-tenant - Switch active organization context
 router.post("/switch-tenant", authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {

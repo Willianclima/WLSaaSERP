@@ -21,6 +21,7 @@ import {
   Store,
   Edit3,
   DollarSign,
+  KeyRound,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 
@@ -38,6 +39,7 @@ interface HeaderNavbarProps {
   onOpenShareModal?: () => void;
   onOpenNewSale?: () => void;
   onOpenHelp?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -51,6 +53,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   onOpenShareModal,
   onOpenNewSale,
   onOpenHelp,
+  onOpenAuthModal,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const handleTabChange = onTabChange || onSelectTab || (() => {});
@@ -205,6 +208,18 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                 <span className="hidden sm:inline text-xs font-semibold text-stone-700 group-hover:text-amber-900 truncate max-w-[100px]">
                   {currentUser.name.split(" ")[0]}
                 </span>
+              </button>
+            )}
+
+            {/* Auth / Login Modal button for mobile/compact view */}
+            {onOpenAuthModal && (
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-semibold transition-all cursor-pointer"
+                title="Acesso & Login"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">Acesso</span>
               </button>
             )}
           </div>

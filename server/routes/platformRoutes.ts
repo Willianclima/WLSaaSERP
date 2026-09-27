@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
-import { requireRole } from "../middlewares/rbacMiddleware";
+import { requireRole, requireSuperAdmin } from "../middlewares/rbacMiddleware";
 import { orgRepo, userRepo, subRepo, planRepo, moduleRepo, memberRepo } from "../repositories";
 import { query, getPostgresPool } from "../db/postgres";
 import { TenantContext } from "../db/tenantContext";
@@ -24,6 +24,10 @@ const enforceDemoWriteProtection = (req: AuthenticatedRequest, res: any, next: a
 };
 
 router.use(enforceDemoWriteProtection);
+// Imposição estrita de RBAC no backend:
+// O painel AURA/SuperAdmin é 100% blindado contra acessos não autenticados ou por usuários comuns da loja
+router.use(authMiddleware);
+router.use(requireSuperAdmin());
 
 /**
  * GET /api/platform/dashboard

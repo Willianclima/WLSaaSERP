@@ -15,6 +15,8 @@ import { LandingHomeExperience } from "./components/LandingHomeExperience";
 import { SaaSControlPanel } from "./components/SaaSControlPanel";
 import { AssistantHelpModal } from "./components/AssistantHelpModal";
 import { CriticalPathModal } from "./components/CriticalPathModal";
+import { AuthModal } from "./components/auth/AuthModal";
+import { RBACAuthMiddleware } from "./components/auth/RBACAuthMiddleware";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
@@ -133,23 +135,51 @@ export default function App() {
     return base;
   });
   const [tenants, setTenants] = useState<TenantStore[]>(mockTenants);
-  const [currentUser, setCurrentUser] = useState<RBACUser>(() => {
+
+  // Authentication & RBAC Session State
+  const [authModalTab, setAuthModalTab] = useState<"STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION">(
+    "STORE_LOGIN"
+  );
+  const openAuthModal = (tab?: "STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION") => {
+    if (tab) setAuthModalTab(tab);
+    setShowAuthModal(true);
+  };
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return apiClient.hasValidToken();
+  });
+  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(() => {
+    return apiClient.hasValidToken();
+  });
+  const [currentUser, setCurrentUser] = useState<RBACUser | null>(() => {
     try {
       const saved = localStorage.getItem("aura_user_profile");
-      if (saved) return JSON.parse(saved);
+      if (saved && apiClient.hasValidToken()) return JSON.parse(saved);
     } catch (e) {}
-    return mockCurrentUser;
+    return apiClient.hasValidToken() ? mockCurrentUser : null;
   });
 
   const handleUpdateUser = (updated: Partial<RBACUser>) => {
     setCurrentUser((prev) => {
+      if (!prev) return null;
       const next = { ...prev, ...updated };
       try {
         localStorage.setItem("aura_user_profile", JSON.stringify(next));
       } catch (e) {}
       return next;
     });
-    showToast("Perfil e foto atualizados com sucesso!");
+    showToast("Perfil atualizado com sucesso!");
+  };
+
+  const handleLogout = () => {
+    apiClient.logout();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem("aura_user_profile");
+    } catch (e) {}
+    showToast("Sessão encerrada com sucesso.");
+    openAuthModal("STORE_LOGIN");
   };
 
   const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
@@ -178,6 +208,7 @@ export default function App() {
   const [showQuickProductModal, setShowQuickProductModal] = useState<boolean>(false);
   const [showAssistantHelpModal, setShowAssistantHelpModal] = useState<boolean>(false);
   const [showCriticalPathModal, setShowCriticalPathModal] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [trialRemainingDays, setTrialRemainingDays] = useState<number>(27);
   const [trialEndsAt, setTrialEndsAt] = useState<string>("2026-09-28");
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean>(true);
@@ -216,6 +247,83 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 4000);
     });
     return unsub;
+  }, []);
+
+  // Validação estrita da sessão e claims RBAC ao iniciar o aplicativo
+  useEffect(() => {
+    const validateActiveSession = async () => {
+      if (!apiClient.hasValidToken()) {
+        setIsAuthenticated(false);
+        setIsValidatingSession(false);
+        return;
+      }
+
+      setIsValidatingSession(true);
+      try {
+        const res = await apiClient.validateSession();
+        if (res.valid && res.user) {
+          setIsAuthenticated(true);
+          const validatedUser: RBACUser = {
+            id: res.user.id,
+            name: res.user.name,
+            email: res.user.email,
+            role: res.user.role as any,
+            tenantId: res.organization?.id || selectedTenant.id,
+            avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+            phone: res.user.phone || "(11) 98765-4321",
+            title: res.user.isPlatformSuperAdmin ? "Fundador & SuperAdmin" : "Dona da Marca",
+            bio: res.user.isPlatformSuperAdmin ? "Administrador mestre AURA" : "Gestora da Loja",
+          };
+          setCurrentUser(validatedUser);
+          try {
+            localStorage.setItem("aura_user_profile", JSON.stringify(validatedUser));
+          } catch (e) {}
+
+          if (res.organization) {
+            const org = res.organization;
+            const matchedTenant = tenants.find((t) => t.id === org.id);
+            if (matchedTenant) {
+              setSelectedTenant(matchedTenant);
+            }
+          }
+        } else {
+          // Token rejeitado pelo backend
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          try {
+            localStorage.removeItem("aura_user_profile");
+          } catch (e) {}
+          apiClient.logout();
+        }
+      } catch (err) {
+        console.warn("[App] Falha ao validar sessão ativa:", err);
+      } finally {
+        setIsValidatingSession(false);
+      }
+    };
+
+    validateActiveSession();
+  }, []);
+
+  // Escuta eventos globais de 401 (desautorizado) e 403 (proibido) emitidos pelos interceptors
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      showToast("⚠️ Sessão expirada ou não autenticada. Faça login para continuar.");
+      openAuthModal("STORE_LOGIN");
+    };
+
+    const handleForbidden = () => {
+      showToast("❌ Acesso negado: Seu perfil não possui permissão para acessar esta área.");
+    };
+
+    window.addEventListener("aura:auth:unauthorized", handleUnauthorized);
+    window.addEventListener("aura:auth:forbidden", handleForbidden);
+    return () => {
+      window.removeEventListener("aura:auth:unauthorized", handleUnauthorized);
+      window.removeEventListener("aura:auth:forbidden", handleForbidden);
+    };
   }, []);
 
   // Centralized tenant and authenticated header helper
@@ -1371,6 +1479,7 @@ export default function App() {
       {/* Top Header: Platform Master Switcher (Nível 1 · Nível 2 · Nível 3) */}
       <PlatformHeader
         currentUser={currentUser}
+        isAuthenticated={isAuthenticated}
         currentMode={productMode}
         selectedTenant={selectedTenant}
         tenants={tenants}
@@ -1394,26 +1503,55 @@ export default function App() {
           handleUpdateUser({ role });
           showToast(`Papel de loja simulado: ${role}`);
         }}
+        onOpenAuthModal={openAuthModal}
+        onLogout={handleLogout}
       />
 
-      {/* If in Platform Master Mode (Produto 2), render dedicated full platform console */}
+      {/* If in Platform Master Mode (Produto 2), render dedicated full platform console wrapped with RBAC */}
       {productMode === "PLATFORM_OWNER" ? (
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <PlatformMasterConsole
-            currentUser={currentUser}
-            tenants={tenants}
-            onImpersonateTenant={(t) => {
-              setSelectedTenant(t);
-              setProductMode("TENANT_STORE");
-              setActiveTab("dashboard");
-              showToast(`Acesso concedido como lojista de: ${t.name}`);
-            }}
-            onOpenStoreSystem={() => setProductMode("TENANT_STORE")}
-            onNotify={(msg) => showToast(msg)}
-          />
-        </main>
+        <RBACAuthMiddleware
+          mode="PLATFORM_OWNER"
+          currentUser={currentUser}
+          isAuthenticated={isAuthenticated}
+          isValidatingSession={isValidatingSession}
+          selectedTenant={selectedTenant}
+          onOpenAuthModal={openAuthModal}
+          onSwitchMode={(mode) => {
+            setProductMode(mode);
+            if (mode === "STORE_CONSUMER") setActiveTab("storefront");
+            else if (mode === "TENANT_STORE") setActiveTab("dashboard");
+          }}
+          onLogout={handleLogout}
+        >
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+            <PlatformMasterConsole
+              currentUser={currentUser || mockCurrentUser}
+              tenants={tenants}
+              onImpersonateTenant={(t) => {
+                setSelectedTenant(t);
+                setProductMode("TENANT_STORE");
+                setActiveTab("dashboard");
+                showToast(`Acesso concedido como lojista de: ${t.name}`);
+              }}
+              onOpenStoreSystem={() => setProductMode("TENANT_STORE")}
+              onNotify={(msg) => showToast(msg)}
+            />
+          </main>
+        </RBACAuthMiddleware>
       ) : (
-        <>
+        <RBACAuthMiddleware
+          mode="TENANT_STORE"
+          currentUser={currentUser}
+          isAuthenticated={isAuthenticated}
+          isValidatingSession={isValidatingSession}
+          selectedTenant={selectedTenant}
+          onOpenAuthModal={openAuthModal}
+          onSwitchMode={(mode) => {
+            setProductMode(mode);
+            if (mode === "STORE_CONSUMER") setActiveTab("storefront");
+          }}
+          onLogout={handleLogout}
+        >
           {/* Trial Status Banner (Pilot Client 01) */}
           <TrialStatusBanner
             remainingDays={trialRemainingDays}
@@ -1435,17 +1573,15 @@ export default function App() {
                 onTabChange={setActiveTab}
                 tenant={selectedTenant}
                 branding={brandingConfig}
-                currentUser={currentUser}
+                currentUser={currentUser || undefined}
                 onOpenHelp={() => setShowAssistantHelpModal(true)}
                 onOpenNewSale={() => setShowQuickSaleModal(true)}
                 onOpenNewProduct={() => setShowQuickProductModal(true)}
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
                 pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
-                onLogout={() => {
-                  apiClient.logout();
-                  showToast("Sessão encerrada com sucesso.");
-                }}
+                onLogout={handleLogout}
+                onOpenAuthModal={() => openAuthModal("STORE_LOGIN")}
               />
             </div>
 
@@ -1458,11 +1594,12 @@ export default function App() {
               onTabChange={setActiveTab}
               selectedTenant={selectedTenant}
               branding={brandingConfig}
-              currentUser={currentUser}
+              currentUser={currentUser || undefined}
               onTenantChange={setSelectedTenant}
               onOpenShareModal={() => setShowShareModal(true)}
               onOpenNewSale={() => setShowQuickSaleModal(true)}
               onOpenHelp={() => setShowAssistantHelpModal(true)}
+              onOpenAuthModal={() => openAuthModal("STORE_LOGIN")}
             />
           </div>
 
@@ -1684,7 +1821,7 @@ export default function App() {
           </main>
         </div>
       </div>
-      </>
+      </RBACAuthMiddleware>
       )}
 
       {/* Editorial Footer */}
@@ -1777,6 +1914,32 @@ export default function App() {
         onOpenStorefront={() => {
           setShowCriticalPathModal(false);
           setActiveTab("storefront");
+        }}
+      />
+
+      {/* Unified Authentication & Login Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        currentUser={currentUser}
+        currentTenant={selectedTenant}
+        tenants={tenants}
+        initialTab={authModalTab}
+        onLoginSuccess={(user, tenant, targetMode) => {
+          setCurrentUser(user);
+          setSelectedTenant(tenant);
+          setIsAuthenticated(true);
+          setProductMode(targetMode);
+          if (targetMode === "PLATFORM_OWNER") {
+            setActiveTab("ownerHome");
+          } else {
+            setActiveTab("dashboard");
+          }
+          try {
+            localStorage.setItem("aura_user_profile", JSON.stringify(user));
+          } catch (e) {}
+          refreshBackendData();
+          checkOnboardingStatus();
         }}
       />
 

@@ -342,11 +342,7 @@ export const tenantRequestInterceptor: RequestInterceptor = async (url, init) =>
   const currentHeaders = TenantManager.injectTenantHeader(rawHeaders);
 
   const tenantId = currentHeaders["x-tenant-id"] || TenantManager.getCurrentTenantId();
-  let token = ApiClient.getToken();
-
-  if (!token && !url.includes("/api/auth/login")) {
-    token = await ApiClient.ensureSession(tenantId);
-  }
+  const token = ApiClient.getToken();
 
   if (token && !currentHeaders["Authorization"]) {
     currentHeaders["Authorization"] = `Bearer ${token}`;
@@ -451,12 +447,26 @@ export function installGlobalFetchInterceptor(): void {
       GlobalLoadingManager.startRequest();
 
       try {
+        let resp: Response;
         // Se o input era um objeto Request, cria uma nova chamada com os headers atualizados
         if (typeof input !== "string" && !(input instanceof URL)) {
-          return await originalFetch(urlString, currentInit);
+          resp = await originalFetch(urlString, currentInit);
+        } else {
+          resp = await originalFetch(input, currentInit);
         }
 
-        return await originalFetch(input, currentInit);
+        if (resp.status === 401 && !urlString.includes("/api/auth/login") && !urlString.includes("/api/products/public")) {
+          ApiClient.logout();
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("aura:auth:unauthorized", { detail: { url: urlString, status: 401 } }));
+          }
+        } else if (resp.status === 403 && !urlString.includes("/api/auth/login")) {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("aura:auth:forbidden", { detail: { url: urlString, status: 403 } }));
+          }
+        }
+
+        return resp;
       } finally {
         GlobalLoadingManager.endRequest();
       }
@@ -575,45 +585,92 @@ export class ApiClient {
   }
 
   /**
-   * Inicializa ou renova o token de sessão para o tenant ativo no PostgreSQL.
+   * Retorna se há um token JWT válido em cache ou no localStorage.
    */
-  static async ensureSession(targetTenantId?: string, targetEmail?: string): Promise<string> {
-    const orgId = targetTenantId || this.getTenantId();
-    const email =
-      targetEmail ||
-      (orgId.includes("elegance") ? "maria@elegance.com" : "willianCLima@gmail.com");
+  static hasValidToken(): boolean {
+    const token = this.getToken();
+    return Boolean(token && token.split(".").length === 3);
+  }
 
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, organizationId: orgId }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const activeJwt = data.session?.jwt;
-        if (data.success && activeJwt) {
-          this.setToken(activeJwt);
-          this.setTenantId(orgId);
-          if (data.session.user && typeof window !== "undefined") {
-            localStorage.setItem(USER_KEY, JSON.stringify(data.session.user));
-            localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
-          }
-          return activeJwt;
-        }
-      }
-    } catch (err) {
-      console.warn("Falha ao renovar sessão automática:", err);
-    }
-
-    // Retorna token existente se for um JWT válido
+  /**
+   * Obtém o token JWT ativo ou lança erro exigindo autenticação explícita.
+   * Não realiza login automático mascarado ou forja identidade no backend.
+   */
+  static async ensureSession(targetTenantId?: string, targetEmail?: string, targetPassword?: string): Promise<string> {
     const existing = this.getToken();
     if (existing && existing.split(".").length === 3) {
       return existing;
     }
 
-    throw new Error(`Sessão não autenticada: Nenhum token JWT válido disponível para o tenant ${orgId}. Faça login novamente.`);
+    if (targetEmail && targetPassword) {
+      const orgId = targetTenantId || this.getTenantId();
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: targetEmail, password: targetPassword, organizationId: orgId }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const activeJwt = data.session?.jwt;
+          if (data.success && activeJwt) {
+            this.setToken(activeJwt);
+            this.setTenantId(orgId);
+            if (data.session.user && typeof window !== "undefined") {
+              localStorage.setItem(USER_KEY, JSON.stringify(data.session.user));
+              localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
+            }
+            return activeJwt;
+          }
+        }
+      } catch (err) {
+        console.warn("[ApiClient] Falha na autenticação explícita:", err);
+      }
+    }
+
+    throw new Error("Sessão não autenticada: É necessário realizar o login com credenciais válidas.");
+  }
+
+  /**
+   * Valida a sessão e claims de RBAC do usuário ativo junto ao backend (/api/auth/validate-session).
+   */
+  static async validateSession(): Promise<{
+    valid: boolean;
+    user?: any;
+    organization?: any;
+    permissions?: {
+      canAccessPlatformOwner: boolean;
+      canAccessStoreERP: boolean;
+      effectiveRole: string;
+    };
+    error?: string;
+  }> {
+    const token = this.getToken();
+    if (!token || token.split(".").length !== 3) {
+      return { valid: false, error: "Nenhum token JWT válido presente no cliente" };
+    }
+
+    try {
+      const res = await fetch("/api/auth/validate-session", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-tenant-id": this.getTenantId(),
+        },
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          this.logout();
+        }
+        return { valid: false, error: `Sessão rejeitada pelo servidor (HTTP ${res.status})` };
+      }
+
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return { valid: false, error: err.message };
+    }
   }
 
   /**
@@ -621,15 +678,15 @@ export class ApiClient {
    */
   static async getAuthHeaders(targetTenantId?: string): Promise<Record<string, string>> {
     const tenantId = targetTenantId || this.getTenantId();
-    let token = this.getToken();
-    if (!token) {
-      token = await this.ensureSession(tenantId);
-    }
-    return {
-      Authorization: `Bearer ${token}`,
+    const token = this.getToken();
+    const headers: Record<string, string> = {
       "x-tenant-id": tenantId,
       "Content-Type": "application/json",
     };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
   }
 
   /**
@@ -652,20 +709,28 @@ export class ApiClient {
 
     let response = await fetch(currentUrl, currentInit);
 
-    // Se 401/403 (token expirado ou tenant mismatch), renova sessão e tenta novamente
+    // Se 401 (token expirado ou inválido) ou 403 (falha de permissão RBAC), emite eventos
     if (
       (response.status === 401 || response.status === 403) &&
       !currentUrl.includes("/api/auth/login")
     ) {
-      const headers = (currentInit.headers as Record<string, string>) || {};
-      const tenantId = headers["x-tenant-id"] || this.getTenantId();
-      console.warn(
-        `[ApiClient] HTTP ${response.status} em ${currentUrl}. Renovando sessão para tenant ${tenantId}...`
-      );
-      const freshToken = await this.ensureSession(tenantId);
-      if (freshToken) {
-        (currentInit.headers as Record<string, string>)["Authorization"] = `Bearer ${freshToken}`;
-        response = await fetch(currentUrl, currentInit);
+      if (response.status === 401) {
+        this.logout();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("aura:auth:unauthorized", {
+              detail: { url: currentUrl, status: 401 },
+            })
+          );
+        }
+      } else if (response.status === 403) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("aura:auth:forbidden", {
+              detail: { url: currentUrl, status: 403 },
+            })
+          );
+        }
       }
     }
 

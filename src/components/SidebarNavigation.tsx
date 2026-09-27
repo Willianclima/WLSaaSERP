@@ -18,6 +18,7 @@ import {
   Award,
   Palette,
   Eye,
+  KeyRound,
 } from "lucide-react";
 import { TenantStore, StoreBrandingConfig, RBACUser } from "../types";
 import { mockCurrentUser } from "../data/mockData";
@@ -35,6 +36,7 @@ export interface SidebarNavigationProps {
   onOpenPlatformConsole?: () => void;
   pendingOrdersCount?: number;
   onLogout?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
@@ -48,6 +50,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   onOpenPlatformConsole,
   pendingOrdersCount = 0,
   onLogout,
+  onOpenAuthModal,
 }) => {
   const storeName = branding?.logoText || tenant?.name || "Lumina Semijoias";
   const storeSubtext = branding?.logoSubtext || "SEMIJOIAS NOBRES";
@@ -417,15 +420,26 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
             </div>
           </div>
 
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors cursor-pointer"
-              title="Sair"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {onOpenAuthModal && (
+              <button
+                onClick={onOpenAuthModal}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
+                title="Trocar de Conta / Autenticação (Login)"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                title="Sair (Logout)"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </aside>

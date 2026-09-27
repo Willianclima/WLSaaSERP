@@ -45,6 +45,7 @@ import {
   UserCheck,
   BarChart3,
   Package,
+  Crown,
 } from "lucide-react";
 import { TenantStore, RBACUser } from "../../types";
 import { apiClient } from "../../services/apiClient";

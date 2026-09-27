@@ -17,13 +17,15 @@ import {
   X,
   Smartphone,
   Package,
+  KeyRound,
 } from "lucide-react";
 import { TenantStore, RBACUser, SystemUserRole } from "../../types";
 
 export type ProductMode = "PLATFORM_OWNER" | "TENANT_STORE" | "STORE_CONSUMER";
 
 interface PlatformHeaderProps {
-  currentUser: RBACUser;
+  currentUser: RBACUser | null;
+  isAuthenticated?: boolean;
   currentMode: ProductMode;
   selectedTenant: TenantStore;
   tenants: TenantStore[];
@@ -31,10 +33,13 @@ interface PlatformHeaderProps {
   onSelectTenant: (tenant: TenantStore) => void;
   onOpenStorefrontPreview: () => void;
   onSwitchRole?: (role: SystemUserRole) => void;
+  onOpenAuthModal?: (defaultTab?: "STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION") => void;
+  onLogout?: () => void;
 }
 
 export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
   currentUser,
+  isAuthenticated = true,
   currentMode,
   selectedTenant,
   tenants,
@@ -42,15 +47,14 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
   onSelectTenant,
   onOpenStorefrontPreview,
   onSwitchRole,
+  onOpenAuthModal,
+  onLogout,
 }) => {
   const [showTenantDropdown, setShowTenantDropdown] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showArchitectureModal, setShowArchitectureModal] = useState(false);
 
-  // If user is not super admin and not simulating, don't render master switcher
-  if (currentUser.role !== "SUPER_ADMIN" && !currentUser.role.includes("ADMIN") && currentMode !== "STORE_CONSUMER") {
-    return null;
-  }
+  const isSuperAdmin = Boolean(currentUser?.role === "SUPER_ADMIN");
 
   const storeRoles: { id: SystemUserRole; label: string; desc: string }[] = [
     { id: "OWNER", label: "OWNER (Dona da Marca)", desc: "Acesso total à loja de semijoias" },
@@ -101,12 +105,27 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 currentMode === "PLATFORM_OWNER"
                   ? "bg-amber-400 text-stone-950 shadow-sm"
-                  : "text-stone-300 hover:text-white"
+                  : isSuperAdmin
+                  ? "text-stone-300 hover:text-white"
+                  : "text-stone-400 hover:text-amber-300 opacity-90"
               }`}
-              title="Camada 1 — AURA PLATFORM (Willian / SUPER_ADMIN): Organizações, Planos, Assinaturas, Trials, Módulos, Suporte, Auditoria"
+              title={
+                isSuperAdmin
+                  ? "Camada 1 — AURA PLATFORM (SUPER_ADMIN): Governança SaaS, Organizações, Planos, Assinaturas, Trials, Módulos, Auditoria"
+                  : "Camada 1 — AURA PLATFORM: Acesso restrito ao SuperAdmin da plataforma"
+              }
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
+              {isSuperAdmin ? (
+                <ShieldCheck className="w-3.5 h-3.5" />
+              ) : (
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+              )}
               <span>Camada 1 · AURA</span>
+              {!isSuperAdmin && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-stone-800 text-amber-400 font-mono hidden sm:inline">
+                  Admin
+                </span>
+              )}
             </button>
 
             {/* Camada 2: ERP do Cliente (Lojista / Piloto 01) */}
@@ -232,6 +251,58 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
                   </>
                 )}
               </div>
+            )}
+
+            {/* User Profile / Status Indicator */}
+            {currentUser && isAuthenticated ? (
+              <div className="flex items-center gap-1.5 pl-1">
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-900 border border-stone-800 rounded-xl text-xs"
+                  title={`Conectado como ${currentUser.name} (${currentUser.email})`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isSuperAdmin ? "bg-amber-400" : "bg-emerald-400"
+                    }`}
+                  />
+                  <span className="font-bold text-white max-w-[100px] truncate hidden md:inline">
+                    {currentUser.name}
+                  </span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase ${
+                      isSuperAdmin
+                        ? "bg-amber-400/20 text-amber-300 border border-amber-400/40"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    }`}
+                  >
+                    {isSuperAdmin ? "SuperAdmin" : currentUser.role}
+                  </span>
+                </div>
+
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="p-1.5 bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-rose-400 border border-stone-800 rounded-xl transition-colors cursor-pointer"
+                    title="Encerrar sessão (Logout)"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ) : null}
+
+            {/* Auth / Account Switcher Button */}
+            {onOpenAuthModal && (
+              <button
+                onClick={() => onOpenAuthModal(isSuperAdmin ? "ADMIN_LOGIN" : "STORE_LOGIN")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                title="Portal de Acesso: Login Administrador SaaS, Login da Lojista ou Criar Nova Loja (Trial)"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">
+                  {isAuthenticated ? "Trocar Perfil" : "Entrar"}
+                </span>
+              </button>
             )}
           </div>
         </div>
