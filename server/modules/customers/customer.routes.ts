@@ -2,11 +2,13 @@ import { Router } from "express";
 import { CustomerController } from "./customer.controller";
 import { authMiddleware } from "../../middlewares/authMiddleware";
 import { requireRole } from "../../middlewares/rbacMiddleware";
+import { enforceSubscriptionCommercialAccess } from "../../middlewares/subscriptionMiddleware";
 
 const router = Router();
 
 // Protect customer routes with Authentication
 router.use(authMiddleware);
+router.use(enforceSubscriptionCommercialAccess());
 
 // List customers
 router.get("/", CustomerController.list);

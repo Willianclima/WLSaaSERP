@@ -59,23 +59,42 @@ export function requireStoreStaff() {
 
 /**
  * Ensures the tenant's active plan authorizes the requested module.
+ * CONCEITO 3 & 4: Barreira de Módulos & Não Confiar no Frontend
+ * Se o plano não possui o módulo (ex: Starter tentando chamar consignments):
+ * O backend responde estritamente 403 com code "MODULE_NOT_INCLUDED".
  */
 export function requireModule(moduleKey: SystemModuleKey) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const orgId = req.organizationId;
       if (!orgId) {
-        return res.status(400).json({ success: false, error: "Organização não identificada no contexto." });
-      }
-
-      const isAuthorized = await AccessControlService.isModuleAuthorized(orgId, moduleKey);
-      if (!isAuthorized) {
-        return res.status(403).json({
+        return res.status(400).json({
           success: false,
-          error: `Módulo "${moduleKey}" bloqueado. Seu plano atual ou período de trial não contempla este recurso.`,
-          moduleKey,
+          code: "TENANT_REQUIRED",
+          error: "Organização não identificada no contexto da requisição.",
         });
       }
+
+      // SuperAdmin operando em governança global possui autorização técnica
+      const isSuperAdmin = Boolean(req.user?.isPlatformSuperAdmin || req.userRole === "SUPER_ADMIN");
+      if (isSuperAdmin) {
+        return next();
+      }
+
+      // Validação estrita do Módulo contra o Plano Contratado
+      const check = await AccessControlService.checkModuleInPlan(orgId, moduleKey);
+      if (!check.allowed) {
+        return res.status(403).json({
+          success: false,
+          code: check.code || "MODULE_NOT_INCLUDED",
+          error: check.error,
+          moduleKey,
+          currentPlan: check.planId,
+          planName: check.planName,
+          requiredAction: "UPGRADE_PLAN",
+        });
+      }
+
       next();
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });

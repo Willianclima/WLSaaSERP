@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AuthService } from "../services/authService";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
+import { subRepo } from "../repositories";
 
 const router = Router();
 
@@ -83,13 +84,41 @@ router.get("/me", authMiddleware, async (req: AuthenticatedRequest, res) => {
 });
 
 // GET /api/auth/validate-session - Strict RBAC session validation
-// Returns verified user credentials, role claims, and platform permissions
+// Returns verified user credentials, role claims, platform permissions, and subscription lifecycle status
 router.get("/validate-session", authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.user!;
     const tenant = req.tenant;
     const userRole = req.userRole;
     const isSuperAdmin = Boolean(user.isPlatformSuperAdmin || userRole === "SUPER_ADMIN");
+
+    let subscriptionData: any = null;
+    if (tenant?.id) {
+      try {
+        const sub = await subRepo.findByOrgId(tenant.id);
+        if (sub) {
+          const now = new Date();
+          const trialEnd = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
+          const isTrialExpired =
+            sub.status === "TRIALING" && trialEnd !== null && trialEnd.getTime() < now.getTime();
+          const isExpired = sub.status === "EXPIRED" || isTrialExpired;
+          const msRemaining = trialEnd ? trialEnd.getTime() - now.getTime() : 0;
+          const daysRemaining = Math.max(0, Math.ceil(msRemaining / (1000 * 60 * 60 * 24)));
+
+          subscriptionData = {
+            id: sub.id,
+            status: isExpired ? "EXPIRED" : sub.status,
+            planId: sub.planId,
+            trialEndsAt: sub.trialEndsAt,
+            daysRemaining,
+            isExpired,
+            isReadOnly: isExpired || sub.status === "READ_ONLY",
+          };
+        }
+      } catch (subErr) {
+        console.warn("Could not query subscription for validate-session:", subErr);
+      }
+    }
 
     return res.json({
       success: true,
@@ -110,10 +139,13 @@ router.get("/validate-session", authMiddleware, async (req: AuthenticatedRequest
             status: tenant.status,
           }
         : null,
+      subscription: subscriptionData,
       permissions: {
         canAccessPlatformOwner: isSuperAdmin,
         canAccessStoreERP: Boolean(tenant || isSuperAdmin),
         effectiveRole: userRole,
+        isSubscriptionExpired: subscriptionData?.isExpired || false,
+        isReadOnlyMode: subscriptionData?.isReadOnly || false,
       },
     });
   } catch (error: any) {
@@ -132,6 +164,32 @@ router.post("/switch-tenant", authMiddleware, async (req: AuthenticatedRequest, 
       success: true,
       message: `Alternado para a empresa ${session.organization.name}`,
       session,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/generate-expired-token - Gera token JWT propositalmente expirado para validação do TESTE 5
+router.post("/generate-expired-token", async (_req, res) => {
+  try {
+    const { JwtService } = await import("../services/jwtService");
+    const expiredToken = JwtService.sign(
+      {
+        sub: "usr-maria-01",
+        userId: "usr-maria-01",
+        email: "maria@elegance.com",
+        organizationId: "org-lumina-01",
+        tenantId: "org-lumina-01",
+        role: "OWNER",
+      },
+      "-1h" // Token expirado há 1 hora
+    );
+
+    return res.json({
+      success: true,
+      token: expiredToken,
+      message: "Token sintético expirado gerado com sucesso para teste de segurança.",
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });

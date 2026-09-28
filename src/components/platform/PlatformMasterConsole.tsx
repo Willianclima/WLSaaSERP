@@ -72,6 +72,7 @@ interface PlatformMasterConsoleProps {
   onImpersonateTenant: (tenant: TenantStore) => void;
   onOpenStoreSystem: () => void;
   onNotify?: (message: string) => void;
+  onOpenSaaSAudit?: () => void;
 }
 
 export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
@@ -82,6 +83,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   onImpersonateTenant,
   onOpenStoreSystem,
   onNotify,
+  onOpenSaaSAudit,
 }) => {
   const [currentTab, setCurrentTab] = useState<PlatformTab>(activeSubTab);
   const [dataSourceMode, setDataSourceMode] = useState<"REAL" | "DEMO">("REAL");
@@ -3041,6 +3043,16 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {onOpenSaaSAudit && (
+                <button
+                  onClick={onOpenSaaSAudit}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md"
+                  title="Abrir console interativo para auditar os 6 cenários de Identidade, RBAC, Multi-Tenant e Ciclo Comercial"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>🛡️ Auditoria SaaS (6 Cenários)</span>
+                </button>
+              )}
               <button
                 onClick={handleRunPilotFlowTest}
                 disabled={isRunningPilotFlow}

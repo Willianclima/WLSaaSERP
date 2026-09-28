@@ -3,6 +3,7 @@ export type SaaSPlanId = "TRIAL_30D" | "STARTER" | "PRO" | "ENTERPRISE";
 export type SubscriptionStatus =
   | "TRIALING"
   | "ACTIVE"
+  | "EXPIRED"
   | "PAST_DUE"
   | "READ_ONLY"
   | "SUSPENDED"

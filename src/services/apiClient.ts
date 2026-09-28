@@ -461,6 +461,15 @@ export function installGlobalFetchInterceptor(): void {
             window.dispatchEvent(new CustomEvent("aura:auth:unauthorized", { detail: { url: urlString, status: 401 } }));
           }
         } else if (resp.status === 403 && !urlString.includes("/api/auth/login")) {
+          // Detecta se a causa do 403 foi expiração do período de teste / assinatura
+          try {
+            resp.clone().json().then((body) => {
+              if (body?.code === "SUBSCRIPTION_EXPIRED" && typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("aura:subscription:expired", { detail: body }));
+              }
+            }).catch(() => {});
+          } catch (e) {}
+
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("aura:auth:forbidden", { detail: { url: urlString, status: 403 } }));
           }
@@ -639,10 +648,13 @@ export class ApiClient {
     valid: boolean;
     user?: any;
     organization?: any;
+    subscription?: any;
     permissions?: {
       canAccessPlatformOwner: boolean;
       canAccessStoreERP: boolean;
       effectiveRole: string;
+      isSubscriptionExpired?: boolean;
+      isReadOnlyMode?: boolean;
     };
     error?: string;
   }> {
@@ -975,6 +987,30 @@ export class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Erro ao alternar módulo.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Simula a expiração do trial para validação de ciclo comercial (TESTE 6).
+   */
+  static async simulateTrialExpiration(): Promise<any> {
+    const res = await this.post("/api/subscriptions/simulate-expiry", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao simular expiração do trial.`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Reativa a assinatura da organização para o estado ativo.
+   */
+  static async reactivateSubscription(): Promise<any> {
+    const res = await this.post("/api/subscriptions/reactivate", {});
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Erro ao reativar assinatura.`);
     }
     return res.json();
   }

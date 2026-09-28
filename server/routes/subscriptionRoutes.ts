@@ -80,4 +80,62 @@ router.post(
   }
 );
 
+// POST /api/subscriptions/simulate-expiry - Simula expiração do trial para validação de ciclo comercial (TESTE 6)
+router.post(
+  "/simulate-expiry",
+  authMiddleware,
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const orgId = req.organizationId!;
+      const result = await SubscriptionService.simulateTrialExpiration(orgId);
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// POST /api/subscriptions/transition - Realiza transição na máquina de estados finita do ciclo comercial
+router.post(
+  "/transition",
+  authMiddleware,
+  requireRole(["SUPER_ADMIN", "OWNER"]),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const orgId = req.organizationId!;
+      const { targetStatus, reason } = req.body;
+
+      if (!targetStatus) {
+        return res.status(400).json({ success: false, error: "targetStatus é obrigatório" });
+      }
+
+      const updated = await SubscriptionService.transitionStatus(orgId, targetStatus, reason);
+      return res.json({
+        success: true,
+        message: `Status da assinatura transicionado com sucesso para '${targetStatus}'`,
+        subscription: updated,
+      });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// POST /api/subscriptions/reactivate - Reativa a assinatura da organização
+router.post(
+  "/reactivate",
+  authMiddleware,
+  requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const orgId = req.organizationId!;
+      const result = await SubscriptionService.reactivateSubscription(orgId);
+      return res.json(result);
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
 export default router;

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { OrderController } from "./order.controller";
 import { authMiddleware } from "../../middlewares/authMiddleware";
+import { enforceSubscriptionCommercialAccess } from "../../middlewares/subscriptionMiddleware";
 
 const router = Router();
 
@@ -9,6 +10,7 @@ router.post("/public", OrderController.createPublic);
 
 // Apply auth/tenant middleware to all operator order routes
 router.use(authMiddleware);
+router.use(enforceSubscriptionCommercialAccess());
 
 // Orders CRUD & Pipeline Querying
 router.get("/", OrderController.list);

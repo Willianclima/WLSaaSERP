@@ -554,11 +554,13 @@ export class PlanRepository implements IPlanRepository {
 
 export class ModuleRepository implements IModuleRepository {
   async listByOrgId(orgId: string): Promise<OrganizationModuleEntity[]> {
-    const res = await query(
-      "SELECT * FROM organization_modules WHERE organization_id = $1 ORDER BY module_key ASC",
-      [orgId]
-    );
-    return res.rows.map(mapRowToModule);
+    return TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      const res = await query(
+        "SELECT * FROM organization_modules WHERE organization_id = $1 ORDER BY module_key ASC",
+        [orgId]
+      );
+      return res.rows.map(mapRowToModule);
+    });
   }
 
   async setModuleStatus(
@@ -566,25 +568,29 @@ export class ModuleRepository implements IModuleRepository {
     moduleKey: SystemModuleKey,
     isEnabled: boolean
   ): Promise<OrganizationModuleEntity> {
-    const modId = `mod-${orgId}-${moduleKey}`;
-    const res = await query(
-      `INSERT INTO organization_modules (id, organization_id, module_key, is_enabled, activated_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (organization_id, module_key) DO UPDATE
-       SET is_enabled = EXCLUDED.is_enabled
-       RETURNING *`,
-      [modId, orgId, moduleKey, isEnabled]
-    );
-    return mapRowToModule(res.rows[0]);
+    return TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      const modId = `mod-${orgId}-${moduleKey}`;
+      const res = await query(
+        `INSERT INTO organization_modules (id, organization_id, module_key, is_enabled, activated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (organization_id, module_key) DO UPDATE
+         SET is_enabled = EXCLUDED.is_enabled
+         RETURNING *`,
+        [modId, orgId, moduleKey, isEnabled]
+      );
+      return mapRowToModule(res.rows[0]);
+    });
   }
 
   async bulkInitialize(orgId: string, allowedKeys: SystemModuleKey[]): Promise<OrganizationModuleEntity[]> {
-    const results: OrganizationModuleEntity[] = [];
-    for (const key of allowedKeys) {
-      const res = await this.setModuleStatus(orgId, key, true);
-      results.push(res);
-    }
-    return results;
+    return TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      const results: OrganizationModuleEntity[] = [];
+      for (const key of allowedKeys) {
+        const res = await this.setModuleStatus(orgId, key, true);
+        results.push(res);
+      }
+      return results;
+    });
   }
 }
 

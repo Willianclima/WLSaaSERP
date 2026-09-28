@@ -3,12 +3,14 @@ import { InventoryController } from "./inventory.controller";
 import { InventoryBalancesController } from "./inventoryBalances.controller";
 import { authMiddleware } from "../../middlewares/authMiddleware";
 import { requireModule, requireRole } from "../../middlewares/rbacMiddleware";
+import { enforceSubscriptionCommercialAccess } from "../../middlewares/subscriptionMiddleware";
 
 const router = Router();
 
 // Protect with Auth and Catalog Inventory Module
 router.use(authMiddleware);
 router.use(requireModule("catalog_inventory"));
+router.use(enforceSubscriptionCommercialAccess());
 
 // Locations
 router.get("/locations", InventoryController.listLocations);

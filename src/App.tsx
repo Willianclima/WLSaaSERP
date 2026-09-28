@@ -19,6 +19,8 @@ import { AuthModal } from "./components/auth/AuthModal";
 import { RBACAuthMiddleware } from "./components/auth/RBACAuthMiddleware";
 import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
+import { SubscriptionExpiredModal } from "./components/saas/SubscriptionExpiredModal";
+import { SaaSAuditModal } from "./components/saas/SaaSAuditModal";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
 
 // Modular Domain Architecture (Platform, Store, Catalog, Orders, Customers, Inventory, Onboarding)
@@ -209,6 +211,10 @@ export default function App() {
   const [showAssistantHelpModal, setShowAssistantHelpModal] = useState<boolean>(false);
   const [showCriticalPathModal, setShowCriticalPathModal] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState<boolean>(false);
+  const [showSaaSAuditModal, setShowSaaSAuditModal] = useState<boolean>(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("TRIALING");
+  const [isSubscriptionExpired, setIsSubscriptionExpired] = useState<boolean>(false);
   const [trialRemainingDays, setTrialRemainingDays] = useState<number>(27);
   const [trialEndsAt, setTrialEndsAt] = useState<string>("2026-09-28");
   const [isOnboardingComplete, setIsOnboardingComplete] = useState<boolean>(true);
@@ -279,6 +285,17 @@ export default function App() {
             localStorage.setItem("aura_user_profile", JSON.stringify(validatedUser));
           } catch (e) {}
 
+          if (res.subscription) {
+            setSubscriptionStatus(res.subscription.status);
+            setIsSubscriptionExpired(Boolean(res.subscription.isExpired));
+            if (res.subscription.daysRemaining !== undefined) {
+              setTrialRemainingDays(res.subscription.daysRemaining);
+            }
+            if (res.subscription.trialEndsAt) {
+              setTrialEndsAt(res.subscription.trialEndsAt.substring(0, 10));
+            }
+          }
+
           if (res.organization) {
             const org = res.organization;
             const matchedTenant = tenants.find((t) => t.id === org.id);
@@ -305,7 +322,7 @@ export default function App() {
     validateActiveSession();
   }, []);
 
-  // Escuta eventos globais de 401 (desautorizado) e 403 (proibido) emitidos pelos interceptors
+  // Escuta eventos globais de 401 (desautorizado), 403 (proibido) e expiração de assinatura
   useEffect(() => {
     const handleUnauthorized = () => {
       setIsAuthenticated(false);
@@ -318,11 +335,20 @@ export default function App() {
       showToast("❌ Acesso negado: Seu perfil não possui permissão para acessar esta área.");
     };
 
+    const handleSubscriptionExpired = () => {
+      setIsSubscriptionExpired(true);
+      setSubscriptionStatus("EXPIRED");
+      setShowSubscriptionModal(true);
+      showToast("⚠️ Seu período de teste terminou. Ative seu plano para registrar novas vendas.");
+    };
+
     window.addEventListener("aura:auth:unauthorized", handleUnauthorized);
     window.addEventListener("aura:auth:forbidden", handleForbidden);
+    window.addEventListener("aura:subscription:expired", handleSubscriptionExpired);
     return () => {
       window.removeEventListener("aura:auth:unauthorized", handleUnauthorized);
       window.removeEventListener("aura:auth:forbidden", handleForbidden);
+      window.removeEventListener("aura:subscription:expired", handleSubscriptionExpired);
     };
   }, []);
 
@@ -336,9 +362,13 @@ export default function App() {
   const checkOnboardingStatus = async () => {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch("/api/onboarding/status", { headers });
-      if (res.ok) {
-        const data = await res.json();
+      const [resOnboarding, resSub] = await Promise.all([
+        fetch("/api/onboarding/status", { headers }),
+        fetch("/api/subscriptions/current", { headers }),
+      ]);
+
+      if (resOnboarding.ok) {
+        const data = await resOnboarding.json();
         if (data.success && data.data) {
           if (data.data.trialRemainingDays !== undefined) {
             setTrialRemainingDays(data.data.trialRemainingDays);
@@ -349,8 +379,51 @@ export default function App() {
           setIsOnboardingComplete(Boolean(data.data.isOnboardingComplete));
         }
       }
+
+      if (resSub.ok) {
+        const subData = await resSub.json();
+        if (subData.success && subData.data) {
+          const sub = subData.data.subscription;
+          const status = subData.data.status || sub?.status || "TRIALING";
+          const isExp = status === "EXPIRED" || status === "READ_ONLY" || subData.data.trial?.isExpired;
+          setSubscriptionStatus(status);
+          setIsSubscriptionExpired(Boolean(isExp));
+          if (subData.data.trial?.daysRemaining !== undefined) {
+            setTrialRemainingDays(subData.data.trial.daysRemaining);
+          }
+          if (sub?.trialEndsAt) {
+            setTrialEndsAt(sub.trialEndsAt.substring(0, 10));
+          }
+        }
+      }
     } catch (e) {
-      console.warn("Could not check onboarding status:", e);
+      console.warn("Could not check onboarding/subscription status:", e);
+    }
+  };
+
+  const handleSimulateExpiry = async () => {
+    try {
+      await apiClient.simulateTrialExpiration();
+      setSubscriptionStatus("EXPIRED");
+      setIsSubscriptionExpired(true);
+      setTrialRemainingDays(0);
+      showToast("⚠️ Período de teste expirado! O sistema entrou em Modo Somente-Leitura.");
+      setShowSubscriptionModal(true);
+    } catch (err: any) {
+      showToast(`Erro ao simular expiração: ${err.message}`);
+    }
+  };
+
+  const handleReactivateTrial = async () => {
+    try {
+      await apiClient.reactivateSubscription();
+      setSubscriptionStatus("ACTIVE");
+      setIsSubscriptionExpired(false);
+      setTrialRemainingDays(30);
+      showToast("✅ Assinatura reativada com sucesso! Vendas e cadastros liberados.");
+      await refreshBackendData();
+    } catch (err: any) {
+      showToast(`Erro ao reativar assinatura: ${err.message}`);
     }
   };
 
@@ -1535,6 +1608,7 @@ export default function App() {
               }}
               onOpenStoreSystem={() => setProductMode("TENANT_STORE")}
               onNotify={(msg) => showToast(msg)}
+              onOpenSaaSAudit={() => setShowSaaSAuditModal(true)}
             />
           </main>
         </RBACAuthMiddleware>
@@ -1557,11 +1631,18 @@ export default function App() {
             remainingDays={trialRemainingDays}
             trialEndsAt={trialEndsAt}
             storeName={selectedTenant.name}
+            isExpired={isSubscriptionExpired}
+            status={subscriptionStatus}
+            isAssistedSupport={currentUser?.role === "SUPER_ADMIN"}
             onOpenOnboarding={() => setShowOnboardingModal(true)}
             onOpenStorefront={() => setActiveTab("myStore")}
             onOpenShareModal={() => setShowShareModal(true)}
             onOpenSettings={() => setActiveTab("storeSettings")}
             onOpenCriticalPath={() => setShowCriticalPathModal(true)}
+            onOpenBilling={() => setShowSubscriptionModal(true)}
+            onOpenAudit={() => setShowSaaSAuditModal(true)}
+            onSimulateExpiry={handleSimulateExpiry}
+            onReactivate={handleReactivateTrial}
           />
 
           {/* Main Layout Container with Sidebar and Content Rail */}
@@ -1575,8 +1656,22 @@ export default function App() {
                 branding={brandingConfig}
                 currentUser={currentUser || undefined}
                 onOpenHelp={() => setShowAssistantHelpModal(true)}
-                onOpenNewSale={() => setShowQuickSaleModal(true)}
-                onOpenNewProduct={() => setShowQuickProductModal(true)}
+                onOpenNewSale={() => {
+                  if (isSubscriptionExpired) {
+                    showToast("⚠️ Período de teste terminado. Ative seu plano para registrar novas vendas.");
+                    setShowSubscriptionModal(true);
+                  } else {
+                    setShowQuickSaleModal(true);
+                  }
+                }}
+                onOpenNewProduct={() => {
+                  if (isSubscriptionExpired) {
+                    showToast("⚠️ Período de teste terminado. Ative seu plano para cadastrar novos produtos.");
+                    setShowSubscriptionModal(true);
+                  } else {
+                    setShowQuickProductModal(true);
+                  }
+                }}
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
                 pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
@@ -1597,7 +1692,14 @@ export default function App() {
               currentUser={currentUser || undefined}
               onTenantChange={setSelectedTenant}
               onOpenShareModal={() => setShowShareModal(true)}
-              onOpenNewSale={() => setShowQuickSaleModal(true)}
+              onOpenNewSale={() => {
+                if (isSubscriptionExpired) {
+                  showToast("⚠️ Período de teste terminado. Ative seu plano para registrar novas vendas.");
+                  setShowSubscriptionModal(true);
+                } else {
+                  setShowQuickSaleModal(true);
+                }
+              }}
               onOpenHelp={() => setShowAssistantHelpModal(true)}
               onOpenAuthModal={() => openAuthModal("STORE_LOGIN")}
             />
@@ -1615,8 +1717,22 @@ export default function App() {
                 warranties={warranties}
                 currentUser={currentUser}
                 onNavigateTab={setActiveTab}
-                onOpenNewSale={() => setActiveTab("vender")}
-                onOpenNewProduct={() => setShowQuickProductModal(true)}
+                onOpenNewSale={() => {
+                  if (isSubscriptionExpired) {
+                    showToast("⚠️ Período de teste terminado. Ative seu plano para registrar novas vendas.");
+                    setShowSubscriptionModal(true);
+                  } else {
+                    setActiveTab("vender");
+                  }
+                }}
+                onOpenNewProduct={() => {
+                  if (isSubscriptionExpired) {
+                    showToast("⚠️ Período de teste terminado. Ative seu plano para cadastrar novos produtos.");
+                    setShowSubscriptionModal(true);
+                  } else {
+                    setShowQuickProductModal(true);
+                  }
+                }}
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenNewCustomer={() => setActiveTab("customers")}
                 onConfirmOrderPayment={handleConfirmOrderPayment}
@@ -1915,6 +2031,34 @@ export default function App() {
           setShowCriticalPathModal(false);
           setActiveTab("storefront");
         }}
+      />
+
+      {/* SaaS Subscription Expired & Plan Activation Modal */}
+      <SubscriptionExpiredModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        organizationName={selectedTenant.name}
+        currentPlanId="TRIAL_30D"
+        onPlanActivated={async (planId) => {
+          setShowSubscriptionModal(false);
+          setSubscriptionStatus("ACTIVE");
+          setIsSubscriptionExpired(false);
+          setTrialRemainingDays(30);
+          showToast(`🎉 Plano ${planId} ativado com sucesso! Vendas e cadastros liberados.`);
+          await refreshBackendData();
+          await checkOnboardingStatus();
+        }}
+      />
+
+      {/* Interactive SaaS Architecture & Governance Audit Console (6 Testes) */}
+      <SaaSAuditModal
+        isOpen={showSaaSAuditModal}
+        onClose={() => setShowSaaSAuditModal(false)}
+        currentUser={currentUser}
+        selectedTenant={selectedTenant}
+        onTriggerSubscriptionExpired={handleSimulateExpiry}
+        onTriggerReactivateTrial={handleReactivateTrial}
+        onOpenAuthModal={() => openAuthModal("STORE_LOGIN")}
       />
 
       {/* Unified Authentication & Login Modal */}

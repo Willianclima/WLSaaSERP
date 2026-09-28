@@ -41,7 +41,10 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     const isProduction = process.env.NODE_ENV === "production";
 
     const authHeader = req.headers.authorization;
-    const tenantHeader = (req.headers["x-tenant-id"] as string) || (req.query.tenantId as string);
+    const tenantHeader =
+      (req.headers["x-tenant-id"] as string) ||
+      (req.query.tenantId as string) ||
+      (req.query.organizationId as string);
 
     // -------------------------------------------------------------------------
     // 1. EXTRACT & VERIFY AUTHORIZATION BEARER TOKEN (STRICT ENFORCEMENT)

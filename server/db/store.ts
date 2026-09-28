@@ -116,7 +116,7 @@ export const INITIAL_PLANS: PlanDefinition[] = [
       "custom_jewelry",
       "ecommerce_storefront",
       "custom_domain_ssl",
-      "webhooks_api",
+      "ai_copilot_mcp",
       "security_lgpd",
     ],
     description: "Para marcas e distribuidoras que operam com rede de revendedoras em consignação e comissões automáticas.",
