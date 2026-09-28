@@ -153,6 +153,8 @@ interface LandingHomeExperienceProps {
   resellers: Reseller[];
   onOpenStorefront: (category?: string, coupon?: string) => void;
   onOpenAdminERP: (tab?: string) => void;
+  onOpenRegisterTrial?: () => void;
+  onOpenLogin?: () => void;
 }
 
 export const LandingHomeExperience: React.FC<LandingHomeExperienceProps> = ({
@@ -162,6 +164,8 @@ export const LandingHomeExperience: React.FC<LandingHomeExperienceProps> = ({
   resellers,
   onOpenStorefront,
   onOpenAdminERP,
+  onOpenRegisterTrial,
+  onOpenLogin,
 }) => {
   const brand: StoreBrandingConfig = branding || {
     logoType: "TEXT",
@@ -426,8 +430,19 @@ export const LandingHomeExperience: React.FC<LandingHomeExperienceProps> = ({
             </button>
           </nav>
 
-          {/* Consumer Store CTA */}
+          {/* Consumer Store CTA & Create Store for new merchants */}
           <div className="flex items-center gap-3">
+            {onOpenRegisterTrial && (
+              <button
+                onClick={onOpenRegisterTrial}
+                className="px-4 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider bg-stone-900 hover:bg-stone-800 text-amber-300 border border-amber-400/50 hover:border-amber-300 transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Criar Minha Loja</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-extrabold hidden sm:inline">30d Grátis</span>
+              </button>
+            )}
+
             <button
               onClick={() => onOpenStorefront()}
               className="px-5 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider transition-all shadow-lg hover:scale-105 flex items-center gap-2 cursor-pointer"
@@ -437,7 +452,7 @@ export const LandingHomeExperience: React.FC<LandingHomeExperienceProps> = ({
               }}
             >
               <ShoppingBag className="w-4 h-4 text-stone-950" />
-              <span>Entrar na Loja</span>
+              <span>Ver Catálogo</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

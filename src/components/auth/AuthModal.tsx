@@ -29,7 +29,12 @@ interface AuthModalProps {
   currentUser: RBACUser | null;
   currentTenant: TenantStore;
   tenants: TenantStore[];
-  onLoginSuccess: (user: RBACUser, tenant: TenantStore, targetMode: "PLATFORM_OWNER" | "TENANT_STORE") => void;
+  onLoginSuccess: (
+    user: RBACUser,
+    tenant: TenantStore,
+    targetMode: "PLATFORM_OWNER" | "TENANT_STORE",
+    isNewRegistration?: boolean
+  ) => void;
   initialTab?: "STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION";
 }
 
@@ -286,7 +291,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
 
       toast.success(`🎉 Parabéns, ${regName}! Sua loja "${regStoreName}" foi criada com 30 dias de Trial ativo!`);
-      onLoginSuccess(newUser, newTenant, "TENANT_STORE");
+      onLoginSuccess(newUser, newTenant, "TENANT_STORE", true);
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Erro ao cadastrar loja.");

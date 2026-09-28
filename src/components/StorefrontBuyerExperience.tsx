@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ExternalLink,
   ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import {
   ProductItem,
@@ -35,6 +36,7 @@ import {
 } from "../services/whatsappOrderService";
 import { ShareCatalogModal } from "./ShareCatalogModal";
 import confetti from "canvas-confetti";
+import { toast } from "../utils/toast";
 
 export interface CartItem {
   product: ProductItem;
@@ -88,6 +90,19 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
   // Product Preview Modal state
   const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
   const [selectedBathForModal, setSelectedBathForModal] = useState<string>("");
+
+  // Dedicated Stock Conflict Modal (Teste 4: Concorrência de Estoque)
+  const [stockConflictData, setStockConflictData] = useState<{
+    isOpen: boolean;
+    productName: string;
+    sku: string;
+    message: string;
+  }>({
+    isOpen: false,
+    productName: "",
+    sku: "",
+    message: "",
+  });
 
   // Favorites & Share
   const [likedProducts, setLikedProducts] = useState<Record<string, boolean>>({});
@@ -386,7 +401,35 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
       setIsOrderSuccess(true);
     } catch (err: any) {
       console.error("Erro ao registrar pedido no ERP:", err);
-      // Fallback: Generate the WhatsApp link regardless so the sale is never blocked
+
+      // TESTE 4: Verificação Estrita de Concorrência e Reserva de Estoque (Cliente A vs Cliente B)
+      const isStockConflict =
+        err?.code === "INSUFFICIENT_STOCK" ||
+        err?.status === 409 ||
+        err?.message?.includes("INSUFFICIENT_STOCK") ||
+        err?.message?.includes("STOCK_UNAVAILABLE") ||
+        err?.message?.includes("Saldo insuficiente") ||
+        err?.message?.includes("reservada") ||
+        err?.message?.includes("esgotad") ||
+        err?.message?.includes("insuficiente") ||
+        err?.message?.includes("409");
+
+      if (isStockConflict) {
+        const firstItem = cartItems[0];
+        const prodName = firstItem?.product?.name || "Peça selecionada";
+        const prodSku = firstItem?.product?.sku || "ANEL-001";
+
+        setStockConflictData({
+          isOpen: true,
+          productName: prodName,
+          sku: prodSku,
+          message: "Essa peça acabou de ser reservada.",
+        });
+        toast.error(`❌ Essa peça acabou de ser reservada por outro cliente. (${prodSku})`);
+        return;
+      }
+
+      // Fallback: Generate the WhatsApp link regardless so the sale is never blocked for network glitched orders
       const waPayload: TraceableWhatsAppOrderPayload = {
         organizationId: tenant.id,
         organizationName: storeDisplayName,
@@ -457,6 +500,22 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
                 Nível 1 (Plataforma)
               </button>
             )}
+            <button
+              onClick={() => {
+                // Simulação controlada de concorrência com Estoque = 1 (Teste 4 do Piloto)
+                const ringItem = products.find((p) => p.sku === "ANEL-001" || p.category === "ANEIS") || products[0];
+                setStockConflictData({
+                  isOpen: true,
+                  productName: ringItem ? ringItem.name : "Anel Solitário Cravejado Zircônia Oval",
+                  sku: ringItem ? ringItem.sku : "ANEL-001",
+                  message: "Essa peça acabou de ser reservada por outro cliente.",
+                });
+              }}
+              className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold tracking-wide transition-all cursor-pointer shadow-xs"
+              title="Demonstrar como a interface reage quando outro cliente compra a última unidade simultaneamente"
+            >
+              ⚡ Simular Teste 4 (Estoque = 1)
+            </button>
           </div>
         </div>
       )}
@@ -1048,6 +1107,47 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
               >
                 <ShoppingBag className="w-4 h-4 text-amber-400" />
                 <span>Quero comprar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teste 4: Modal Explicativo de Concorrência e Reserva de Estoque */}
+      {stockConflictData.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-rose-200 text-center space-y-4 animate-scaleUp">
+            <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
+                Estoque Esgotado em Tempo Real
+              </span>
+              <h3 className="text-xl font-serif font-bold text-stone-900">
+                Essa peça acabou de ser reservada.
+              </h3>
+              <p className="text-sm text-stone-600 leading-relaxed">
+                Outro cliente concluiu o pedido de <strong>{stockConflictData.productName}</strong> ({stockConflictData.sku}) frações de segundo antes.
+              </p>
+              <div className="bg-stone-50 rounded-2xl p-3 text-xs text-stone-500 border border-stone-200 text-left space-y-1">
+                <p className="font-semibold text-stone-700">🔒 Garantia de Estoque Concorrente (Zero Overselling):</p>
+                <p>O sistema protege você e a loja, impedindo que pagamentos duplicados sejam efetuados para a mesma joia física única.</p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStockConflictData({ isOpen: false, productName: "", sku: "", message: "" });
+                  setCartItems([]);
+                  setIsBagOpen(false);
+                }}
+                className="w-full py-3.5 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
+              >
+                Entendido, Escolher Outra Peça
               </button>
             </div>
           </div>

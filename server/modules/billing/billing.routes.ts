@@ -34,6 +34,46 @@ router.post("/webhook", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// 1.1 ASAAS PAYMENT PROVIDER ADAPTER (PILOTO 01 — ÚNICO PROVEDOR CONECTADO)
+// Asaas Webhook -> POST /api/billing/webhook/asaas -> Idempotência -> ACTIVE
+// ============================================================================
+router.post("/webhook/asaas", async (req: Request, res: Response) => {
+  try {
+    const asaasBody = req.body;
+    const eventId = asaasBody.id || asaasBody.payment?.id || `asaas-evt-${Date.now()}`;
+    const invoiceId = asaasBody.payment?.externalReference || asaasBody.invoiceId || asaasBody.externalReference;
+
+    if (!invoiceId) {
+      return res.status(400).json({
+        success: false,
+        error: "Asaas webhook: externalReference (invoiceId) não informado.",
+      });
+    }
+
+    let eventType: "PAYMENT_APPROVED" | "INVOICE_OVERDUE" = "PAYMENT_APPROVED";
+    if (asaasBody.event === "PAYMENT_OVERDUE") {
+      eventType = "INVOICE_OVERDUE";
+    }
+
+    const result = await BillingService.processWebhook({
+      eventId,
+      eventType,
+      invoiceId,
+      providerTxId: asaasBody.payment?.id,
+      amount: asaasBody.payment?.value,
+      paymentMethod: "PIX",
+      paidAt: asaasBody.payment?.paymentDate || new Date().toISOString(),
+      rawPayload: asaasBody,
+    });
+
+    return res.status(200).json({ success: true, provider: "ASAAS", result });
+  } catch (error: any) {
+    console.error("[Asaas Webhook Error]:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
 // 2. CHECKOUT & INVOICE CREATION (LOJISTA / STORE OWNER)
 // ============================================================================
 router.post(

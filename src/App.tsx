@@ -1501,6 +1501,8 @@ export default function App() {
         resellers={resellers}
         onOpenStorefront={handleOpenStorefrontFromHome}
         onOpenAdminERP={(tab) => setActiveTab(tab || "dashboard")}
+        onOpenRegisterTrial={() => openAuthModal("REGISTER_TRIAL")}
+        onOpenLogin={() => openAuthModal("STORE_LOGIN")}
       />
     );
   }
@@ -2069,7 +2071,7 @@ export default function App() {
         currentTenant={selectedTenant}
         tenants={tenants}
         initialTab={authModalTab}
-        onLoginSuccess={(user, tenant, targetMode) => {
+        onLoginSuccess={(user, tenant, targetMode, isNewRegistration) => {
           setCurrentUser(user);
           setSelectedTenant(tenant);
           setIsAuthenticated(true);
@@ -2077,7 +2079,10 @@ export default function App() {
           if (targetMode === "PLATFORM_OWNER") {
             setActiveTab("ownerHome");
           } else {
-            setActiveTab("dashboard");
+            setActiveTab("ownerHome");
+            if (isNewRegistration) {
+              setShowOnboardingModal(true);
+            }
           }
           try {
             localStorage.setItem("aura_user_profile", JSON.stringify(user));

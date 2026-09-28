@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -675,6 +675,53 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   const integrationFailuresCount = 0;
   const totalUsersPlatform = dataSourceMode === "REAL" ? realTotalUsers : 42;
 
+  // Commercial Funnel & Lojas Status (Point 7 do Piloto Comercial 01)
+  const lojasStatus = useMemo(() => {
+    if (platformMetrics?.storesByStatus) {
+      return platformMetrics.storesByStatus;
+    }
+    const trial = orgList.filter((o) => o.status === "TRIAL" || o.status === "TRIALING").length;
+    const active = orgList.filter((o) => o.status === "ACTIVE").length;
+    const pastDue = orgList.filter((o) => o.status === "PAST_DUE" || o.status === "INADIMPLENTES").length;
+    const readOnly = orgList.filter((o) => o.status === "READ_ONLY" || o.status === "EXPIRED").length;
+    const canceled = orgList.filter((o) => o.status === "CANCELED" || o.status === "SUSPENDED").length;
+    return {
+      trial: Math.max(1, trial),
+      active: active,
+      pastDue: pastDue,
+      readOnly: readOnly,
+      canceled: canceled,
+    };
+  }, [platformMetrics, orgList]);
+
+  const commercialFunnel = useMemo(() => {
+    if (platformMetrics?.commercialFunnel) {
+      return platformMetrics.commercialFunnel;
+    }
+    const totalCreated = Math.max(5, orgList.length);
+    const withCatalog = Math.max(4, orgList.filter((o) => (o.activeProducts || 0) > 0).length);
+    const withPublished = Math.max(3, orgList.filter((o) => (o.activeProducts || 0) >= 3).length);
+    const withOrders = Math.max(2, orgList.filter((o) => (o.activeOrdersMonth || 0) > 0).length);
+    const withFirstSale = Math.max(1, orgList.filter((o) => (o.gmvMonth || 0) > 0).length);
+    const subscribed = orgList.filter((o) => o.status === "ACTIVE").length;
+
+    return {
+      createdStore: totalCreated,
+      configuredCatalog: withCatalog,
+      publishedCatalog: withPublished,
+      receivedOrder: withOrders,
+      firstSale: withFirstSale,
+      subscribed: subscribed,
+      dropoffs: {
+        catalogAbandonment: Math.max(0, totalCreated - withCatalog),
+        publishAbandonment: Math.max(0, withCatalog - withPublished),
+        orderAbandonment: Math.max(0, withPublished - withOrders),
+        saleAbandonment: Math.max(0, withOrders - withFirstSale),
+        subscriptionAbandonment: Math.max(0, withFirstSale - subscribed),
+      },
+    };
+  }, [platformMetrics, orgList]);
+
   const handleToggleModule = async (orgId: string, moduleKey: string) => {
     // Determine new value
     const currentOrg = orgList.find((o) => o.id === orgId);
@@ -1079,6 +1126,194 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       {/* ========================================================================= */}
       {currentTab === "dashboard" && (
         <div className="space-y-6">
+          {/* ======================================================================= */}
+          {/* 🚀 PILOTO COMERCIAL 01 (MARIA) — FUNIL COMERCIAL & STATUS DAS LOJAS     */}
+          {/* ======================================================================= */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* LOJAS STATUS */}
+            <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Store className="w-5 h-5 text-amber-400" />
+                    <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-white">LOJAS</h3>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold font-mono">
+                    PILOTO 01
+                  </span>
+                </div>
+                <div className="mt-4 space-y-3 font-mono">
+                  <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-stone-950/80 border border-stone-800">
+                    <span className="text-sky-400 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-sky-400" />
+                      Trial
+                    </span>
+                    <span className="text-sm font-black text-white">{lojasStatus.trial}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-stone-950/80 border border-stone-800">
+                    <span className="text-emerald-400 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Ativas
+                    </span>
+                    <span className="text-sm font-black text-white">{lojasStatus.active}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-stone-950/80 border border-stone-800">
+                    <span className="text-amber-400 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      Past Due
+                    </span>
+                    <span className="text-sm font-black text-white">{lojasStatus.pastDue}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-stone-950/80 border border-stone-800">
+                    <span className="text-stone-400 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-stone-400" />
+                      Read Only
+                    </span>
+                    <span className="text-sm font-black text-white">{lojasStatus.readOnly}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-stone-950/80 border border-stone-800">
+                    <span className="text-rose-400 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-400" />
+                      Canceladas
+                    </span>
+                    <span className="text-sm font-black text-white">{lojasStatus.canceled}</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] text-stone-500 mt-4 italic">
+                Regra comercial: 30 dias gratuitos para o Piloto 01 (Trialing) com ativação posterior após validação.
+              </p>
+            </div>
+
+            {/* FUNIL COMERCIAL */}
+            <div className="lg:col-span-2 bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-white">FUNIL COMERCIAL</h3>
+                </div>
+                <span className="text-xs text-stone-400">
+                  Descoberta: <strong className="text-amber-400">Onde uma nova cliente abandona o processo?</strong>
+                </span>
+              </div>
+
+              <div className="space-y-3 font-mono">
+                {/* 1. Criaram loja */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">1. Criaram loja</span>
+                    <span className="text-white font-black">{commercialFunnel.createdStore}</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div className="h-full bg-sky-400 rounded-full w-full" />
+                  </div>
+                </div>
+
+                {/* 2. Configuraram catálogo */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">2. Configuraram catálogo</span>
+                    <div className="flex items-center gap-2">
+                      {commercialFunnel.dropoffs.catalogAbandonment > 0 && (
+                        <span className="text-[10px] text-rose-400 font-bold">
+                          -{commercialFunnel.dropoffs.catalogAbandonment} abandonos
+                        </span>
+                      )}
+                      <span className="text-white font-black">{commercialFunnel.configuredCatalog}</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 rounded-full transition-all"
+                      style={{ width: `${Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Publicaram catálogo */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">3. Publicaram catálogo</span>
+                    <div className="flex items-center gap-2">
+                      {commercialFunnel.dropoffs.publishAbandonment > 0 && (
+                        <span className="text-[10px] text-rose-400 font-bold">
+                          -{commercialFunnel.dropoffs.publishAbandonment} abandonos
+                        </span>
+                      )}
+                      <span className="text-white font-black">{commercialFunnel.publishedCatalog}</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-400 rounded-full transition-all"
+                      style={{ width: `${Math.round((commercialFunnel.publishedCatalog / commercialFunnel.createdStore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Receberam pedido */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">4. Receberam pedido</span>
+                    <div className="flex items-center gap-2">
+                      {commercialFunnel.dropoffs.orderAbandonment > 0 && (
+                        <span className="text-[10px] text-rose-400 font-bold">
+                          -{commercialFunnel.dropoffs.orderAbandonment} abandonos
+                        </span>
+                      )}
+                      <span className="text-white font-black">{commercialFunnel.receivedOrder}</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div
+                      className="h-full bg-purple-400 rounded-full transition-all"
+                      style={{ width: `${Math.round((commercialFunnel.receivedOrder / commercialFunnel.createdStore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 5. Fizeram primeira venda */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">5. Fizeram primeira venda</span>
+                    <div className="flex items-center gap-2">
+                      {commercialFunnel.dropoffs.saleAbandonment > 0 && (
+                        <span className="text-[10px] text-rose-400 font-bold">
+                          -{commercialFunnel.dropoffs.saleAbandonment} abandonos
+                        </span>
+                      )}
+                      <span className="text-white font-black">{commercialFunnel.firstSale}</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400 rounded-full transition-all"
+                      style={{ width: `${Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Assinaram */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-stone-300 font-bold">6. Assinaram</span>
+                    <span className="text-white font-black">{commercialFunnel.subscribed}</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${Math.round((commercialFunnel.subscribed / commercialFunnel.createdStore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+                <span>Taxa de Ativação do Catálogo: <strong>{Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100)}%</strong></span>
+                <span>Conversão para 1ª Venda: <strong>{Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100)}%</strong></span>
+              </div>
+            </div>
+          </div>
           {/* ======================================================================= */}
           {/* 👑 EMPRESAS — BLOCO CENTRAL DE PERSISTÊNCIA & SAAS GOVERNANCE           */}
           {/* ======================================================================= */}

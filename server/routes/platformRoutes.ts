@@ -98,6 +98,11 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
     let gmvTotal = 0;
     let gmvToday = 0;
 
+    let orgsWithProductsCount = 0;
+    let orgsWithPublishedCatalogCount = 0;
+    let orgsWithOrdersCount = 0;
+    let orgsWithPaidOrdersCount = 0;
+
     const orgStatsMap = new Map<string, { productsCount: number; ordersCount: number; gmv: number }>();
 
     try {
@@ -105,12 +110,16 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
       totalProductsGlobal = parseInt(prodRes.rows[0]?.count || "0", 10);
 
       const orgProds = await query("SELECT organization_id, count(*) as count FROM products GROUP BY organization_id");
+      orgsWithProductsCount = orgProds.rows.length;
       for (const row of orgProds.rows) {
         const orgId = row.organization_id;
         const current = orgStatsMap.get(orgId) || { productsCount: 0, ordersCount: 0, gmv: 0 };
         current.productsCount = parseInt(row.count || "0", 10);
         orgStatsMap.set(orgId, current);
       }
+
+      const publishedProds = await query("SELECT count(DISTINCT organization_id) as count FROM products WHERE (publication_status = 'PUBLISHED' OR status = 'ACTIVE' OR (stock_physical - coalesce(stock_reserved, 0)) > 0)");
+      orgsWithPublishedCatalogCount = parseInt(publishedProds.rows[0]?.count || "0", 10);
     } catch {
       totalProductsGlobal = 0;
     }
@@ -139,6 +148,7 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
         FROM orders 
         GROUP BY organization_id
       `);
+      orgsWithOrdersCount = orgOrders.rows.length;
       for (const row of orgOrders.rows) {
         const orgId = row.organization_id;
         const current = orgStatsMap.get(orgId) || { productsCount: 0, ordersCount: 0, gmv: 0 };
@@ -146,6 +156,14 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
         current.gmv = parseFloat(row.gmv || "0");
         orgStatsMap.set(orgId, current);
       }
+
+      const paidOrdersRes = await query(`
+        SELECT count(DISTINCT organization_id) as count
+        FROM orders
+        WHERE status IN ('PAID', 'COMPLETED', 'SHIPPED', 'DELIVERED')
+           OR payment_status = 'PAID'
+      `);
+      orgsWithPaidOrdersCount = parseInt(paidOrdersRes.rows[0]?.count || "0", 10);
     } catch {
       // Fallback gracioso se orders estiver vazio
     }
@@ -234,6 +252,28 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
         totalGmv: gmvTotal,
         totalMrr,
         totalArr: totalMrr * 12,
+        storesByStatus: {
+          trial: trialingCount,
+          active: activeSubscriptionsCount,
+          pastDue: allSubs.filter((s) => s.status === "PAST_DUE").length,
+          readOnly: readOnlyCount,
+          canceled: suspendedCount,
+        },
+        commercialFunnel: {
+          createdStore: totalOrgs,
+          configuredCatalog: orgsWithProductsCount,
+          publishedCatalog: orgsWithPublishedCatalogCount,
+          receivedOrder: orgsWithOrdersCount,
+          firstSale: orgsWithPaidOrdersCount,
+          subscribed: activeSubscriptionsCount,
+          dropoffs: {
+            catalogAbandonment: Math.max(0, totalOrgs - orgsWithProductsCount),
+            publishAbandonment: Math.max(0, orgsWithProductsCount - orgsWithPublishedCatalogCount),
+            orderAbandonment: Math.max(0, orgsWithPublishedCatalogCount - orgsWithOrdersCount),
+            saleAbandonment: Math.max(0, orgsWithOrdersCount - orgsWithPaidOrdersCount),
+            subscriptionAbandonment: Math.max(0, orgsWithPaidOrdersCount - activeSubscriptionsCount),
+          },
+        },
         systemHealth: {
           database: "PostgreSQL (Cloud SQL)",
           rlsEnforced: true,

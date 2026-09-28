@@ -43,6 +43,7 @@ export interface BillingWebhookPayload {
   paymentMethod: BillingPaymentMethod;
   paidAt?: string;
   metadata?: Record<string, any>;
+  rawPayload?: any;
 }
 
 export interface WebhookProcessResult {
