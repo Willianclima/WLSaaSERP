@@ -105,7 +105,9 @@ export const SubscriptionExpiredModal: React.FC<SubscriptionExpiredModalProps> =
   const handleActivatePlan = async () => {
     try {
       setIsSubmitting(true);
-      const res = await fetch("/api/subscriptions/simulate-payment", {
+      
+      // 1. Gera fatura formal de checkout na camada própria de Billing
+      const checkoutRes = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -114,13 +116,46 @@ export const SubscriptionExpiredModal: React.FC<SubscriptionExpiredModalProps> =
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Erro ao processar assinatura.");
+      let invoiceData = await checkoutRes.json().catch(() => null);
+      let invoiceId = invoiceData?.invoice?.id;
+
+      // 2. Confirmação automática via Webhook do Provedor (Idempotente)
+      if (invoiceId) {
+        const eventId = `wbk-ui-${Date.now()}`;
+        const webhookRes = await fetch("/api/billing/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId,
+            eventType: "PAYMENT_APPROVED",
+            invoiceId,
+            providerTxId: `tx-prov-${Date.now()}`,
+            amount: invoiceData.invoice.amount,
+            paymentMethod,
+          }),
+        });
+        const webhookData = await webhookRes.json();
+        if (!webhookRes.ok || !webhookData.received) {
+          throw new Error(webhookData.error || "Falha no processamento do pagamento.");
+        }
+      } else {
+        // Fallback compatível caso rota de checkout não responda
+        const fallbackRes = await fetch("/api/subscriptions/simulate-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            targetPlanId: selectedPlan,
+            paymentMethod,
+          }),
+        });
+        const fallbackData = await fallbackRes.json();
+        if (!fallbackRes.ok || !fallbackData.success) {
+          throw new Error(fallbackData.error || "Erro ao processar assinatura.");
+        }
       }
 
       setActivatedSuccess(true);
-      setSuccessMessage(data.message || `Plano ${selectedPlan} ativado com sucesso!`);
+      setSuccessMessage(`Plano ${selectedPlan} ativado com sucesso via camada de faturamento (${paymentMethod})!`);
       confetti({
         particleCount: 100,
         spread: 70,

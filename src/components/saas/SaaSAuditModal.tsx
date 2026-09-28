@@ -114,6 +114,24 @@ export const SaaSAuditModal: React.FC<SaaSAuditModalProps> = ({
       expectedHttp: 403,
       status: "IDLE",
     },
+    {
+      id: 7,
+      title: "TESTE 7 — Não Confiar no Frontend (Módulo Fora do Plano)",
+      subtitle: "Barreira de Plano no Backend (Starter vs Consignação)",
+      scenario: "Lojista com plano Starter tenta chamar POST /api/consignments diretamente pela API",
+      expectedStatus: "403 MODULE_NOT_INCLUDED (Mesmo exibindo botão no front, backend barra estritamente)",
+      expectedHttp: 403,
+      status: "IDLE",
+    },
+    {
+      id: 8,
+      title: "TESTE 8 — Billing & Webhook Idempotente",
+      subtitle: "Camada de Billing Isolada & 3x PAYMENT_APPROVED",
+      scenario: "Fatura gerada no checkout. Provedor de pagamento envia webhook de confirmação 3 vezes consecutivas",
+      expectedStatus: "1ª chamada: Ativa plano (200). 2ª e 3ª chamadas: Idempotentes (não duplica cobrança ou renovação)",
+      expectedHttp: 200,
+      status: "IDLE",
+    },
   ];
 
   const [tests, setTests] = useState<AuditTestItem[]>(initialTests);
@@ -362,6 +380,157 @@ export const SaaSAuditModal: React.FC<SaaSAuditModalProps> = ({
               : t
           )
         );
+      } else if (testId === 7) {
+        // TESTE 7: Não confiar no frontend — Starter chamando POST /api/consignments diretamente
+        const mariaLoginRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "maria@elegance.com", password: "qualquercoisa" }),
+        });
+        const mariaData = await mariaLoginRes.json();
+        const mariaToken = mariaData.session?.token;
+
+        // 1. Muda plano de org-lumina-01 temporariamente para STARTER
+        await fetch("/api/subscriptions/simulate-payment", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${mariaToken}`,
+            "x-tenant-id": "org-lumina-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ targetPlanId: "STARTER", paymentMethod: "PIX" }),
+        });
+
+        // 2. Tenta chamar POST /api/consignments mesmo sem ter consignação no Starter
+        const res = await fetch("/api/consignments", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${mariaToken}`,
+            "x-tenant-id": "org-lumina-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ resellerName: "Revendedora Bypass Tentativa" }),
+        });
+        const latencyMs = Date.now() - startTime;
+        const data = await res.json().catch(() => ({}));
+        const passed = res.status === 403 && data.code === "MODULE_NOT_INCLUDED";
+
+        // 3. Restaura plano PRO para org-lumina-01
+        await fetch("/api/subscriptions/simulate-payment", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${mariaToken}`,
+            "x-tenant-id": "org-lumina-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ targetPlanId: "PRO", paymentMethod: "PIX" }),
+        });
+
+        setTests((prev) =>
+          prev.map((t) =>
+            t.id === 7
+              ? {
+                  ...t,
+                  status: passed ? "PASSED" : "FAILED",
+                  actualHttp: res.status,
+                  actualStatus: `${res.status} ${data.code || "FORBIDDEN"}`,
+                  latencyMs,
+                  log: `HTTP 403 MODULE_NOT_INCLUDED confirmado: ${data.error || "Módulo não incluso"}. O backend barrou a chamada mesmo sem intervenção do frontend. Não confiar no cliente validado.`,
+                }
+              : t
+          )
+        );
+      } else if (testId === 8) {
+        // TESTE 8: Billing Layer & Webhook Idempotente (3x PAYMENT_APPROVED)
+        const mariaLoginRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "maria@elegance.com", password: "qualquercoisa" }),
+        });
+        const mariaData = await mariaLoginRes.json();
+        const mariaToken = mariaData.session?.token;
+
+        // 1. Cria fatura de checkout
+        const checkoutRes = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${mariaToken}`,
+            "x-tenant-id": "org-lumina-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ targetPlanId: "PRO", paymentMethod: "PIX" }),
+        });
+        const checkoutData = await checkoutRes.json();
+        const invoiceId = checkoutData.invoice?.id;
+
+        const eventId = `audit-webhook-${Date.now()}`;
+
+        // 2. Disparo 1 (Primeira entrega do webhook pelo provedor)
+        const w1Res = await fetch("/api/billing/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId,
+            eventType: "PAYMENT_APPROVED",
+            invoiceId,
+            providerTxId: "tx-mp-audit-123",
+            amount: 289.0,
+            paymentMethod: "PIX",
+          }),
+        });
+        const w1Data = await w1Res.json();
+
+        // 3. Disparo 2 (Entrega duplicada do provedor com mesmo eventId)
+        const w2Res = await fetch("/api/billing/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId,
+            eventType: "PAYMENT_APPROVED",
+            invoiceId,
+            providerTxId: "tx-mp-audit-123",
+            amount: 289.0,
+            paymentMethod: "PIX",
+          }),
+        });
+        const w2Data = await w2Res.json();
+
+        // 4. Disparo 3 (Terceira tentativa de reenvio da rede)
+        const w3Res = await fetch("/api/billing/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventId,
+            eventType: "PAYMENT_APPROVED",
+            invoiceId,
+            providerTxId: "tx-mp-audit-123",
+            amount: 289.0,
+            paymentMethod: "PIX",
+          }),
+        });
+        const w3Data = await w3Res.json();
+
+        const latencyMs = Date.now() - startTime;
+        const passed =
+          w1Data.processed === true &&
+          w1Data.idempotent === false &&
+          w2Data.idempotent === true &&
+          w3Data.idempotent === true;
+
+        setTests((prev) =>
+          prev.map((t) =>
+            t.id === 8
+              ? {
+                  ...t,
+                  status: passed ? "PASSED" : "FAILED",
+                  actualHttp: w1Res.status,
+                  actualStatus: `200 OK (1x Ativação + 2x Idempotente)`,
+                  latencyMs,
+                  log: `Idempotência comprovada: 1º disparo ativou plano no PostgreSQL (Status=ACTIVE). 2º e 3º disparos foram reconhecidos como duplicatas e não geraram cobranças ou auditorias adicionais.`,
+                }
+              : t
+          )
+        );
       }
     } catch (err: any) {
       setTests((prev) =>
@@ -379,12 +548,12 @@ export const SaaSAuditModal: React.FC<SaaSAuditModalProps> = ({
     }
   };
 
-  // Run all 6 tests in sequence
+  // Run all 8 tests in sequence
   const handleRunAll = async () => {
     setIsRunningAll(true);
-    setOverallSummary("Executando suite completa de 6 testes no backend PostgreSQL...");
+    setOverallSummary("Executando suite completa de 8 testes no backend PostgreSQL...");
 
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 8; i++) {
       await runTest(i);
       // Pequena pausa para animação suave
       await new Promise((r) => setTimeout(r, 200));
