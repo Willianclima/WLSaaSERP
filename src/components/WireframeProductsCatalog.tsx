@@ -370,8 +370,16 @@ export const WireframeProductsCatalog: React.FC<WireframeProductsCatalogProps> =
           </p>
         </div>
 
-        {/* + Novo Produto Button */}
+        {/* + Novo Produto & Coleção Piloto Buttons */}
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={onOpenNewProduct}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold rounded-2xl transition-all cursor-pointer shadow-xs"
+            title="Carregar ou cadastrar as 10 peças reais da Maria para o piloto 01"
+          >
+            <span>💎 10 Peças da Maria</span>
+          </button>
+
           <button
             onClick={onOpenNewProduct}
             className="flex items-center gap-2 px-5 py-2.5 bg-stone-900 hover:bg-stone-800 active:scale-98 text-white text-xs font-bold rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer font-sans"
