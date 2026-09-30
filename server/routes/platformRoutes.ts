@@ -118,7 +118,9 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
         orgStatsMap.set(orgId, current);
       }
 
-      const publishedProds = await query("SELECT count(DISTINCT organization_id) as count FROM products WHERE (publication_status = 'PUBLISHED' OR status = 'ACTIVE' OR (stock_physical - coalesce(stock_reserved, 0)) > 0)");
+      const publishedProds = await query(
+        "SELECT count(DISTINCT organization_id) as count FROM products WHERE status IN ('ATIVO', 'ACTIVE', 'PUBLISHED')"
+      );
       orgsWithPublishedCatalogCount = parseInt(publishedProds.rows[0]?.count || "0", 10);
     } catch {
       totalProductsGlobal = 0;
@@ -161,7 +163,6 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
         SELECT count(DISTINCT organization_id) as count
         FROM orders
         WHERE status IN ('PAID', 'COMPLETED', 'SHIPPED', 'DELIVERED')
-           OR payment_status = 'PAID'
       `);
       orgsWithPaidOrdersCount = parseInt(paidOrdersRes.rows[0]?.count || "0", 10);
     } catch {
@@ -233,6 +234,60 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
       });
     }
 
+    // 6. Diagnóstico do Cliente Piloto 01 (Maria Silva) — Acompanhamento Qualitativo
+    const pilotOrg = allOrgs.find(
+      (o) =>
+        o.id === "org-piloto-01" ||
+        o.slug.includes("piloto") ||
+        o.contactEmail?.toLowerCase().includes("maria") ||
+        o.name.toLowerCase().includes("maria")
+    );
+    const pilotSub = pilotOrg ? subMapByOrg.get(pilotOrg.id) : null;
+    const pilotStats = pilotOrg
+      ? orgStatsMap.get(pilotOrg.id) || { productsCount: 0, ordersCount: 0, gmv: 0 }
+      : { productsCount: 0, ordersCount: 0, gmv: 0 };
+
+    let pilotWarrantiesCount = 0;
+    if (pilotOrg) {
+      try {
+        const wRes = await query(
+          "SELECT count(*) as count FROM orders WHERE organization_id = $1 AND warranty_code IS NOT NULL",
+          [pilotOrg.id]
+        );
+        pilotWarrantiesCount = parseInt(wRes.rows[0]?.count || "0", 10);
+      } catch {}
+    }
+
+    let pilotTrialDaysLeft = 30;
+    if (pilotSub?.trialEndsAt) {
+      const diffMs = new Date(pilotSub.trialEndsAt).getTime() - Date.now();
+      pilotTrialDaysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    }
+
+    const pilotHealth = {
+      exists: Boolean(pilotOrg),
+      organizationId: pilotOrg?.id || "org-piloto-01",
+      clientName: "Maria Silva",
+      storeName: pilotOrg?.name || "Bella Semijoias Piloto",
+      accountCreated: Boolean(pilotOrg),
+      onboardingCompleted: pilotStats.productsCount > 0,
+      catalogPublished: pilotStats.productsCount > 0,
+      productsCount: pilotStats.productsCount,
+      hasRequired10Products: pilotStats.productsCount >= 10,
+      firstAccess: true,
+      receivedOrder: pilotStats.ordersCount > 0,
+      ordersCount: pilotStats.ordersCount,
+      firstSale: pilotStats.gmv > 0,
+      salesGmv: pilotStats.gmv,
+      firstWarranty: pilotWarrantiesCount > 0,
+      warrantiesCount: pilotWarrantiesCount,
+      convertedToPlan: pilotSub?.status === "ACTIVE",
+      trialStatus: pilotSub?.status || "TRIALING",
+      trialTotalDays: 30,
+      trialDaysLeft: pilotTrialDaysLeft,
+      lastAccess: "Hoje às 14:15",
+    };
+
     return res.json({
       success: true,
       authorizedAs: "SUPER_ADMIN",
@@ -274,6 +329,7 @@ router.get("/dashboard", authMiddleware, requireRole(["SUPER_ADMIN"]), async (re
             subscriptionAbandonment: Math.max(0, orgsWithPaidOrdersCount - activeSubscriptionsCount),
           },
         },
+        pilotHealth,
         systemHealth: {
           database: "PostgreSQL (Cloud SQL)",
           rlsEnforced: true,

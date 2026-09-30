@@ -225,13 +225,23 @@ interface QuickNewProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddProduct: (product: Omit<ProductItem, "id">) => Promise<void> | void;
+  isPilotTenant?: boolean;
+  tenantSlug?: string;
 }
 
 export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
   isOpen,
   onClose,
   onAddProduct,
+  isPilotTenant,
+  tenantSlug,
 }) => {
+  // Verificação de ambiente controlado para o Piloto 01 vs Loja Comercial Padrão
+  const isPilotMode =
+    isPilotTenant ||
+    tenantSlug?.includes("piloto") ||
+    tenantSlug?.includes("elegance") ||
+    (typeof window !== "undefined" && window.location.search.includes("pilot=true"));
   // 1. Foto
   const [imageUrl, setImageUrl] = useState(
     "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&auto=format&fit=crop&q=80"
@@ -453,18 +463,22 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
           </p>
         </div>
 
-        {/* Banner de Ação Rápida: Carregar as 10 peças reais da Maria */}
+        {/* Banner de Ação Rápida: Piloto 01 (Maria) ou Catálogo Modelo Geral */}
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 mb-5 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-200/60 text-amber-800 flex items-center justify-center font-bold text-sm shrink-0">
-              💎
+              {isPilotMode ? "💎" : "📦"}
             </div>
             <div>
               <p className="text-xs font-bold text-amber-950">
-                10 Peças Reais da Coleção da Maria
+                {isPilotMode
+                  ? "Coleção Piloto 01 (10 Peças Reais da Maria)"
+                  : "Importar Catálogo Modelo de Semijoias Finas"}
               </p>
               <p className="text-[11px] text-amber-800">
-                Colares, Rivieras, Anel Solitário (Estoque=1), Chokers e Brincos já configurados.
+                {isPilotMode
+                  ? "Colares, Rivieras, Anel Solitário (Estoque=1), Chokers e Brincos já configurados para Maria."
+                  : "10 peças completas com fotos, banhos e margens pré-configuradas para começar vendendo agora."}
               </p>
             </div>
           </div>
@@ -474,14 +488,20 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
             onClick={handleLoadAll10MariaProducts}
             className="w-full sm:w-auto px-4 py-2 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
           >
-            {isBatchLoading ? "Cadastrando 10 Peças..." : "Carregar as 10 Peças"}
+            {isBatchLoading
+              ? "Importando Peças..."
+              : isPilotMode
+              ? "Carregar as 10 Peças da Maria"
+              : "Importar Catálogo Modelo"}
           </button>
         </div>
 
         {/* Atalhos para preenchimento de peças reais */}
         <div className="mb-4">
           <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block mb-1.5">
-            Ou escolha um exemplo real para preencher:
+            {isPilotMode
+              ? "Ou escolha um exemplo real da Maria para preencher:"
+              : "Ou preencha rapidamente com um modelo de referência:"}
           </span>
           <div className="flex flex-wrap gap-1.5">
             {MARIA_PILOT_PRODUCTS.slice(0, 5).map((p) => (
@@ -565,9 +585,12 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
 
             {/* 4. BANHO NOBRE */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-1 flex items-center gap-1">
-                <span>4. Banho Nobre</span>
-                <span className="text-[10px] text-amber-700 font-normal">(Milésimos)</span>
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <span>4. Banho Nobre</span>
+                  <span className="text-[10px] text-amber-700 font-semibold">(Milésimos)</span>
+                </span>
+                <span className="text-[10px] text-stone-400 font-normal">Camada de Metal Nobre</span>
               </label>
               <select
                 value={bath}
@@ -580,6 +603,9 @@ export const QuickNewProductModal: React.FC<QuickNewProductModalProps> = ({
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-[10px] text-stone-500 leading-tight">
+                💡 <strong>O que são milésimos?</strong> É a espessura da camada de ouro depositada sobre a peça (ex: 10 milésimos = padrão alta joalheria com 1 ano de garantia; 3 a 5 milésimos = semijoia de linha leve).
+              </p>
             </div>
 
             {/* 5. PREÇO DE VENDA */}

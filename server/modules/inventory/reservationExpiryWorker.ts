@@ -335,6 +335,7 @@ export class ReservationExpiryWorker {
 
       const releaseLock = await InventoryConcurrencyService.lockManager.acquireLocks(lockKeys);
       let balanceReleased = false;
+      let releasedQuantity = 0;
 
       try {
         // Re-verificar status sob lock para evitar concorrência com pagamento simultâneo
@@ -348,8 +349,15 @@ export class ReservationExpiryWorker {
         }
 
         // 1. Decrementa reserved_quantity
-        await inventoryRepo.releaseReservation(orgId, fresh.productId, fresh.locationId, fresh.quantity);
-        balanceReleased = true;
+        // Se o saldo já tiver reservedQuantity menor que a quantidade da reserva (ou 0),
+        // liberamos apenas a quantidade efetivamente reservada no saldo para evitar erro de saldo insuficiente.
+        const currentBal = await inventoryRepo.getBalance(orgId, fresh.productId, fresh.locationId);
+        if (currentBal && currentBal.reservedQuantity > 0) {
+          const qtyToRelease = Math.min(fresh.quantity, currentBal.reservedQuantity);
+          await inventoryRepo.releaseReservation(orgId, fresh.productId, fresh.locationId, qtyToRelease);
+          balanceReleased = true;
+          releasedQuantity = qtyToRelease;
+        }
 
         // 2. Atualiza registro na tabela inventory_reservations para EXPIRED
         const updated = await inventoryRepo.updateReservationStatus(orgId, resId, "EXPIRED", {
@@ -380,9 +388,12 @@ export class ReservationExpiryWorker {
           expiredProcessed.push(updated);
         }
       } catch (err: any) {
-        if (balanceReleased) {
+        if (balanceReleased && releasedQuantity > 0) {
           try {
-            await inventoryRepo.reserveStock(orgId, current.productId, current.locationId, current.quantity);
+            const checkBal = await inventoryRepo.getBalance(orgId, current.productId, current.locationId);
+            if (checkBal && (checkBal.onHandQuantity - checkBal.reservedQuantity) >= releasedQuantity) {
+              await inventoryRepo.reserveStock(orgId, current.productId, current.locationId, releasedQuantity);
+            }
           } catch (rbErr) {
             console.error(`[ROLLBACK_ERROR] Falha ao reverter expiração de reserva:`, rbErr);
           }
@@ -411,8 +422,21 @@ export class ReservationExpiryWorker {
     const productLocations = new Set<string>();
 
     const activeReservations = await inventoryRepo.listReservations(orgId, { status: "ACTIVE" });
+    const nowTime = Date.now();
     for (const res of activeReservations) {
       if (filterProductIds && filterProductIds.length > 0 && !filterProductIds.includes(res.productId)) continue;
+
+      // Se a reserva já tiver ultrapassado seu TTL (expiresAt no passado), ela deve ser auto-expirada
+      // e NÃO somada no saldo ativo para evitar sobre-reserva de reservas fantasmas
+      if (new Date(res.expiresAt).getTime() <= nowTime) {
+        try {
+          await inventoryRepo.updateReservationStatus(orgId, res.id, "EXPIRED", {
+            releasedAt: new Date().toISOString(),
+            notes: "[Auto-expirada durante reconciliação de estoque (TTL vencido)]",
+          });
+        } catch {}
+        continue;
+      }
 
       const key = `${res.productId}:::${res.locationId}`;
       const current = activeSums.get(key) || 0;
@@ -471,10 +495,14 @@ export class ReservationExpiryWorker {
         }
 
         const prevReserved = bal.reservedQuantity;
-        const divergenceFound = prevReserved !== expectedReserved || bal.availableQuantity !== (bal.onHandQuantity - prevReserved);
+        // O valor reservado NUNCA pode exceder onHandQuantity (regra do PostgreSQL CHECK reserved_quantity <= on_hand_quantity)
+        const clampedExpectedReserved = Math.max(0, Math.min(expectedReserved, bal.onHandQuantity));
+        const divergenceFound =
+          prevReserved !== clampedExpectedReserved ||
+          bal.availableQuantity !== (bal.onHandQuantity - clampedExpectedReserved);
 
         if (divergenceFound) {
-          const newReserved = expectedReserved;
+          const newReserved = clampedExpectedReserved;
           const newAvailable = Math.max(0, bal.onHandQuantity - newReserved);
 
           const correctedBal = {

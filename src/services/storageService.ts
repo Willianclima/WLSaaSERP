@@ -1,4 +1,5 @@
 import { ProductMedia } from "../types";
+import { safeStorage } from "../utils/safeStorage";
 
 export interface StorageUploadResponse {
   storageKey: string;
@@ -54,8 +55,8 @@ export class ClientStorageService {
   ): Promise<StorageUploadResponse> {
     try {
       const base64Data = await this.fileToBase64(file);
-      const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
-      const tenantId = localStorage.getItem("aura_current_tenant_id") || options.organizationId || "org-lumina-01";
+      const token = safeStorage.getItem("aura_session_token") || safeStorage.getItem("aura_auth_token");
+      const tenantId = safeStorage.getItem("aura_current_tenant_id") || options.organizationId || "org-lumina-01";
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -119,7 +120,7 @@ export class ClientStorageService {
     sortOrder = 0
   ): Promise<ProductMedia> {
     const isVideo = uploadResult.mimeType.startsWith("video/");
-    const token = localStorage.getItem("aura_auth_token");
+    const token = safeStorage.getItem("aura_auth_token");
 
     const payload = {
       storageKey: uploadResult.storageKey,
@@ -206,7 +207,7 @@ export class ClientStorageService {
    * Deletes a media record from database and storage
    */
   public async deleteProductMedia(productId: string, mediaId: string, storageKey?: string): Promise<boolean> {
-    const token = localStorage.getItem("aura_auth_token");
+    const token = safeStorage.getItem("aura_auth_token");
     try {
       // 1. Delete from PostgreSQL
       await fetch(`/api/products/${productId}/media/${mediaId}`, {
@@ -233,7 +234,7 @@ export class ClientStorageService {
    * Sets a specific media as primary for the product
    */
   public async setPrimaryProductMedia(productId: string, mediaId: string): Promise<boolean> {
-    const token = localStorage.getItem("aura_auth_token");
+    const token = safeStorage.getItem("aura_auth_token");
     try {
       const response = await fetch(`/api/products/${productId}/media/${mediaId}/primary`, {
         method: "PUT",

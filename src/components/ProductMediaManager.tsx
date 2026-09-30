@@ -19,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { ProductMedia } from "../types";
+import { safeStorage } from "../utils/safeStorage";
 
 // Curated high-resolution jewelry photos for quick selection
 export const CURATED_JEWELRY_PHOTOS = [
@@ -126,8 +127,8 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
     // If item has a real id in product_media and product exists in DB, delete from DB
     if (itemToRemove && productId && !productId.startsWith("prod-new") && itemToRemove.id && !itemToRemove.id.startsWith("med-")) {
       try {
-        const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
-        const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
+        const token = safeStorage.getItem("aura_session_token") || safeStorage.getItem("aura_auth_token");
+        const tenantId = safeStorage.getItem("aura_tenant_id") || "org-lumina-01";
         await fetch(`/api/products/${productId}/media/${itemToRemove.id}`, {
           method: "DELETE",
           headers: {
@@ -167,8 +168,8 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
     if (!files || files.length === 0) return;
     setIsUploading(true);
 
-    const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
-    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
+    const token = safeStorage.getItem("aura_session_token") || safeStorage.getItem("aura_auth_token");
+    const tenantId = safeStorage.getItem("aura_tenant_id") || "org-lumina-01";
 
     const uploadPromises = Array.from(files).map((file) => {
       return new Promise<ProductMedia | null>((resolve) => {
@@ -294,7 +295,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
   // Add media via URL
   const handleAddUrl = () => {
     if (!inputUrl.trim()) return;
-    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
+    const tenantId = safeStorage.getItem("aura_tenant_id") || "org-lumina-01";
 
     const newMediaItem: ProductMedia = {
       id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -315,7 +316,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
 
   // Add from curated bank
   const handleSelectPreset = (url: string, label: string) => {
-    const tenantId = localStorage.getItem("aura_tenant_id") || "org-lumina-01";
+    const tenantId = safeStorage.getItem("aura_tenant_id") || "org-lumina-01";
     const newMediaItem: ProductMedia = {
       id: `med-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       organization_id: tenantId,

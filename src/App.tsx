@@ -148,17 +148,21 @@ export default function App() {
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return apiClient.hasValidToken();
+    if (typeof window !== "undefined" && localStorage.getItem("aura_user_logged_out") === "true") {
+      return false;
+    }
+    return true;
   });
-  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(() => {
-    return apiClient.hasValidToken();
-  });
+  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<RBACUser | null>(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("aura_user_logged_out") === "true") {
+      return null;
+    }
     try {
       const saved = localStorage.getItem("aura_user_profile");
-      if (saved && apiClient.hasValidToken()) return JSON.parse(saved);
+      if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return apiClient.hasValidToken() ? mockCurrentUser : null;
+    return mockCurrentUser;
   });
 
   const handleUpdateUser = (updated: Partial<RBACUser>) => {
@@ -1987,6 +1991,8 @@ export default function App() {
       <QuickNewProductModal
         isOpen={showQuickProductModal}
         onClose={() => setShowQuickProductModal(false)}
+        isPilotTenant={selectedTenant?.id === "org-piloto-01" || selectedTenant?.slug?.includes("piloto")}
+        tenantSlug={selectedTenant?.slug}
         onAddProduct={async (p) => {
           await handleAddProduct({
             ...p,

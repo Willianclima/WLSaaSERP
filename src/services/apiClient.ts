@@ -10,6 +10,8 @@
  *   2. 'Authorization: Bearer <session_token>'
  */
 
+import { safeStorage } from "../utils/safeStorage";
+
 const TOKEN_KEY = "aura_session_token";
 const TENANT_KEY = "aura_current_tenant_id";
 const USER_KEY = "aura_current_user";
@@ -94,13 +96,9 @@ export class TenantManager {
    * Prioriza sessões ativas autenticadas, perfil do usuário e token de acesso.
    */
   static getAuthContext(): CurrentUserAuthContext | null {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return null;
-    }
-
     try {
       // 1. Verificar sessão ativa estruturada
-      const sessionRaw = localStorage.getItem(SESSION_KEY);
+      const sessionRaw = safeStorage.getItem(SESSION_KEY);
       if (sessionRaw) {
         const session: SessionInfo = JSON.parse(sessionRaw);
         if (session?.organization?.id) {
@@ -116,7 +114,7 @@ export class TenantManager {
       }
 
       // 2. Verificar usuário autenticado armazenado
-      const userRaw = localStorage.getItem(USER_KEY);
+      const userRaw = safeStorage.getItem(USER_KEY);
       if (userRaw) {
         const user = JSON.parse(userRaw);
         if (user?.organizationId || user?.organization?.id) {
@@ -132,7 +130,7 @@ export class TenantManager {
       }
 
       // 3. Verificar perfil de usuário do operador
-      const profileRaw = localStorage.getItem(USER_PROFILE_KEY);
+      const profileRaw = safeStorage.getItem(USER_PROFILE_KEY);
       if (profileRaw) {
         const profile = JSON.parse(profileRaw);
         if (profile?.organizationId || profile?.organization_id) {
@@ -147,7 +145,7 @@ export class TenantManager {
       }
 
       // 4. Inspecionar token RFC 7519 JSON Web Token (JWT)
-      const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem("aura_auth_token");
+      const token = safeStorage.getItem(TOKEN_KEY) || safeStorage.getItem("aura_auth_token");
       if (token && token.split(".").length === 3) {
         try {
           const base64Url = token.split(".")[1];
@@ -195,7 +193,7 @@ export class TenantManager {
     const authContext = this.getAuthContext();
 
     // Se houver um tenant manualmente selecionado no storage (ex: operador alternando entre lojas)
-    const storedTenant = typeof window !== "undefined" ? localStorage.getItem(TENANT_KEY) : null;
+    const storedTenant = safeStorage.getItem(TENANT_KEY);
 
     if (storedTenant) {
       const sanitized = this.sanitizeTenantId(storedTenant);
@@ -233,9 +231,7 @@ export class TenantManager {
   static setTenantId(tenantId: string): void {
     const sanitized = this.sanitizeTenantId(tenantId);
     this.cachedTenantId = sanitized;
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem(TENANT_KEY, sanitized);
-    }
+    safeStorage.setItem(TENANT_KEY, sanitized);
     this.listeners.forEach((listener) => {
       try {
         listener(sanitized);
@@ -250,9 +246,7 @@ export class TenantManager {
    */
   static clearTenant(): void {
     this.cachedTenantId = null;
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.removeItem(TENANT_KEY);
-    }
+    safeStorage.removeItem(TENANT_KEY);
   }
 
   /**
@@ -260,15 +254,13 @@ export class TenantManager {
    */
   static logout(): void {
     this.cachedTenantId = null;
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(TENANT_KEY);
-      localStorage.removeItem(USER_KEY);
-      localStorage.removeItem(USER_PROFILE_KEY);
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(SUPPORT_SESSION_KEY);
-      localStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
-    }
+    safeStorage.removeItem(TOKEN_KEY);
+    safeStorage.removeItem(TENANT_KEY);
+    safeStorage.removeItem(USER_KEY);
+    safeStorage.removeItem(USER_PROFILE_KEY);
+    safeStorage.removeItem(SESSION_KEY);
+    safeStorage.removeItem(SUPPORT_SESSION_KEY);
+    safeStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
   }
 
   /**
@@ -538,20 +530,16 @@ export class ApiClient {
 
   static getToken(): string | null {
     if (!this.cachedToken) {
-      if (typeof window !== "undefined" && window.localStorage) {
-        this.cachedToken =
-          localStorage.getItem(TOKEN_KEY) || localStorage.getItem("aura_auth_token");
-      }
+      this.cachedToken =
+        safeStorage.getItem(TOKEN_KEY) || safeStorage.getItem("aura_auth_token");
     }
     return this.cachedToken;
   }
 
   static setToken(token: string) {
     this.cachedToken = token;
-    if (typeof window !== "undefined" && window.localStorage) {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem("aura_auth_token", token);
-    }
+    safeStorage.setItem(TOKEN_KEY, token);
+    safeStorage.setItem("aura_auth_token", token);
   }
 
   /**
@@ -626,9 +614,9 @@ export class ApiClient {
           if (data.success && activeJwt) {
             this.setToken(activeJwt);
             this.setTenantId(orgId);
-            if (data.session.user && typeof window !== "undefined") {
-              localStorage.setItem(USER_KEY, JSON.stringify(data.session.user));
-              localStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
+            if (data.session.user) {
+              safeStorage.setItem(USER_KEY, JSON.stringify(data.session.user));
+              safeStorage.setItem(SESSION_KEY, JSON.stringify(data.session));
             }
             return activeJwt;
           }

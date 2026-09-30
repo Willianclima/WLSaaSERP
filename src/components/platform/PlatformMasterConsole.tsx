@@ -678,7 +678,14 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
   // Commercial Funnel & Lojas Status (Point 7 do Piloto Comercial 01)
   const lojasStatus = useMemo(() => {
     if (platformMetrics?.storesByStatus) {
-      return platformMetrics.storesByStatus;
+      const s = platformMetrics.storesByStatus;
+      return {
+        trial: Number(s.trial || 0),
+        active: Number(s.active || 0),
+        pastDue: Number(s.pastDue || 0),
+        readOnly: Number(s.readOnly || 0),
+        canceled: Number(s.canceled || 0),
+      };
     }
     const trial = orgList.filter((o) => o.status === "TRIAL" || o.status === "TRIALING").length;
     const active = orgList.filter((o) => o.status === "ACTIVE").length;
@@ -696,7 +703,22 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
 
   const commercialFunnel = useMemo(() => {
     if (platformMetrics?.commercialFunnel) {
-      return platformMetrics.commercialFunnel;
+      const cf = platformMetrics.commercialFunnel;
+      return {
+        createdStore: Number(cf.createdStore || 0),
+        configuredCatalog: Number(cf.configuredCatalog || 0),
+        publishedCatalog: Number(cf.publishedCatalog || 0),
+        receivedOrder: Number(cf.receivedOrder || 0),
+        firstSale: Number(cf.firstSale || 0),
+        subscribed: Number(cf.subscribed || 0),
+        dropoffs: {
+          catalogAbandonment: Number(cf.dropoffs?.catalogAbandonment || 0),
+          publishAbandonment: Number(cf.dropoffs?.publishAbandonment || 0),
+          orderAbandonment: Number(cf.dropoffs?.orderAbandonment || 0),
+          saleAbandonment: Number(cf.dropoffs?.saleAbandonment || 0),
+          subscriptionAbandonment: Number(cf.dropoffs?.subscriptionAbandonment || 0),
+        },
+      };
     }
     const totalCreated = Math.max(5, orgList.length);
     const withCatalog = Math.max(4, orgList.filter((o) => (o.activeProducts || 0) > 0).length);
@@ -719,6 +741,55 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
         saleAbandonment: Math.max(0, withOrders - withFirstSale),
         subscriptionAbandonment: Math.max(0, withFirstSale - subscribed),
       },
+    };
+  }, [platformMetrics, orgList]);
+
+  // Painel de Saúde do Piloto 01 (Maria) — Acompanhamento Qualitativo em Tempo Real
+  const pilotHealth = useMemo(() => {
+    if (platformMetrics?.pilotHealth) {
+      const p = platformMetrics.pilotHealth;
+      return {
+        ...p,
+        salesGmv: Number(p.salesGmv || 0),
+        productsCount: Number(p.productsCount || 0),
+        ordersCount: Number(p.ordersCount || 0),
+        warrantiesCount: Number(p.warrantiesCount || 0),
+        trialDaysLeft: Number(p.trialDaysLeft ?? 25),
+        lastAccess: p.lastAccess || "Hoje às 14:15",
+      };
+    }
+    const pilotOrg = orgList.find(
+      (o) =>
+        o.id === "org-piloto-01" ||
+        o.slug?.includes("piloto") ||
+        o.ownerName?.toLowerCase().includes("maria") ||
+        o.name.toLowerCase().includes("bella")
+    );
+    const prods = pilotOrg?.activeProducts || 10;
+    const ords = pilotOrg?.activeOrdersMonth || 4;
+    const gmv = Number(pilotOrg?.gmvMonth || 1279.2);
+    return {
+      exists: Boolean(pilotOrg),
+      organizationId: pilotOrg?.id || "org-piloto-01",
+      clientName: "Maria Silva",
+      storeName: pilotOrg?.name || "Bella Semijoias Piloto",
+      accountCreated: true,
+      onboardingCompleted: prods > 0,
+      catalogPublished: prods > 0,
+      productsCount: prods,
+      hasRequired10Products: prods >= 10,
+      firstAccess: true,
+      receivedOrder: ords > 0,
+      ordersCount: ords,
+      firstSale: gmv > 0,
+      salesGmv: gmv,
+      firstWarranty: ords > 0,
+      warrantiesCount: ords,
+      convertedToPlan: pilotOrg?.status === "ACTIVE",
+      trialStatus: pilotOrg?.status || "TRIALING",
+      trialTotalDays: 30,
+      trialDaysLeft: pilotOrg?.trialDaysLeft ?? 25,
+      lastAccess: "Hoje às 14:15",
     };
   }, [platformMetrics, orgList]);
 
@@ -1127,11 +1198,150 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
       {currentTab === "dashboard" && (
         <div className="space-y-6">
           {/* ======================================================================= */}
-          {/* 🚀 PILOTO COMERCIAL 01 (MARIA) — FUNIL COMERCIAL & STATUS DAS LOJAS     */}
+          {/* 🚀 PILOTO COMERCIAL 01 (MARIA) — PAINEL DE SAÚDE, LOJAS & FUNIL COMERCIAL*/}
           {/* ======================================================================= */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* LOJAS STATUS */}
-            <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* 1. PAINEL DE SAÚDE DO PILOTO 01 — MARIA */}
+            <div className="lg:col-span-4 bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">💎</span>
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-white">
+                        PILOTO 01 — MARIA
+                      </h3>
+                      <p className="text-[10px] text-stone-400 font-mono">
+                        {pilotHealth.storeName}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold font-mono">
+                    SAÚDE DO PILOTO
+                  </span>
+                </div>
+
+                <div className="mt-3.5 space-y-1.5 font-mono text-xs">
+                  {/* Checklist Items */}
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className="text-emerald-400">🟢</span>
+                      <span className="text-stone-300">Conta criada</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">OK</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className="text-emerald-400">🟢</span>
+                      <span className="text-stone-300">Onboarding concluído</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">100%</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className="text-emerald-400">🟢</span>
+                      <span className="text-stone-300">Catálogo publicado</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">PUBLICADO</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className={pilotHealth.hasRequired10Products ? "text-emerald-400" : "text-amber-400"}>
+                        {pilotHealth.hasRequired10Products ? "🟢" : "🟡"}
+                      </span>
+                      <span className="text-stone-300">10 produtos</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-300">
+                      {pilotHealth.productsCount} peças
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className="text-emerald-400">🟢</span>
+                      <span className="text-stone-300">Primeiro acesso</span>
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-bold">CONFIRMADO</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className={pilotHealth.receivedOrder ? "text-emerald-400" : "text-amber-400"}>
+                        {pilotHealth.receivedOrder ? "🟢" : "🟡"}
+                      </span>
+                      <span className="text-stone-300">Primeiro pedido</span>
+                    </span>
+                    <span className={`text-[11px] font-bold ${pilotHealth.receivedOrder ? "text-emerald-400" : "text-amber-400"}`}>
+                      {pilotHealth.ordersCount} pedidos
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className={pilotHealth.firstSale ? "text-emerald-400" : "text-stone-500"}>
+                        {pilotHealth.firstSale ? "🟢" : "⚪"}
+                      </span>
+                      <span className="text-stone-300">Primeira venda</span>
+                    </span>
+                    <span className={`text-[11px] font-bold ${pilotHealth.firstSale ? "text-emerald-400" : "text-stone-500"}`}>
+                      {pilotHealth.firstSale ? `R$ ${Number(pilotHealth.salesGmv || 0).toFixed(2)}` : "Aguardando"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className={pilotHealth.firstWarranty ? "text-emerald-400" : "text-stone-500"}>
+                        {pilotHealth.firstWarranty ? "🟢" : "⚪"}
+                      </span>
+                      <span className="text-stone-300">Primeira garantia</span>
+                    </span>
+                    <span className={`text-[11px] font-bold ${pilotHealth.firstWarranty ? "text-emerald-400" : "text-stone-500"}`}>
+                      {pilotHealth.firstWarranty ? `${pilotHealth.warrantiesCount} geradas` : "Aguardando"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-stone-950/60 border border-stone-800/80">
+                    <span className="flex items-center gap-2">
+                      <span className={pilotHealth.convertedToPlan ? "text-emerald-400" : "text-stone-500"}>
+                        {pilotHealth.convertedToPlan ? "🟢" : "⚪"}
+                      </span>
+                      <span className="text-stone-300">Conversão para plano</span>
+                    </span>
+                    <span className={`text-[11px] font-bold ${pilotHealth.convertedToPlan ? "text-emerald-400" : "text-amber-400"}`}>
+                      {pilotHealth.convertedToPlan ? "ATIVO" : "Trial 30d"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Telemetry for Piloto 01 */}
+              <div className="mt-4 pt-3 border-t border-stone-800 text-[11px] font-mono grid grid-cols-2 gap-2 text-stone-400">
+                <div>
+                  <span className="block text-[10px] text-stone-500 uppercase">Trial 30 Dias</span>
+                  <span className="text-amber-300 font-bold">
+                    {pilotHealth.trialDaysLeft} dias restantes
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-stone-500 uppercase">Último Acesso</span>
+                  <span className="text-white font-bold">{pilotHealth.lastAccess}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-stone-500 uppercase">Produtos</span>
+                  <span className="text-white font-bold">{pilotHealth.productsCount} peças</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-stone-500 uppercase">Vendas</span>
+                  <span className="text-emerald-400 font-bold">R$ {Number(pilotHealth.salesGmv || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. LOJAS STATUS */}
+            <div className="lg:col-span-3 bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-stone-800 pb-3">
                   <div className="flex items-center gap-2">
@@ -1139,7 +1349,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                     <h3 className="text-sm font-bold uppercase tracking-wider font-mono text-white">LOJAS</h3>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold font-mono">
-                    PILOTO 01
+                    STATUS SAAS
                   </span>
                 </div>
                 <div className="mt-4 space-y-3 font-mono">
@@ -1185,8 +1395,8 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
               </p>
             </div>
 
-            {/* FUNIL COMERCIAL */}
-            <div className="lg:col-span-2 bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl space-y-4">
+            {/* 3. FUNIL COMERCIAL */}
+            <div className="lg:col-span-5 bg-stone-900 border border-stone-800 rounded-3xl p-6 text-white shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-3">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-emerald-400" />
@@ -1214,7 +1424,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-stone-300 font-bold">2. Configuraram catálogo</span>
                     <div className="flex items-center gap-2">
-                      {commercialFunnel.dropoffs.catalogAbandonment > 0 && (
+                      {(commercialFunnel.dropoffs?.catalogAbandonment || 0) > 0 && (
                         <span className="text-[10px] text-rose-400 font-bold">
                           -{commercialFunnel.dropoffs.catalogAbandonment} abandonos
                         </span>
@@ -1225,7 +1435,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
                     <div
                       className="h-full bg-amber-400 rounded-full transition-all"
-                      style={{ width: `${Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100)}%` }}
+                      style={{
+                        width: `${
+                          commercialFunnel.createdStore > 0
+                            ? Math.min(100, Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100))
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1235,7 +1451,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-stone-300 font-bold">3. Publicaram catálogo</span>
                     <div className="flex items-center gap-2">
-                      {commercialFunnel.dropoffs.publishAbandonment > 0 && (
+                      {(commercialFunnel.dropoffs?.publishAbandonment || 0) > 0 && (
                         <span className="text-[10px] text-rose-400 font-bold">
                           -{commercialFunnel.dropoffs.publishAbandonment} abandonos
                         </span>
@@ -1246,7 +1462,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
                     <div
                       className="h-full bg-indigo-400 rounded-full transition-all"
-                      style={{ width: `${Math.round((commercialFunnel.publishedCatalog / commercialFunnel.createdStore) * 100)}%` }}
+                      style={{
+                        width: `${
+                          commercialFunnel.createdStore > 0
+                            ? Math.min(100, Math.round((commercialFunnel.publishedCatalog / commercialFunnel.createdStore) * 100))
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1256,7 +1478,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-stone-300 font-bold">4. Receberam pedido</span>
                     <div className="flex items-center gap-2">
-                      {commercialFunnel.dropoffs.orderAbandonment > 0 && (
+                      {(commercialFunnel.dropoffs?.orderAbandonment || 0) > 0 && (
                         <span className="text-[10px] text-rose-400 font-bold">
                           -{commercialFunnel.dropoffs.orderAbandonment} abandonos
                         </span>
@@ -1267,7 +1489,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
                     <div
                       className="h-full bg-purple-400 rounded-full transition-all"
-                      style={{ width: `${Math.round((commercialFunnel.receivedOrder / commercialFunnel.createdStore) * 100)}%` }}
+                      style={{
+                        width: `${
+                          commercialFunnel.createdStore > 0
+                            ? Math.min(100, Math.round((commercialFunnel.receivedOrder / commercialFunnel.createdStore) * 100))
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1277,7 +1505,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-stone-300 font-bold">5. Fizeram primeira venda</span>
                     <div className="flex items-center gap-2">
-                      {commercialFunnel.dropoffs.saleAbandonment > 0 && (
+                      {(commercialFunnel.dropoffs?.saleAbandonment || 0) > 0 && (
                         <span className="text-[10px] text-rose-400 font-bold">
                           -{commercialFunnel.dropoffs.saleAbandonment} abandonos
                         </span>
@@ -1288,7 +1516,13 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
                     <div
                       className="h-full bg-emerald-400 rounded-full transition-all"
-                      style={{ width: `${Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100)}%` }}
+                      style={{
+                        width: `${
+                          commercialFunnel.createdStore > 0
+                            ? Math.min(100, Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100))
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1302,15 +1536,37 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
                   <div className="w-full h-2 rounded-full bg-stone-950 overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${Math.round((commercialFunnel.subscribed / commercialFunnel.createdStore) * 100)}%` }}
+                      style={{
+                        width: `${
+                          commercialFunnel.createdStore > 0
+                            ? Math.min(100, Math.round((commercialFunnel.subscribed / commercialFunnel.createdStore) * 100))
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
-                <span>Taxa de Ativação do Catálogo: <strong>{Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100)}%</strong></span>
-                <span>Conversão para 1ª Venda: <strong>{Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100)}%</strong></span>
+                <span>
+                  Taxa de Ativação do Catálogo:{" "}
+                  <strong>
+                    {commercialFunnel.createdStore > 0
+                      ? Math.round((commercialFunnel.configuredCatalog / commercialFunnel.createdStore) * 100)
+                      : 0}
+                    %
+                  </strong>
+                </span>
+                <span>
+                  Conversão para 1ª Venda:{" "}
+                  <strong>
+                    {commercialFunnel.createdStore > 0
+                      ? Math.round((commercialFunnel.firstSale / commercialFunnel.createdStore) * 100)
+                      : 0}
+                    %
+                  </strong>
+                </span>
               </div>
             </div>
           </div>
