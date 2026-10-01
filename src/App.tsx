@@ -21,6 +21,7 @@ import { TrialStatusBanner } from "./components/TrialStatusBanner";
 import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
 import { SubscriptionExpiredModal } from "./components/saas/SubscriptionExpiredModal";
 import { SaaSAuditModal } from "./components/saas/SaaSAuditModal";
+import { PreviewDiagnostic } from "./components/PreviewDiagnostic";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
 
 // Modular Domain Architecture (Platform, Store, Catalog, Orders, Customers, Inventory, Onboarding)
@@ -100,6 +101,10 @@ function detectInitialRoute(): { tab: string; slug?: string } {
     return { tab: "storefront", slug: queryLoja };
   }
 
+  if (search.get("diagnostic") !== null || hash === "#diagnostic" || path === "/diagnostic") {
+    return { tab: "diagnostic" };
+  }
+
   if (hash === "#storefront" || hash === "#catalogo" || hash === "#loja") {
     return { tab: "storefront" };
   }
@@ -111,8 +116,18 @@ export default function App() {
   const initialRoute = useMemo(() => detectInitialRoute(), []);
   const [activeTab, setActiveTab] = useState<string>(initialRoute.tab);
   const [productMode, setProductMode] = useState<ProductMode>(() => {
-    if (initialRoute.tab === "storefront") return "TENANT_STORE";
-    return "PLATFORM_OWNER";
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlMode = params.get("mode");
+      if (urlMode === "storefront" || urlMode === "consumer") return "STORE_CONSUMER";
+      if (urlMode === "erp" || urlMode === "store") return "TENANT_STORE";
+      if (urlMode === "aura" || urlMode === "admin") return "PLATFORM_OWNER";
+    }
+    if (initialRoute.tab === "storefront") return "STORE_CONSUMER";
+    if (typeof window !== "undefined" && apiClient.hasValidToken()) {
+      return "PLATFORM_OWNER";
+    }
+    return "STORE_CONSUMER";
   });
   const [storefrontCategory, setStorefrontCategory] = useState<string>("TODOS");
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
@@ -148,22 +163,66 @@ export default function App() {
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("aura_user_logged_out") === "true") {
-      return false;
-    }
-    return true;
+    if (typeof window === "undefined") return false;
+    if (localStorage.getItem("aura_user_logged_out") === "true") return false;
+    return apiClient.hasValidToken();
   });
-  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(false);
+  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return apiClient.hasValidToken();
+  });
   const [currentUser, setCurrentUser] = useState<RBACUser | null>(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("aura_user_logged_out") === "true") {
-      return null;
-    }
+    if (typeof window === "undefined") return null;
+    if (localStorage.getItem("aura_user_logged_out") === "true") return null;
+    if (!apiClient.hasValidToken()) return null;
     try {
       const saved = localStorage.getItem("aura_user_profile");
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return mockCurrentUser;
+    return null;
   });
+
+  // Immediate pre-render log on first component pass before child middlewares execute
+  if (typeof window !== "undefined" && !(window as any).__aura_prerender_debug_logged__) {
+    (window as any).__aura_prerender_debug_logged__ = true;
+    try {
+      console.group("Initialization Debug");
+      console.log("1) window.location details:", {
+        href: window.location.href,
+        origin: window.location.origin,
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+        initialRoute,
+      });
+      console.log("2) apiClient.hasValidToken():", {
+        hasValidToken: apiClient.hasValidToken(),
+        tokenPreview: localStorage.getItem("aura_session_token")
+          ? `${localStorage.getItem("aura_session_token")?.substring(0, 20)}...`
+          : null,
+      });
+      console.log("3) Current Authentication State & Mock Status:", {
+        isAuthenticated,
+        isValidatingSession,
+        productMode,
+        activeTab,
+        currentUser: currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+        } : null,
+        mockStatus: {
+          isUsingMockUser: Boolean(currentUser && currentUser.id === mockCurrentUser.id),
+          mockUserId: mockCurrentUser.id,
+          mockUserEmail: mockCurrentUser.email,
+        },
+      });
+      console.groupEnd();
+    } catch (e) {
+      console.error("[Initialization Debug]", e);
+    }
+  }
 
   const handleUpdateUser = (updated: Partial<RBACUser>) => {
     setCurrentUser((prev) => {
@@ -229,6 +288,64 @@ export default function App() {
   // Global loading state synchronized with ApiClient request lifecycle
   const [isGlobalLoading, setIsGlobalLoading] = useState<boolean>(false);
   const [activeRequestsCount, setActiveRequestsCount] = useState<number>(0);
+
+  // Diagnostic: Initialization Debug log firing immediately when App evaluates & mounts
+  // to verify if App is being blocked by RBAC middleware before the first render completes.
+  useEffect(() => {
+    try {
+      console.group("Initialization Debug");
+      console.log("1) Window Location Details:", {
+        href: window.location.href,
+        origin: window.location.origin,
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+        detectedInitialRoute: initialRoute,
+      });
+
+      const tokenValid = apiClient.hasValidToken();
+      const rawStoredToken = typeof window !== "undefined" ? localStorage.getItem("aura_session_token") : null;
+      const userLoggedOut = typeof window !== "undefined" ? localStorage.getItem("aura_user_logged_out") : null;
+
+      console.log("2) apiClient.hasValidToken():", {
+        hasValidToken: tokenValid,
+        hasRawTokenInLocalStorage: Boolean(rawStoredToken),
+        storedTokenPreview: rawStoredToken ? `${rawStoredToken.substring(0, 24)}...` : null,
+        userLoggedOutFlag: userLoggedOut,
+      });
+
+      console.log("3) Current Authentication State & Mock Status:", {
+        isAuthenticated,
+        isValidatingSession,
+        productMode,
+        activeTab,
+        currentUser: currentUser ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+          tenantId: currentUser.tenantId,
+        } : null,
+        mockStatus: {
+          isUsingMockUser: Boolean(currentUser && currentUser.id === mockCurrentUser.id),
+          mockUserAvailable: {
+            id: mockCurrentUser.id,
+            name: mockCurrentUser.name,
+            email: mockCurrentUser.email,
+            role: mockCurrentUser.role,
+          },
+        },
+        rbacMiddlewareStatus: {
+          isBlockedByAuthRequired: (productMode === "PLATFORM_OWNER" || productMode === "TENANT_STORE") && !isAuthenticated,
+          isBlockedBySuperAdminOnly: productMode === "PLATFORM_OWNER" && currentUser?.role !== "SUPER_ADMIN",
+          isPublicStorefront: productMode === "STORE_CONSUMER",
+        },
+      });
+      console.groupEnd();
+    } catch (err) {
+      console.error("[Initialization Debug] Logging error:", err);
+    }
+  }, [initialRoute, isAuthenticated, isValidatingSession, productMode, activeTab, currentUser]);
 
   // PostgreSQL is the authoritative Single Source of Truth for core ERP data.
   // Hydrates products, inventory ledger, customers, and orders on tenant change.
@@ -1495,49 +1612,67 @@ export default function App() {
     setActiveTab("storefront");
   };
 
+  // Dedicated Fullscreen Diagnostic Route (?diagnostic=1, #diagnostic or /diagnostic)
+  if (activeTab === "diagnostic") {
+    return (
+      <PreviewDiagnostic
+        fullscreen
+        onClose={() => {
+          setActiveTab("ownerHome");
+        }}
+      />
+    );
+  }
+
   // If in home landing page mode, render luxury entry portal
   if (activeTab === "home") {
     return (
-      <LandingHomeExperience
-        tenant={selectedTenant}
-        branding={brandingConfig}
-        products={products}
-        resellers={resellers}
-        onOpenStorefront={handleOpenStorefrontFromHome}
-        onOpenAdminERP={(tab) => setActiveTab(tab || "dashboard")}
-        onOpenRegisterTrial={() => openAuthModal("REGISTER_TRIAL")}
-        onOpenLogin={() => openAuthModal("STORE_LOGIN")}
-      />
+      <>
+        <LandingHomeExperience
+          tenant={selectedTenant}
+          branding={brandingConfig}
+          products={products}
+          resellers={resellers}
+          onOpenStorefront={handleOpenStorefrontFromHome}
+          onOpenAdminERP={(tab) => setActiveTab(tab || "dashboard")}
+          onOpenRegisterTrial={() => openAuthModal("REGISTER_TRIAL")}
+          onOpenLogin={() => openAuthModal("STORE_LOGIN")}
+        />
+        <PreviewDiagnostic />
+      </>
     );
   }
 
   // If in storefront mode, render full dedicated buyer storefront experience (Nível 3: Consumidor)
   if (activeTab === "storefront" || productMode === "STORE_CONSUMER") {
     return (
-      <StorefrontBuyerExperience
-        tenant={selectedTenant}
-        branding={brandingConfig}
-        paymentSettings={paymentSettings}
-        products={products}
-        resellers={resellers}
-        warranties={warranties}
-        initialCategory={storefrontCategory}
-        initialCoupon={storefrontCoupon}
-        currentUser={currentUser}
-        onPlaceOrder={handlePlaceBuyerOrder}
-        onNavigateToERP={(tab) => {
-          setProductMode("TENANT_STORE");
-          setActiveTab(tab || "myStore");
-        }}
-        onNavigateToHome={() => {
-          setProductMode("TENANT_STORE");
-          setActiveTab("home");
-        }}
-        onNavigateToPlatform={() => {
-          setProductMode("PLATFORM_OWNER");
-          setActiveTab("ownerHome");
-        }}
-      />
+      <>
+        <StorefrontBuyerExperience
+          tenant={selectedTenant}
+          branding={brandingConfig}
+          paymentSettings={paymentSettings}
+          products={products}
+          resellers={resellers}
+          warranties={warranties}
+          initialCategory={storefrontCategory}
+          initialCoupon={storefrontCoupon}
+          currentUser={currentUser}
+          onPlaceOrder={handlePlaceBuyerOrder}
+          onNavigateToERP={(tab) => {
+            setProductMode("TENANT_STORE");
+            setActiveTab(tab || "myStore");
+          }}
+          onNavigateToHome={() => {
+            setProductMode("TENANT_STORE");
+            setActiveTab("home");
+          }}
+          onNavigateToPlatform={() => {
+            setProductMode("PLATFORM_OWNER");
+            setActiveTab("ownerHome");
+          }}
+        />
+        <PreviewDiagnostic />
+      </>
     );
   }
 
@@ -2104,6 +2239,9 @@ export default function App() {
         activeRequestsCount={activeRequestsCount}
         message="Sincronizando dados..."
       />
+
+      {/* Floating System Health & Preview Diagnostic */}
+      <PreviewDiagnostic />
     </div>
   );
 }

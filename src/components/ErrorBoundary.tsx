@@ -1,4 +1,5 @@
 import React from "react";
+import { PreviewDiagnostic } from "./PreviewDiagnostic";
 
 interface Props {
   children: React.ReactNode;
@@ -79,6 +80,8 @@ export class ErrorBoundary extends (React.Component as unknown as {
                 )}
               </div>
             )}
+
+            <PreviewDiagnostic compact />
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button

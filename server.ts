@@ -89,7 +89,10 @@ app.use("/api/diagnostics", diagnosticRoutes);
 
 // 3. Start Server and mount Vite middleware / static files
 async function start() {
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    process.argv.includes("--production") ||
+    (typeof __filename !== "undefined" && __filename.endsWith("server.cjs"));
 
   if (!isProduction) {
     const vite = await createViteServer({
