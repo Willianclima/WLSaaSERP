@@ -349,10 +349,15 @@ export default function App() {
 
   // PostgreSQL is the authoritative Single Source of Truth for core ERP data.
   // Hydrates products, inventory ledger, customers, and orders on tenant change.
+  // A loja pública não deve disparar chamadas protegidas do ERP.
   useEffect(() => {
+    if (productMode === "STORE_CONSUMER") {
+      return;
+    }
+
     refreshBackendData();
     checkOnboardingStatus();
-  }, [selectedTenant.id, selectedTenant.slug]);
+  }, [selectedTenant.id, selectedTenant.slug, productMode]);
 
   useEffect(() => {
     const unsubscribe = GlobalLoadingManager.subscribe(({ isLoading, activeCount }) => {
@@ -481,6 +486,9 @@ export default function App() {
 
   // Check onboarding status and trial info
   const checkOnboardingStatus = async () => {
+    if (!apiClient.hasValidToken()) {
+      return;
+    }
     try {
       const headers = await getAuthHeaders();
       const [resOnboarding, resSub] = await Promise.all([
@@ -596,6 +604,9 @@ export default function App() {
 
   // Sync Products, Ledger, Customers and Orders from Real ERP API
   const refreshBackendData = async () => {
+    if (!apiClient.hasValidToken()) {
+      return;
+    }
     try {
       const headers = await getAuthHeaders();
 
@@ -671,12 +682,7 @@ export default function App() {
   };
 
   React.useEffect(() => {
-    refreshBackendData();
-    checkOnboardingStatus();
-  }, [selectedTenant.id]);
-
-  React.useEffect(() => {
-    if (activeTab === "storefront") {
+    if (activeTab === "storefront" || productMode === "STORE_CONSUMER") {
       const slug = initialRoute.slug || selectedTenant.slug || "lumina";
       fetch(`/api/products/public?storeSlug=${encodeURIComponent(slug)}`)
         .then((r) => r.json())
@@ -708,7 +714,7 @@ export default function App() {
         })
         .catch((e) => console.warn("Could not load public storefront:", e));
     }
-  }, [activeTab, selectedTenant.slug]);
+  }, [activeTab, productMode, selectedTenant.slug]);
 
   const handleUpdateBranding = (newBranding: StoreBrandingConfig) => {
     setBrandingConfig(newBranding);
