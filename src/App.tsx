@@ -353,17 +353,16 @@ export default function App() {
     }
   }, [initialRoute, isAuthenticated, isValidatingSession, productMode, activeTab, currentUser]);
 
-  // PostgreSQL is the authoritative Single Source of Truth for core ERP data.
-  // Hydrates products, inventory ledger, customers, and orders on tenant change.
-  // A loja pública não deve disparar chamadas protegidas do ERP.
-  useEffect(() => {
+  React.useEffect(() => {
+    // A loja pública não deve disparar chamadas protegidas do ERP.
+    // Isso evita 401/403 durante a inicialização do Preview sem sessão JWT.
     if (productMode === "STORE_CONSUMER") {
       return;
     }
 
     refreshBackendData();
     checkOnboardingStatus();
-  }, [selectedTenant.id, selectedTenant.slug, productMode]);
+  }, [selectedTenant.id, productMode]);
 
   useEffect(() => {
     const unsubscribe = GlobalLoadingManager.subscribe(({ isLoading, activeCount }) => {
