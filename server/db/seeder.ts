@@ -63,7 +63,7 @@ export async function seedPostgresIfNeeded(): Promise<void> {
       await query(
         `INSERT INTO users (id, name, email, password_hash, avatar_url, phone, is_platform_super_admin, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = EXCLUDED.name, email = EXCLUDED.email`,
         [
           user.id,
           user.name,
@@ -82,7 +82,7 @@ export async function seedPostgresIfNeeded(): Promise<void> {
       await query(
         `INSERT INTO organization_members (id, organization_id, user_id, role, custom_permissions, status)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (id) DO NOTHING`,
+         ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status`,
         [
           member.id,
           member.organizationId,

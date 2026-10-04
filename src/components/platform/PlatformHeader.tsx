@@ -18,6 +18,7 @@ import {
   Smartphone,
   Package,
   KeyRound,
+  Lock,
 } from "lucide-react";
 import { TenantStore, RBACUser, SystemUserRole } from "../../types";
 
@@ -75,13 +76,13 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
                 A
               </span>
               <div>
-                <span className="font-bold text-white text-xs tracking-tight">AURA SaaS</span>
+                <span className="font-bold text-white text-xs tracking-tight">AURA Semijoias</span>
                 <span className="ml-2 px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[9px] font-bold uppercase tracking-wider">
-                  {currentMode === "PLATFORM_OWNER"
-                    ? "Camada 1 · Plataforma"
+                  {currentMode === "STORE_CONSUMER"
+                    ? "Vitrine Pública"
                     : currentMode === "TENANT_STORE"
-                    ? "Camada 2 · ERP do Cliente"
-                    : "Camada 3 · Loja Pública"}
+                    ? "ERP da Loja"
+                    : "Central AURA"}
                 </span>
               </div>
             </div>
@@ -90,29 +91,60 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
             <button
               onClick={() => setShowArchitectureModal(true)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-300 text-[11px] font-semibold border border-stone-800 transition-colors cursor-pointer"
-              title="Entenda a separação entre as 3 Camadas: AURA (Willian), ERP (Lojista) e Loja Pública (Consumidor)"
+              title="Entenda a separação entre os 3 Níveis: Vitrine Pública, ERP da Loja e Central AURA"
             >
               <Info className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">3 Camadas do Sistema</span>
+              <span className="hidden sm:inline">3 Níveis do Sistema</span>
             </button>
           </div>
 
-          {/* Center: The Three Levels Switcher */}
-          <div className="flex items-center bg-stone-900 border border-stone-800 p-1 rounded-2xl w-full sm:w-auto justify-center overflow-x-auto scrollbar-none">
-            {/* Camada 1: Plataforma (Willian / SUPER_ADMIN) */}
+          {/* Center: The Three Levels Switcher (Vitrine | ERP da Loja | Central AURA) */}
+          <div className="flex items-center bg-stone-900 border border-stone-800 p-1 rounded-2xl w-full sm:w-auto justify-center overflow-x-auto scrollbar-none gap-1">
+            {/* Nível 3: Vitrine Pública (Consumidor Final - Aberto/Sem autenticação) */}
+            <button
+              onClick={() => onSwitchMode("STORE_CONSUMER")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                currentMode === "STORE_CONSUMER"
+                  ? "bg-amber-400 text-stone-950 shadow-sm"
+                  : "text-stone-300 hover:text-white hover:bg-stone-800/60"
+              }`}
+              title="🛍️ Vitrine: Catálogo aberto para clientes, sacola e compras via WhatsApp (Sem autenticação)"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>🛍️ Vitrine</span>
+            </button>
+
+            {/* Nível 2: ERP da Loja (Lojista / Equipe) */}
+            <button
+              onClick={() => onSwitchMode("TENANT_STORE")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                currentMode === "TENANT_STORE"
+                  ? "bg-amber-400 text-stone-950 shadow-sm"
+                  : "text-stone-300 hover:text-white hover:bg-stone-800/60"
+              }`}
+              title="🏪 ERP da Loja: Gestão de estoque, produtos, vendas, clientes e configurações"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>🏪 ERP da Loja</span>
+              {!isAuthenticated && (
+                <Lock className="w-3 h-3 text-stone-400" />
+              )}
+            </button>
+
+            {/* Nível 1: Central AURA (Administração da Plataforma) */}
             <button
               onClick={() => onSwitchMode("PLATFORM_OWNER")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 currentMode === "PLATFORM_OWNER"
                   ? "bg-amber-400 text-stone-950 shadow-sm"
                   : isSuperAdmin
-                  ? "text-stone-300 hover:text-white"
-                  : "text-stone-400 hover:text-amber-300 opacity-90"
+                  ? "text-stone-300 hover:text-white hover:bg-stone-800/60"
+                  : "text-stone-400 hover:text-amber-300 opacity-90 hover:bg-stone-800/60"
               }`}
               title={
                 isSuperAdmin
-                  ? "Camada 1 — AURA PLATFORM (SUPER_ADMIN): Governança SaaS, Organizações, Planos, Assinaturas, Trials, Módulos, Auditoria"
-                  : "Camada 1 — AURA PLATFORM: Acesso restrito ao SuperAdmin da plataforma"
+                  ? "🛡️ Central AURA: Governança SaaS, Tenancy, Planos, Assinaturas e Auditoria"
+                  : "🛡️ Central AURA: Área exclusiva para administradores da plataforma"
               }
             >
               {isSuperAdmin ? (
@@ -120,40 +152,7 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
               ) : (
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
               )}
-              <span>Camada 1 · AURA</span>
-              {!isSuperAdmin && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-stone-800 text-amber-400 font-mono hidden sm:inline">
-                  Admin
-                </span>
-              )}
-            </button>
-
-            {/* Camada 2: ERP do Cliente (Lojista / Piloto 01) */}
-            <button
-              onClick={() => onSwitchMode("TENANT_STORE")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                currentMode === "TENANT_STORE"
-                  ? "bg-amber-400 text-stone-950 shadow-sm"
-                  : "text-stone-300 hover:text-white"
-              }`}
-              title="Camada 2 — ERP DO CLIENTE (Lojista): Início, Produtos, Pedidos, Clientes, Estoque, Minha Loja, Configurações"
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>Camada 2 · ERP da Loja</span>
-            </button>
-
-            {/* Camada 3: Loja Pública (Consumidor Final) */}
-            <button
-              onClick={() => onSwitchMode("STORE_CONSUMER")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                currentMode === "STORE_CONSUMER"
-                  ? "bg-amber-400 text-stone-950 shadow-sm"
-                  : "text-stone-300 hover:text-white"
-              }`}
-              title="Camada 3 — LOJA PÚBLICA (Consumidor): Catálogo → Produto → Carrinho → WhatsApp → Pedido"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Camada 3 · Loja Pública</span>
+              <span>🛡️ Central AURA</span>
             </button>
           </div>
 
@@ -210,7 +209,7 @@ export const PlatformHeader: React.FC<PlatformHeaderProps> = ({
             </div>
 
             {/* If in Store Mode (Nível 2), show Store User Role simulation */}
-            {currentMode === "TENANT_STORE" && onSwitchRole && (
+            {currentMode === "TENANT_STORE" && onSwitchRole && currentUser && (
               <div className="relative">
                 <button
                   onClick={() => setShowRoleDropdown(!showRoleDropdown)}

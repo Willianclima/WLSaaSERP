@@ -1,5 +1,6 @@
 import React from "react";
 import { PreviewDiagnostic } from "./PreviewDiagnostic";
+import { safeStorage } from "../utils/safeStorage";
 
 interface Props {
   children: React.ReactNode;
@@ -35,13 +36,15 @@ export class ErrorBoundary extends (React.Component as unknown as {
   }
 
   private handleReload = () => {
-    localStorage.removeItem("aura_last_error");
+    try {
+      safeStorage.removeItem("aura_last_error");
+    } catch {}
     window.location.reload();
   };
 
   private handleResetStorage = () => {
     try {
-      localStorage.clear();
+      safeStorage.clear();
       sessionStorage.clear();
     } catch {
       // ignore

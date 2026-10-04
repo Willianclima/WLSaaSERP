@@ -47,7 +47,7 @@ export async function jwtTenantRlsMiddleware(
     if (authHeader) {
       const rawToken = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-      // Caso A: Token no formato JWT padrão RFC 7519 (header.payload.signature)
+      // Token no formato JWT padrão RFC 7519 (header.payload.signature)
       if (JwtService.isJwt(rawToken)) {
         try {
           tokenPayload = JwtService.verify(rawToken);
@@ -60,61 +60,11 @@ export async function jwtTenantRlsMiddleware(
             error: `Token JWT inválido ou expirado: ${jwtErr.message}`,
           });
         }
-      }
-      // Caso B: Formato de sessão legada assinada com HMAC-SHA256 (sess_aura_{userId}_{orgId}_{timestamp}_{sig})
-      else if (rawToken.startsWith("sess_aura_")) {
-        const parts = rawToken.split("_");
-        const uId = parts[2];
-        const orgId = parts[3];
-        const timestamp = parts[4];
-        const signature = parts[5];
-
-        if (!uId || !orgId) {
-          return res.status(401).json({
-            success: false,
-            code: "INVALID_SESSION_PAYLOAD",
-            error: "Token de sessão inválido: payload incompleto.",
-          });
-        }
-
-        const sessionSecret = getSessionSecret();
-        if (signature) {
-          const expectedSig = crypto
-            .createHmac("sha256", sessionSecret)
-            .update(`${uId}_${orgId}_${timestamp}`)
-            .digest("hex")
-            .substring(0, 16);
-
-          if (signature !== expectedSig) {
-            return res.status(401).json({
-              success: false,
-              code: "INVALID_TOKEN_SIGNATURE",
-              error: "Token de autenticação com assinatura inválida ou violada.",
-            });
-          }
-        } else if (isProduction) {
-          return res.status(401).json({
-            success: false,
-            code: "UNSIGNED_TOKEN_REJECTED",
-            error: "Acesso negado: token sem assinatura criptográfica rejeitado em produção.",
-          });
-        }
-
-        userId = uId;
-        tokenTenantId = orgId;
-        tokenPayload = {
-          sub: uId,
-          userId: uId,
-          email: "",
-          tenantId: orgId,
-          organizationId: orgId,
-          role: "OWNER" as OrganizationRole,
-        };
       } else {
         return res.status(401).json({
           success: false,
-          code: "UNKNOWN_TOKEN_FORMAT",
-          error: "Formato de token de autenticação não reconhecido. Forneça um JWT válido.",
+          code: "JWT_TOKEN_REQUIRED",
+          error: "Formato de token não reconhecido ou legado rejeitado. Um token JWT RFC 7519 válido é estritamente obrigatório.",
         });
       }
     }

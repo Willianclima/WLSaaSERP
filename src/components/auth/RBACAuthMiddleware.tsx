@@ -96,13 +96,13 @@ export const RBACAuthMiddleware: React.FC<RBACAuthMiddlewareProps> = ({
             </span>
 
             <h2 className="text-2xl font-serif font-bold text-stone-900 dark:text-stone-100 mt-2">
-              Autenticação Obrigatória
+              {isPlatformMode ? "Central AURA — Administração da Plataforma" : "Acesso ao ERP da Loja"}
             </h2>
 
             <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-1 max-w-md">
               {isPlatformMode
-                ? "O Painel de Governança AURA é restrito ao Administrador Mestre da Plataforma. É necessário fazer login com seu token de SuperAdmin para acessar métricas, base de inquilinos e controle financeiro."
-                : `A área administrativa de ${selectedTenant.name} é restrita à proprietária e colaboradoras autorizadas. Faça login com suas credenciais ou crie um cadastro de teste com 30 dias grátis.`}
+                ? "Área exclusiva para administradores da plataforma."
+                : "Entre para gerenciar produtos, estoque, vendas, clientes e sua loja."}
             </p>
           </div>
 
@@ -115,7 +115,7 @@ export const RBACAuthMiddleware: React.FC<RBACAuthMiddlewareProps> = ({
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold rounded-2xl shadow-md transition-all cursor-pointer text-sm"
                 >
                   <KeyRound className="w-4 h-4" />
-                  <span>Entrar como Administrador da Plataforma (SuperAdmin)</span>
+                  <span>Entrar como administrador</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>
 
@@ -147,7 +147,7 @@ export const RBACAuthMiddleware: React.FC<RBACAuthMiddlewareProps> = ({
                   className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-stone-950 dark:bg-amber-400 dark:text-stone-950 text-white font-bold rounded-2xl shadow-md transition-all cursor-pointer text-sm"
                 >
                   <KeyRound className="w-4 h-4" />
-                  <span>Fazer Login na Minha Loja (ERP)</span>
+                  <span>Entrar no ERP</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>
 

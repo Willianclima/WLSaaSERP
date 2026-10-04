@@ -23,6 +23,7 @@ import { SubscriptionExpiredModal } from "./components/saas/SubscriptionExpiredM
 import { SaaSAuditModal } from "./components/saas/SaaSAuditModal";
 import { PreviewDiagnostic } from "./components/PreviewDiagnostic";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
+import { safeStorage } from "./utils/safeStorage";
 
 // Modular Domain Architecture (Platform, Store, Catalog, Orders, Customers, Inventory, Onboarding)
 import {
@@ -85,31 +86,40 @@ import {
 } from "./types";
 import confetti from "canvas-confetti";
 
-function detectInitialRoute(): { tab: string; slug?: string } {
-  if (typeof window === "undefined") return { tab: "ownerHome" };
+function detectInitialRoute(): { tab: string; mode: ProductMode; slug?: string } {
+  if (typeof window === "undefined") return { tab: "storefront", mode: "STORE_CONSUMER" };
   const path = window.location.pathname;
   const search = new URLSearchParams(window.location.search);
   const hash = window.location.hash;
 
+  if (search.get("diagnostic") !== null || hash === "#diagnostic" || path === "/diagnostic") {
+    return { tab: "diagnostic", mode: "STORE_CONSUMER" };
+  }
+
   if (path.startsWith("/loja/")) {
     const slug = path.replace(/^\/loja\/?/, "").split("/")[0].split("?")[0];
-    return { tab: "storefront", slug: slug || undefined };
+    return { tab: "storefront", mode: "STORE_CONSUMER", slug: slug || undefined };
   }
 
   const queryLoja = search.get("loja");
   if (queryLoja) {
-    return { tab: "storefront", slug: queryLoja };
+    return { tab: "storefront", mode: "STORE_CONSUMER", slug: queryLoja };
   }
 
-  if (search.get("diagnostic") !== null || hash === "#diagnostic" || path === "/diagnostic") {
-    return { tab: "diagnostic" };
+  // Direct friendly routes for ERP and Central AURA
+  if (path === "/erp" || hash === "#erp" || search.get("mode") === "erp") {
+    return { tab: "dashboard", mode: "TENANT_STORE" };
   }
 
-  if (hash === "#storefront" || hash === "#catalogo" || hash === "#loja") {
-    return { tab: "storefront" };
+  if (path === "/aura" || hash === "#aura" || search.get("mode") === "aura") {
+    return { tab: "ownerHome", mode: "PLATFORM_OWNER" };
   }
 
-  return { tab: "ownerHome" };
+  if (hash === "#storefront" || hash === "#catalogo" || hash === "#loja" || search.get("mode") === "storefront") {
+    return { tab: "storefront", mode: "STORE_CONSUMER" };
+  }
+
+  return { tab: "storefront", mode: "STORE_CONSUMER" };
 }
 
 export default function App() {
@@ -123,11 +133,7 @@ export default function App() {
       if (urlMode === "erp" || urlMode === "store") return "TENANT_STORE";
       if (urlMode === "aura" || urlMode === "admin") return "PLATFORM_OWNER";
     }
-    if (initialRoute.tab === "storefront") return "STORE_CONSUMER";
-    if (typeof window !== "undefined" && apiClient.hasValidToken()) {
-      return "PLATFORM_OWNER";
-    }
-    return "STORE_CONSUMER";
+    return initialRoute.mode;
   });
   const [storefrontCategory, setStorefrontCategory] = useState<string>("TODOS");
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
@@ -679,6 +685,31 @@ export default function App() {
     } catch (err) {
       console.warn("Backend API sync fallback to local state:", err);
     }
+  };
+
+  const handleAuthSuccess = (
+    user: RBACUser,
+    tenant: TenantStore,
+    targetMode: ProductMode,
+    isNewRegistration?: boolean
+  ) => {
+    setCurrentUser(user);
+    setSelectedTenant(tenant);
+    setIsAuthenticated(true);
+    setProductMode(targetMode);
+    if (targetMode === "PLATFORM_OWNER") {
+      setActiveTab("ownerHome");
+    } else {
+      setActiveTab("dashboard");
+      if (isNewRegistration) {
+        setShowOnboardingModal(true);
+      }
+    }
+    try {
+      localStorage.setItem("aura_user_profile", JSON.stringify(user));
+    } catch (e) {}
+    refreshBackendData();
+    checkOnboardingStatus();
   };
 
   React.useEffect(() => {
@@ -1640,10 +1671,24 @@ export default function App() {
           products={products}
           resellers={resellers}
           onOpenStorefront={handleOpenStorefrontFromHome}
-          onOpenAdminERP={(tab) => setActiveTab(tab || "dashboard")}
+          onOpenAdminERP={(tab) => {
+            setProductMode("TENANT_STORE");
+            setActiveTab(tab || "dashboard");
+          }}
           onOpenRegisterTrial={() => openAuthModal("REGISTER_TRIAL")}
           onOpenLogin={() => openAuthModal("STORE_LOGIN")}
         />
+        {showAuthModal && (
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+            currentUser={currentUser}
+            currentTenant={selectedTenant}
+            tenants={tenants}
+            initialTab={authModalTab}
+            onLoginSuccess={handleAuthSuccess}
+          />
+        )}
         <PreviewDiagnostic />
       </>
     );
@@ -1653,6 +1698,39 @@ export default function App() {
   if (activeTab === "storefront" || productMode === "STORE_CONSUMER") {
     return (
       <>
+        {/* Top Header: Platform Master Switcher (Nível 1 · Nível 2 · Nível 3) */}
+        <PlatformHeader
+          currentUser={currentUser}
+          isAuthenticated={isAuthenticated}
+          currentMode={productMode}
+          selectedTenant={selectedTenant}
+          tenants={tenants}
+          onSwitchMode={(mode) => {
+            setProductMode(mode);
+            if (mode === "STORE_CONSUMER") {
+              setActiveTab("storefront");
+            } else if (mode === "PLATFORM_OWNER") {
+              setActiveTab("ownerHome");
+            } else {
+              setActiveTab("dashboard");
+            }
+          }}
+          onSelectTenant={(t) => {
+            setSelectedTenant(t);
+            showToast(`Loja alterada para: ${t.name}`);
+          }}
+          onOpenStorefrontPreview={() => {
+            setProductMode("STORE_CONSUMER");
+            setActiveTab("storefront");
+          }}
+          onSwitchRole={(role) => {
+            handleUpdateUser({ role });
+            showToast(`Papel de loja simulado: ${role}`);
+          }}
+          onOpenAuthModal={openAuthModal}
+          onLogout={handleLogout}
+        />
+
         <StorefrontBuyerExperience
           tenant={selectedTenant}
           branding={brandingConfig}
@@ -1666,7 +1744,7 @@ export default function App() {
           onPlaceOrder={handlePlaceBuyerOrder}
           onNavigateToERP={(tab) => {
             setProductMode("TENANT_STORE");
-            setActiveTab(tab || "myStore");
+            setActiveTab(tab || "dashboard");
           }}
           onNavigateToHome={() => {
             setProductMode("TENANT_STORE");
@@ -1677,6 +1755,19 @@ export default function App() {
             setActiveTab("ownerHome");
           }}
         />
+
+        {showAuthModal && (
+          <AuthModal
+            isOpen={showAuthModal}
+            onClose={() => setShowAuthModal(false)}
+            currentUser={currentUser}
+            currentTenant={selectedTenant}
+            tenants={tenants}
+            initialTab={authModalTab}
+            onLoginSuccess={handleAuthSuccess}
+          />
+        )}
+
         <PreviewDiagnostic />
       </>
     );

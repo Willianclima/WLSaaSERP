@@ -17,10 +17,17 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    if (!password || typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: "A senha de acesso é obrigatória e deve possuir no mínimo 6 caracteres.",
+      });
+    }
+
     const session = await AuthService.registerTrial({
       userName,
       email,
-      password: password || "123456",
+      password,
       organizationName,
       segment,
       document,
@@ -43,17 +50,23 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password, organizationId } = req.body;
-    const isProduction = process.env.NODE_ENV === "production";
 
-    if (isProduction && !email) {
+    if (!email || typeof email !== "string" || !email.trim()) {
       return res.status(400).json({
         success: false,
-        error: "O endereço de e-mail é obrigatório para autenticação em produção.",
+        error: "O endereço de e-mail é obrigatório para autenticação.",
+      });
+    }
+
+    if (!password || typeof password !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "A senha de acesso é obrigatória.",
       });
     }
 
     const session = await AuthService.login(
-      email || (isProduction ? "" : "willianCLima@gmail.com"),
+      email.trim(),
       password,
       organizationId
     );
@@ -73,7 +86,7 @@ router.get("/me", authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
     const user = req.user!;
     const organization = req.tenant!;
-    const session = await AuthService.login(user.email, undefined, organization.id);
+    const session = await AuthService.getSessionForUser(user, organization.id);
     return res.json({
       success: true,
       session,
@@ -159,7 +172,7 @@ router.post("/switch-tenant", authMiddleware, async (req: AuthenticatedRequest, 
     const { targetOrganizationId } = req.body;
     const user = req.user!;
 
-    const session = await AuthService.login(user.email, undefined, targetOrganizationId);
+    const session = await AuthService.getSessionForUser(user, targetOrganizationId);
     return res.json({
       success: true,
       message: `Alternado para a empresa ${session.organization.name}`,
@@ -173,6 +186,13 @@ router.post("/switch-tenant", authMiddleware, async (req: AuthenticatedRequest, 
 // POST /api/auth/generate-expired-token - Gera token JWT propositalmente expirado para validação do TESTE 5
 router.post("/generate-expired-token", async (_req, res) => {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({
+        success: false,
+        error: "Rota de teste desativada em ambiente de produção.",
+      });
+    }
+
     const { JwtService } = await import("../services/jwtService");
     const expiredToken = JwtService.sign(
       {

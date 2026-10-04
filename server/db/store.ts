@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { PasswordService } from "../services/passwordService";
 import {
   OrganizationEntity,
   UserEntity,
@@ -283,7 +284,7 @@ class DatabaseStore {
       id: "usr-admin-01",
       name: "Willian C. Lima",
       email: "willianCLima@gmail.com",
-      passwordHash: "demo_hash_bcrypt_super_secure",
+      passwordHash: PasswordService.hashSync("admin123"),
       phone: "+55 (19) 99876-5432",
       isPlatformSuperAdmin: true,
       status: "ACTIVE",
@@ -292,8 +293,36 @@ class DatabaseStore {
     };
     this.users.set(userAdmin.id, userAdmin);
 
-    // 4. Membership
-    const memberLumina: OrganizationMemberEntity = {
+    // 3b. Store Owner User (Lumina Semijoias)
+    const userLumina: UserEntity = {
+      id: "usr-lumina-01",
+      name: "Dona Lumina",
+      email: "contato@luminasemijoias.com.br",
+      passwordHash: PasswordService.hashSync("123456"),
+      phone: "+55 (19) 98765-4321",
+      isPlatformSuperAdmin: false,
+      status: "ACTIVE",
+      createdAt: "2026-08-01 10:00",
+      lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+    this.users.set(userLumina.id, userLumina);
+
+    // 3c. Store Manager User (Maria da Silva)
+    const userMaria: UserEntity = {
+      id: "usr-maria-01",
+      name: "Maria da Silva",
+      email: "maria@elegance.com",
+      passwordHash: PasswordService.hashSync("123456"),
+      phone: "+55 (11) 98888-7777",
+      isPlatformSuperAdmin: false,
+      status: "ACTIVE",
+      createdAt: "2026-08-01 10:00",
+      lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+    this.users.set(userMaria.id, userMaria);
+
+    // 4. Memberships
+    const memberLuminaAdmin: OrganizationMemberEntity = {
       id: "mem-01",
       organizationId: orgLumina.id,
       userId: userAdmin.id,
@@ -302,7 +331,29 @@ class DatabaseStore {
       status: "ACTIVE",
       createdAt: "2026-08-01 10:00",
     };
-    this.members.set(memberLumina.id, memberLumina);
+    this.members.set(memberLuminaAdmin.id, memberLuminaAdmin);
+
+    const memberLuminaOwner: OrganizationMemberEntity = {
+      id: "mem-02",
+      organizationId: orgLumina.id,
+      userId: userLumina.id,
+      role: "OWNER",
+      customPermissions: ["*"],
+      status: "ACTIVE",
+      createdAt: "2026-08-01 10:00",
+    };
+    this.members.set(memberLuminaOwner.id, memberLuminaOwner);
+
+    const memberMaria: OrganizationMemberEntity = {
+      id: "mem-03",
+      organizationId: orgLumina.id,
+      userId: userMaria.id,
+      role: "GERENTE_COMERCIAL",
+      customPermissions: ["products.*", "orders.*", "customers.*"],
+      status: "ACTIVE",
+      createdAt: "2026-08-01 10:00",
+    };
+    this.members.set(memberMaria.id, memberMaria);
 
     // 5. Subscription (Trial 30 days active with 20 days remaining)
     const now = new Date();

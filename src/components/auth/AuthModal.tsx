@@ -58,14 +58,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   }, [initialTab, isOpen]);
 
   // Store Login State
-  const [storeEmail, setStoreEmail] = useState<string>("contato@luminasemijoias.com.br");
-  const [storePassword, setStorePassword] = useState<string>("123456");
-  const [selectedTenantId, setSelectedTenantId] = useState<string>(currentTenant?.id || "org-lumina-01");
+  const [storeEmail, setStoreEmail] = useState<string>("");
+  const [storePassword, setStorePassword] = useState<string>("");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(currentTenant?.id || tenants[0]?.id || "");
   const [isStoreLoading, setIsStoreLoading] = useState<boolean>(false);
 
   // Platform Super Admin Login State
-  const [adminEmail, setAdminEmail] = useState<string>("willianCLima@gmail.com");
-  const [adminPassword, setAdminPassword] = useState<string>("admin123");
+  const [adminEmail, setAdminEmail] = useState<string>("");
+  const [adminPassword, setAdminPassword] = useState<string>("");
   const [isAdminLoading, setIsAdminLoading] = useState<boolean>(false);
 
   // New Trial Registration State
@@ -214,6 +214,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    if (!regPassword || regPassword.length < 6) {
+      toast.error("Por favor, informe uma senha com no mínimo 6 caracteres.");
+      return;
+    }
+
     setIsRegLoading(true);
 
     try {
@@ -224,8 +229,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           userName: regName.trim(),
           organizationName: regStoreName.trim(),
           email: regEmail.trim(),
-          password: regPassword || "123456",
-          whatsapp: regWhatsapp.trim() || "(19) 98765-4321",
+          password: regPassword,
+          whatsapp: regWhatsapp.trim() || "",
           segment: "SEMIJOIAS",
         }),
       });
@@ -446,8 +451,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
 
                 <div className="pt-2 flex items-center justify-between">
-                  <div className="text-[11px] text-stone-500">
-                    Senha padrão demo: <span className="text-amber-400 font-mono">123456</span>
+                  <div className="text-[11px] text-stone-500 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Autenticação Bcrypt + JWT Multi-Tenant</span>
                   </div>
                   <button
                     type="submit"
@@ -466,10 +472,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </form>
 
-              {/* Quick Preset Buttons */}
+              {/* Quick Demo Pre-fill for Development / Evaluation */}
               <div className="border-t border-stone-800 pt-4">
                 <p className="text-[11px] font-semibold text-stone-400 mb-2">
-                  Atalhos de Acesso Rápido para Demonstração:
+                  Atalhos de Demonstração (Sandbox):
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
@@ -564,8 +570,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
 
                 <div className="pt-2 flex items-center justify-between">
-                  <div className="text-[11px] text-stone-500">
-                    Usuário Master: <span className="text-amber-400 font-mono">willianCLima@gmail.com</span>
+                  <div className="text-[11px] text-stone-500 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Autenticação Master com RBAC & SuperAdmin Guard</span>
                   </div>
                   <button
                     type="submit"

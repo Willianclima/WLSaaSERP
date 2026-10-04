@@ -20,8 +20,44 @@ import {
   OrganizationRole,
 } from "../types/saas";
 import { JwtService } from "./jwtService";
+import { PasswordService } from "./passwordService";
+import bcrypt from "bcryptjs";
 
 export class AuthService {
+  private static readonly BCRYPT_SALT_ROUNDS = 10;
+
+  /**
+   * Cryptographically hashes a plain-text password using bcrypt with generated salt.
+   */
+  static async hashPassword(password: string): Promise<string> {
+    if (!password || typeof password !== "string") {
+      throw new Error("A senha fornecida para hashing é inválida ou vazia.");
+    }
+    const salt = await bcrypt.genSalt(this.BCRYPT_SALT_ROUNDS);
+    return bcrypt.hash(password, salt);
+  }
+
+  /**
+   * Secure async comparison function using bcryptjs to compare plain-text password with stored hash.
+   */
+  static async verifyPassword(plainPassword: string, storedHash?: string | null): Promise<boolean> {
+    if (!plainPassword || !storedHash || typeof plainPassword !== "string" || typeof storedHash !== "string") {
+      return false;
+    }
+
+    // Direct asynchronous bcrypt verification
+    try {
+      if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$") || storedHash.startsWith("$2y$")) {
+        return await bcrypt.compare(plainPassword, storedHash);
+      }
+    } catch (err) {
+      console.error("[AuthService] Error comparing password hash with bcrypt:", err);
+      return false;
+    }
+
+    // Fallback for transitional legacy seeds (automatic upgrade to bcrypt occurs on login)
+    return PasswordService.verify(plainPassword, storedHash);
+  }
   /**
    * Generates a tamper-proof session token signed with HMAC-SHA256 using SESSION_SECRET.
    */
@@ -67,11 +103,12 @@ export class AuthService {
     // 1. Check if user exists
     let existingUser = await userRepo.findByEmail(emailNormalized);
     const userId = existingUser ? existingUser.id : `usr-${Date.now()}`;
+    const passwordHash = await this.hashPassword(data.password);
     const user: UserEntity = existingUser || {
       id: userId,
       name: data.userName.trim(),
       email: emailNormalized,
-      passwordHash: `hash_${data.password}`,
+      passwordHash,
       phone: data.whatsapp || "",
       isPlatformSuperAdmin: false,
       status: "ACTIVE",
@@ -165,19 +202,61 @@ export class AuthService {
   }
 
   /**
-   * Authenticates user via email and returns organization context.
+   * Authenticates user via email and password with cryptographic bcrypt validation and returns organization session context.
    */
-  static async login(email: string, _password?: string, targetOrgId?: string): Promise<AuthSessionResponse> {
+  static async login(email: string, password?: string, targetOrgId?: string): Promise<AuthSessionResponse> {
     const emailNormalized = (email || "").trim().toLowerCase();
-    let user: UserEntity | null = null;
-    if (emailNormalized) {
-      user = await userRepo.findByEmail(emailNormalized);
+    if (!emailNormalized) {
+      throw new Error("Credenciais inválidas: o e-mail de acesso é obrigatório.");
     }
+
+    if (!password || typeof password !== "string") {
+      throw new Error("Credenciais inválidas: a senha de acesso é obrigatória.");
+    }
+
+    let user: UserEntity | null = await userRepo.findByEmail(emailNormalized);
 
     if (!user) {
-      throw new Error("Credenciais inválidas: usuário não encontrado.");
+      throw new Error("Credenciais inválidas: e-mail ou senha incorretos.");
     }
 
+    // Cryptographic bcrypt validation against stored password hash
+    const isPasswordValid = await this.verifyPassword(password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new Error("Credenciais inválidas: e-mail ou senha incorretos.");
+    }
+
+    if (user.status !== "ACTIVE") {
+      throw new Error("Usuário inativo ou suspenso. Entre em contato com o suporte.");
+    }
+
+    // Automatic transparent upgrade if legacy hash is detected
+    if (PasswordService.needsRehash(user.passwordHash)) {
+      try {
+        const upgradedHash = await this.hashPassword(password);
+        await userRepo.update(user.id, { passwordHash: upgradedHash });
+        user.passwordHash = upgradedHash;
+      } catch (upgradeErr) {
+        console.warn("[AuthService] Could not upgrade legacy password hash:", upgradeErr);
+      }
+    }
+
+    // Update lastLoginAt timestamp
+    try {
+      const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+      await userRepo.update(user.id, { lastLoginAt: nowStr });
+      user.lastLoginAt = nowStr;
+    } catch (loginTimeErr) {
+      console.warn("[AuthService] Could not update lastLoginAt:", loginTimeErr);
+    }
+
+    return this.getSessionForUser(user, targetOrgId);
+  }
+
+  /**
+   * Constructs active tenant session context for an already-authenticated identity (e.g., via verified JWT).
+   */
+  static async getSessionForUser(user: UserEntity, targetOrgId?: string): Promise<AuthSessionResponse> {
     if (user.status !== "ACTIVE") {
       throw new Error("Usuário inativo ou suspenso. Entre em contato com o suporte.");
     }

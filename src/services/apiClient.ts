@@ -1024,13 +1024,13 @@ export class ApiClient {
       // Guarda token e tenant anteriores para restauração posterior
       const prevToken = this.getToken();
       const prevTenant = this.getTenantId();
-      localStorage.setItem(
+      safeStorage.setItem(
         PRE_SUPPORT_SESSION_KEY,
         JSON.stringify({ token: prevToken, tenantId: prevTenant })
       );
 
       // Ativa token e tenant da sessão de suporte
-      localStorage.setItem(SUPPORT_SESSION_KEY, JSON.stringify(data.session));
+      safeStorage.setItem(SUPPORT_SESSION_KEY, JSON.stringify(data.session));
       this.setToken(data.token);
       this.setTenantId(params.targetOrganizationId);
     }
@@ -1043,14 +1043,14 @@ export class ApiClient {
   static endControlledSupportSession(): void {
     if (typeof window === "undefined") return;
     try {
-      const preRaw = localStorage.getItem(PRE_SUPPORT_SESSION_KEY);
+      const preRaw = safeStorage.getItem(PRE_SUPPORT_SESSION_KEY);
       if (preRaw) {
         const pre = JSON.parse(preRaw);
         if (pre.token) this.setToken(pre.token);
         if (pre.tenantId) this.setTenantId(pre.tenantId);
       }
-      localStorage.removeItem(SUPPORT_SESSION_KEY);
-      localStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
+      safeStorage.removeItem(SUPPORT_SESSION_KEY);
+      safeStorage.removeItem(PRE_SUPPORT_SESSION_KEY);
     } catch (e) {
       console.warn("Erro ao encerrar sessão de suporte:", e);
     }
@@ -1062,7 +1062,7 @@ export class ApiClient {
   static getActiveSupportSession(): any | null {
     if (typeof window === "undefined") return null;
     try {
-      const raw = localStorage.getItem(SUPPORT_SESSION_KEY);
+      const raw = safeStorage.getItem(SUPPORT_SESSION_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
