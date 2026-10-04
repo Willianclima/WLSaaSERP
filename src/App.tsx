@@ -139,7 +139,7 @@ export default function App() {
   const [storefrontCoupon, setStorefrontCoupon] = useState<string>("");
   const [brandingConfig, setBrandingConfig] = useState<StoreBrandingConfig>(() => {
     try {
-      const saved = localStorage.getItem("aura_branding_config");
+      const saved = safeStorage.getItem("aura_branding_config");
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return DEFAULT_BRANDING_CONFIG;
@@ -147,7 +147,7 @@ export default function App() {
   const [selectedTenant, setSelectedTenant] = useState<TenantStore>(() => {
     const base = mockTenants[0];
     try {
-      const saved = localStorage.getItem("aura_branding_config");
+      const saved = safeStorage.getItem("aura_branding_config");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.logoText) {
@@ -170,7 +170,7 @@ export default function App() {
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    if (localStorage.getItem("aura_user_logged_out") === "true") return false;
+    if (safeStorage.getItem("aura_user_logged_out") === "true") return false;
     return apiClient.hasValidToken();
   });
   const [isValidatingSession, setIsValidatingSession] = useState<boolean>(() => {
@@ -179,10 +179,10 @@ export default function App() {
   });
   const [currentUser, setCurrentUser] = useState<RBACUser | null>(() => {
     if (typeof window === "undefined") return null;
-    if (localStorage.getItem("aura_user_logged_out") === "true") return null;
+    if (safeStorage.getItem("aura_user_logged_out") === "true") return null;
     if (!apiClient.hasValidToken()) return null;
     try {
-      const saved = localStorage.getItem("aura_user_profile");
+      const saved = safeStorage.getItem("aura_user_profile");
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return null;
@@ -203,8 +203,8 @@ export default function App() {
       });
       console.log("2) apiClient.hasValidToken():", {
         hasValidToken: apiClient.hasValidToken(),
-        tokenPreview: localStorage.getItem("aura_session_token")
-          ? `${localStorage.getItem("aura_session_token")?.substring(0, 20)}...`
+        tokenPreview: safeStorage.getItem("aura_session_token")
+          ? `${safeStorage.getItem("aura_session_token")?.substring(0, 20)}...`
           : null,
       });
       console.log("3) Current Authentication State & Mock Status:", {
@@ -235,7 +235,7 @@ export default function App() {
       if (!prev) return null;
       const next = { ...prev, ...updated };
       try {
-        localStorage.setItem("aura_user_profile", JSON.stringify(next));
+        safeStorage.setItem("aura_user_profile", JSON.stringify(next));
       } catch (e) {}
       return next;
     });
@@ -247,7 +247,7 @@ export default function App() {
     setIsAuthenticated(false);
     setCurrentUser(null);
     try {
-      localStorage.removeItem("aura_user_profile");
+      safeStorage.removeItem("aura_user_profile");
     } catch (e) {}
     showToast("Sessão encerrada com sucesso.");
     openAuthModal("STORE_LOGIN");
@@ -256,7 +256,7 @@ export default function App() {
   const [paymentSettings, setPaymentSettings] = useState<OrganizationPaymentSettings>(DEFAULT_PAYMENT_SETTINGS);
   const [smtpConfig, setSmtpConfig] = useState<StoreSmtpConfig>(() => {
     try {
-      const saved = localStorage.getItem("aura_store_smtp_config");
+      const saved = safeStorage.getItem("aura_store_smtp_config");
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return DEFAULT_STORE_SMTP_CONFIG;
@@ -310,8 +310,8 @@ export default function App() {
       });
 
       const tokenValid = apiClient.hasValidToken();
-      const rawStoredToken = typeof window !== "undefined" ? localStorage.getItem("aura_session_token") : null;
-      const userLoggedOut = typeof window !== "undefined" ? localStorage.getItem("aura_user_logged_out") : null;
+      const rawStoredToken = safeStorage.getItem("aura_session_token");
+      const userLoggedOut = safeStorage.getItem("aura_user_logged_out");
 
       console.log("2) apiClient.hasValidToken():", {
         hasValidToken: tokenValid,
@@ -413,7 +413,7 @@ export default function App() {
           };
           setCurrentUser(validatedUser);
           try {
-            localStorage.setItem("aura_user_profile", JSON.stringify(validatedUser));
+            safeStorage.setItem("aura_user_profile", JSON.stringify(validatedUser));
           } catch (e) {}
 
           if (res.subscription) {
@@ -439,7 +439,7 @@ export default function App() {
           setIsAuthenticated(false);
           setCurrentUser(null);
           try {
-            localStorage.removeItem("aura_user_profile");
+            safeStorage.removeItem("aura_user_profile");
           } catch (e) {}
           apiClient.logout();
         }
@@ -705,7 +705,7 @@ export default function App() {
       }
     }
     try {
-      localStorage.setItem("aura_user_profile", JSON.stringify(user));
+      safeStorage.setItem("aura_user_profile", JSON.stringify(user));
     } catch (e) {}
     refreshBackendData();
     checkOnboardingStatus();
@@ -749,7 +749,7 @@ export default function App() {
   const handleUpdateBranding = (newBranding: StoreBrandingConfig) => {
     setBrandingConfig(newBranding);
     try {
-      localStorage.setItem("aura_branding_config", JSON.stringify(newBranding));
+      safeStorage.setItem("aura_branding_config", JSON.stringify(newBranding));
     } catch (e) {}
     setSelectedTenant((prev) => ({
       ...prev,
@@ -1332,7 +1332,7 @@ export default function App() {
     };
 
     const storeSlug = selectedTenant.slug || "lumina";
-    const token = localStorage.getItem("aura_session_token") || localStorage.getItem("aura_auth_token");
+    const token = safeStorage.getItem("aura_session_token") || safeStorage.getItem("aura_auth_token");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "x-tenant-id": tenantId,
@@ -2041,7 +2041,7 @@ export default function App() {
                 onUpdateSmtpConfig={(newSmtp) => {
                   setSmtpConfig(newSmtp);
                   try {
-                    localStorage.setItem("aura_store_smtp_config", JSON.stringify(newSmtp));
+                    safeStorage.setItem("aura_store_smtp_config", JSON.stringify(newSmtp));
                   } catch (e) {}
                   showToast("Configuração do servidor SMTP e regras de disparo salvas!");
                 }}
@@ -2322,7 +2322,7 @@ export default function App() {
             }
           }
           try {
-            localStorage.setItem("aura_user_profile", JSON.stringify(user));
+            safeStorage.setItem("aura_user_profile", JSON.stringify(user));
           } catch (e) {}
           refreshBackendData();
           checkOnboardingStatus();

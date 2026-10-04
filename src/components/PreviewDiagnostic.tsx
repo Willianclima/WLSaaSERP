@@ -21,6 +21,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { apiClient, tenantManager } from "../services/apiClient";
+import { safeStorage } from "../utils/safeStorage";
 
 const metaEnv = ((import.meta as unknown) as { env?: Record<string, string | boolean> }).env || {};
 const envMode = String(metaEnv.MODE || "development");
@@ -70,18 +71,15 @@ export function PreviewDiagnostic({
     tenantId?: string;
   }>({ accessible: false, hasToken: false, hasTenant: false });
 
-  // Test local storage accessibility
+  // Test local storage accessibility safely via safeStorage
   const checkStorage = useCallback(() => {
     try {
-      const testKey = "__aura_diag_test__";
-      localStorage.setItem(testKey, "1");
-      localStorage.removeItem(testKey);
-
-      const token = localStorage.getItem("aura_session_token");
-      const tenant = localStorage.getItem("aura_current_tenant_id");
+      const isAvailable = safeStorage.isAvailable();
+      const token = safeStorage.getItem("aura_session_token");
+      const tenant = safeStorage.getItem("aura_current_tenant_id");
 
       setStorageStatus({
-        accessible: true,
+        accessible: isAvailable,
         hasToken: Boolean(token),
         tokenPreview: token ? `${token.substring(0, 16)}...` : undefined,
         hasTenant: Boolean(tenant),
@@ -179,7 +177,7 @@ export function PreviewDiagnostic({
 
   const handleResetCache = () => {
     try {
-      localStorage.clear();
+      safeStorage.clear();
       sessionStorage.clear();
       window.location.reload();
     } catch (e) {

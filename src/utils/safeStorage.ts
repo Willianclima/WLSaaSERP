@@ -92,4 +92,8 @@ export const safeStorage = {
     }
     memoryFallback.clear();
   },
+
+  isAvailable(): boolean {
+    return isLocalStorageAvailable;
+  },
 };
