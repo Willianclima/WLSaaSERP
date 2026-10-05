@@ -413,7 +413,7 @@ export class GlobalLoadingManager {
  * e rastreie o estado global de carregamento (isGlobalLoading).
  */
 export function installGlobalFetchInterceptor(): void {
-  if (typeof window === "undefined" || (window as any).__aura_fetch_interceptor_installed) {
+  if (typeof window === "undefined" || typeof window.fetch !== "function" || (window as any).__aura_fetch_interceptor_installed) {
     return;
   }
 
