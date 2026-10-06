@@ -664,47 +664,6 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
       {/* Main Catalog View */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
-        {/* Welcome & 3-Levels Access Banner */}
-        <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 text-stone-100 rounded-3xl p-5 sm:p-6 shadow-md border border-stone-800 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="space-y-1 text-center md:text-left">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
-              AURA — Plataforma de Gestão para Semijoias
-            </span>
-            <h2 className="text-lg sm:text-xl font-serif font-bold text-white">
-              Escolha como deseja acessar:
-            </h2>
-            <p className="text-xs text-stone-400 max-w-xl">
-              Navegue pelo catálogo público sem login, acerte a gestão da sua marca no ERP da Loja ou acesse a governança mestre da plataforma na Central AURA.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
-            <button
-              onClick={() => setSelectedCategory("TODOS")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold rounded-xl text-xs shadow-sm transition-all cursor-pointer"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>🛍️ Conhecer a Vitrine</span>
-            </button>
-            <button
-              onClick={() => onNavigateToERP("dashboard")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-stone-800 hover:bg-stone-700 text-white font-semibold rounded-xl text-xs border border-stone-700 shadow-sm transition-all cursor-pointer"
-            >
-              <Building2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>🏪 Acessar ERP da Loja</span>
-            </button>
-            {onNavigateToPlatform && (
-              <button
-                onClick={onNavigateToPlatform}
-                className="flex items-center gap-1.5 px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs border border-stone-700 shadow-sm transition-all cursor-pointer"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span>🛡️ Central AURA</span>
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Category Selection Filter Pills */}
         <div className="bg-white border border-stone-200/80 rounded-2xl p-3 sm:p-4 shadow-xs flex items-center justify-between gap-3 overflow-x-auto">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs font-semibold">
