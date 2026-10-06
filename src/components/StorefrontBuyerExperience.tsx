@@ -468,59 +468,6 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-stone-900 flex flex-col font-sans selection:bg-amber-100 selection:text-amber-900">
-      {/* Simulation Bar if accessed from Platform Admin / Testing context */}
-      {currentUser?.role === "SUPER_ADMIN" && (
-        <div className="bg-stone-950 text-stone-200 border-b border-stone-800 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md bg-purple-500 text-white font-bold text-[10px] uppercase tracking-wider">
-              Nível 3 · Consumidor da Loja
-            </span>
-            <span className="font-semibold text-white">
-              Vitrine Pública: {tenant.name}
-            </span>
-            <span className="hidden lg:inline text-stone-400">
-              (Jornada: Catálogo → Produto → Carrinho → Pedido → WhatsApp)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-stone-400 hidden md:inline italic">
-              Não pertence ao WLSaaSERP como usuário administrativo
-            </span>
-            <button
-              onClick={() => onNavigateToERP("ownerHome")}
-              className="px-2.5 py-1 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-700 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Nível 2 (Loja)
-            </button>
-            {onNavigateToPlatform && (
-              <button
-                onClick={onNavigateToPlatform}
-                className="px-2.5 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-bold transition-colors cursor-pointer"
-              >
-                Nível 1 (Plataforma)
-              </button>
-            )}
-            <button
-              onClick={() => {
-                // Simulação controlada de concorrência com Estoque = 1 (Teste 4 do Piloto)
-                const ringItem = products.find((p) => p.sku === "ANEL-001" || p.category === "ANEIS") || products[0];
-                setStockConflictData({
-                  isOpen: true,
-                  productName: ringItem ? ringItem.name : "Anel Solitário Cravejado Zircônia Oval",
-                  sku: ringItem ? ringItem.sku : "ANEL-001",
-                  message: "Essa peça acabou de ser reservada por outro cliente.",
-                });
-              }}
-              className="px-2.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold tracking-wide transition-all cursor-pointer shadow-xs"
-              title="Demonstrar como a interface reage quando outro cliente compra a última unidade simultaneamente"
-            >
-              ⚡ Simular Teste 4 (Estoque = 1)
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-2xs">
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 ${
@@ -600,17 +547,6 @@ export const StorefrontBuyerExperience: React.FC<StorefrontBuyerExperienceProps>
             >
               <Share2 className="w-3.5 h-3.5 text-stone-600" />
               <span className="hidden md:inline">Compartilhar</span>
-            </button>
-
-            {/* Quick ERP / Painel do Dono link */}
-            <button
-              onClick={() => onNavigateToERP("ownerHome")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 hover:bg-stone-800 text-amber-300 border border-stone-800 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs"
-              title="Retornar à Central de Gestão do Dono"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Painel do Dono</span>
-              <span className="sm:hidden">Dono</span>
             </button>
 
             {/* 🛍 Minha sacola Button */}

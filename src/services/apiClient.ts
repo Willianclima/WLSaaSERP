@@ -1180,6 +1180,61 @@ export class ApiClient {
   }
 
   /**
+   * Consulta o status de inicialização do ecossistema AURA.
+   * Retorna true em needsFirstAdmin se não houver usuários cadastrados no banco.
+   */
+  static async checkSystemInitStatus(): Promise<{
+    success: boolean;
+    needsFirstAdmin: boolean;
+    totalUsers: number;
+    hasSuperAdmin: boolean;
+  }> {
+    try {
+      const res = await fetch("/api/auth/system-init-status", {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        return { success: false, needsFirstAdmin: false, totalUsers: 1, hasSuperAdmin: true };
+      }
+      return await res.json();
+    } catch (e) {
+      return { success: false, needsFirstAdmin: false, totalUsers: 1, hasSuperAdmin: true };
+    }
+  }
+
+  /**
+   * Registra a primeira conta mestre do Administrador do Ecossistema AURA.
+   */
+  static async setupFirstAdmin(data: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    ecosystemName?: string;
+  }): Promise<any> {
+    const res = await fetch("/api/auth/setup-first-admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || "Falha ao configurar a conta mestre inicial.");
+    }
+    if (json.session?.token) {
+      safeStorage.setItem(TOKEN_KEY, json.session.token);
+      if (json.session.organization?.id) {
+        safeStorage.setItem(TENANT_KEY, json.session.organization.id);
+      }
+      if (json.session.user) {
+        safeStorage.setItem(USER_PROFILE_KEY, JSON.stringify(json.session.user));
+      }
+      safeStorage.removeItem("aura_user_logged_out");
+    }
+    return json;
+  }
+
+  /**
    * Executa o Teste Definitivo do Piloto 01 (12 Etapas):
    * CRIAR CLIENTE -> TRIAL 30 DIAS -> ONBOARDING -> 10 PRODUTOS -> PUBLICAR CATÁLOGO ->
    * CLIENTE FINAL -> PEDIDO -> RESERVA -> PAGAMENTO -> VENDA -> ESTOQUE -> GARANTIA

@@ -5,6 +5,41 @@ import { subRepo, userRepo } from "../repositories";
 
 const router = Router();
 
+// GET /api/auth/system-init-status - Check if database has users or requires first master admin setup
+router.get("/system-init-status", async (_req, res) => {
+  try {
+    const status = await AuthService.checkSystemInitStatus();
+    return res.json({
+      success: true,
+      ...status,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/setup-first-admin - Provisions first root Master Administrator of the AURA ecosystem
+router.post("/setup-first-admin", async (req, res) => {
+  try {
+    const { name, email, password, phone, ecosystemName } = req.body;
+    const session = await AuthService.setupFirstAdmin({
+      name,
+      email,
+      password,
+      phone,
+      ecosystemName,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Administrador mestre do ecossistema AURA configurado com sucesso! A conta raiz está ativa.",
+      session,
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/auth/register - Register new company with instant 30-day Trial
 router.post("/register", async (req, res) => {
   try {

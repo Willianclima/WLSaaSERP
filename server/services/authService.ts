@@ -378,4 +378,125 @@ export class AuthService {
       availableOrganizations,
     };
   }
+
+  /**
+   * Checks whether the system has any users registered in the database.
+   * If totalUsers === 0, the system must prompt for the initial Master Admin setup.
+   */
+  static async checkSystemInitStatus(): Promise<{
+    needsFirstAdmin: boolean;
+    totalUsers: number;
+    hasSuperAdmin: boolean;
+  }> {
+    const users = await TenantContext.run({ isSuperAdmin: true }, async () => {
+      return await userRepo.listAll();
+    });
+    const totalUsers = users.length;
+    const hasSuperAdmin = users.some((u) => Boolean(u.isPlatformSuperAdmin) && u.status === "ACTIVE");
+    return {
+      needsFirstAdmin: totalUsers === 0,
+      totalUsers,
+      hasSuperAdmin,
+    };
+  }
+
+  /**
+   * Provisions the first root Administrator of the AURA ecosystem when the database has 0 users.
+   */
+  static async setupFirstAdmin(data: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    ecosystemName?: string;
+  }): Promise<AuthSessionResponse> {
+    const status = await this.checkSystemInitStatus();
+    if (!status.needsFirstAdmin) {
+      throw new Error("O ecossistema AURA já possui usuários cadastrados. A inicialização da conta mestre já foi concluída.");
+    }
+
+    if (!data.name || !data.name.trim()) {
+      throw new Error("O nome completo do administrador mestre é obrigatório.");
+    }
+    if (!data.email || !data.email.trim()) {
+      throw new Error("O e-mail do administrador mestre é obrigatório.");
+    }
+    if (!data.password || data.password.length < 6) {
+      throw new Error("A senha mestre deve possuir no mínimo 6 caracteres.");
+    }
+
+    const emailNormalized = data.email.trim().toLowerCase();
+    const passwordHash = await this.hashPassword(data.password);
+
+    // 1. Ensure master organization exists
+    let masterOrg = await TenantContext.run({ isSuperAdmin: true }, async () => {
+      const orgs = await orgRepo.listAll();
+      return orgs.find((o) => o.slug.includes("aura") || o.slug.includes("matriz") || o.id === "org-lumina-01") || orgs[0];
+    });
+
+    if (!masterOrg) {
+      masterOrg = await orgRepo.create({
+        id: `org-aura-${Date.now()}`,
+        name: data.ecosystemName?.trim() || "AURA Plataforma & Ecossistema",
+        slug: "aura-plataforma",
+        document: "00.000.000/0001-00",
+        segment: "SEMIJOIAS",
+        city: "Limeira",
+        state: "SP",
+        contactEmail: emailNormalized,
+        contactWhatsapp: data.phone || "",
+        status: "ACTIVE",
+      });
+    }
+
+    // 2. Create the first user as Platform Super Admin
+    const userId = `usr-master-${Date.now()}`;
+    const masterUser: UserEntity = {
+      id: userId,
+      name: data.name.trim(),
+      email: emailNormalized,
+      passwordHash,
+      phone: data.phone || "",
+      isPlatformSuperAdmin: true,
+      status: "ACTIVE",
+      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+
+    await userRepo.create(masterUser);
+
+    // 3. Create root membership with OWNER role and full wildcard permissions
+    return await TenantContext.run({ tenantId: masterOrg.id, isSuperAdmin: true }, async () => {
+      const membership: OrganizationMemberEntity = {
+        id: `mem-master-${Date.now()}`,
+        organizationId: masterOrg.id,
+        userId: masterUser.id,
+        role: "OWNER",
+        customPermissions: ["*"],
+        status: "ACTIVE",
+        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      };
+      await memberRepo.create(membership);
+
+      let subscription = await subRepo.findByOrgId(masterOrg.id);
+      if (!subscription) {
+        const now = new Date();
+        const expirationDate = new Date(now.getTime() + 365 * 86400000);
+        subscription = {
+          id: `sub-master-${masterOrg.id}`,
+          organizationId: masterOrg.id,
+          planId: "ENTERPRISE",
+          status: "ACTIVE",
+          currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
+          currentPeriodEnd: expirationDate.toISOString().replace("T", " ").substring(0, 16),
+          autoRenew: true,
+          createdAt: now.toISOString().replace("T", " ").substring(0, 16),
+          updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+        };
+        await subRepo.create(subscription);
+      }
+
+      return this.buildAuthSession(masterUser, masterOrg, membership, subscription);
+    });
+  }
 }
