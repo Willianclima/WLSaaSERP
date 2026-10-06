@@ -806,25 +806,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Footer / Active Session Indicator */}
         <div className="p-4 border-t border-stone-800 bg-stone-950/80 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-stone-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>
-              Sessão ativa: <strong className="text-white">{currentUser.name}</strong> ({currentUser.role})
-            </span>
-          </div>
+          {currentUser ? (
+            <div className="flex items-center gap-2 text-stone-400">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                Sessão ativa: <strong className="text-white">{currentUser.name}</strong> ({currentUser.role})
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-stone-500">
+              <span className="w-2 h-2 rounded-full bg-amber-400/60" />
+              <span>Nenhuma sessão ativa</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                apiClient.logout();
-                toast.info("Credenciais e sessão local limpas com sucesso.");
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-rose-950/40 text-stone-400 hover:text-rose-300 border border-stone-800 hover:border-rose-800/40 transition-colors text-[11px] cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Limpar Sessão Local</span>
-            </button>
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => {
+                  apiClient.logout();
+                  toast.info("Credenciais e sessão local limpas com sucesso.");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-rose-950/40 text-stone-400 hover:text-rose-300 border border-stone-800 hover:border-rose-800/40 transition-colors text-[11px] cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Limpar Sessão Local</span>
+              </button>
+            )}
 
             <button
               onClick={onClose}
