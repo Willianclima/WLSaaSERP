@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { AuthService } from "../services/authService";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
-import { subRepo } from "../repositories";
+import { subRepo, userRepo } from "../repositories";
 
 const router = Router();
 
@@ -210,6 +210,30 @@ router.post("/generate-expired-token", async (_req, res) => {
       success: true,
       token: expiredToken,
       message: "Token sintético expirado gerado com sucesso para teste de segurança.",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/update-password - Atualiza senha do usuário autenticado (incluindo SuperAdmin)
+router.post("/update-password", authMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const user = req.user!;
+    const { newPassword } = req.body;
+    if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: "A nova senha é obrigatória e deve ter no mínimo 6 caracteres.",
+      });
+    }
+
+    const hashed = await AuthService.hashPassword(newPassword);
+    await userRepo.update(user.id, { passwordHash: hashed });
+
+    return res.json({
+      success: true,
+      message: "Senha atualizada com sucesso!",
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });

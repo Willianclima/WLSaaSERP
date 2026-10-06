@@ -413,75 +413,96 @@ export class GlobalLoadingManager {
  * e rastreie o estado global de carregamento (isGlobalLoading).
  */
 export function installGlobalFetchInterceptor(): void {
-  if (typeof window === "undefined" || typeof window.fetch !== "function" || (window as any).__aura_fetch_interceptor_installed) {
-    return;
-  }
-
-  const originalFetch = window.fetch.bind(window);
-
-  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const urlString = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-
-    // Apenas intercepta requisições direcionadas para rotas da API interna
-    if (urlString.startsWith("/api/") || urlString.includes("/api/")) {
-      const currentInit = { ...(init || {}) };
-      const currentHeaders = TenantManager.injectTenantHeader(currentInit.headers);
-
-      const tenantId = currentHeaders["x-tenant-id"] || TenantManager.getCurrentTenantId();
-      const token = ApiClient.getToken();
-
-      if (token && !currentHeaders["Authorization"]) {
-        currentHeaders["Authorization"] = `Bearer ${token}`;
-      }
-
-      currentInit.headers = currentHeaders;
-
-      GlobalLoadingManager.startRequest();
-
-      try {
-        let resp: Response;
-        // Se o input era um objeto Request, cria uma nova chamada com os headers atualizados
-        if (typeof input !== "string" && !(input instanceof URL)) {
-          resp = await originalFetch(urlString, currentInit);
-        } else {
-          resp = await originalFetch(input, currentInit);
-        }
-
-        if (resp.status === 401 && !urlString.includes("/api/auth/login") && !urlString.includes("/api/products/public")) {
-          ApiClient.logout();
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("aura:auth:unauthorized", { detail: { url: urlString, status: 401 } }));
-          }
-        } else if (resp.status === 403 && !urlString.includes("/api/auth/login")) {
-          // Detecta se a causa do 403 foi expiração do período de teste / assinatura
-          try {
-            resp.clone().json().then((body) => {
-              if (body?.code === "SUBSCRIPTION_EXPIRED" && typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("aura:subscription:expired", { detail: body }));
-              }
-            }).catch(() => {});
-          } catch (e) {}
-
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("aura:auth:forbidden", { detail: { url: urlString, status: 403 } }));
-          }
-        }
-
-        return resp;
-      } finally {
-        GlobalLoadingManager.endRequest();
-      }
+  try {
+    if (typeof window === "undefined" || typeof window.fetch !== "function" || (window as any).__aura_fetch_interceptor_installed) {
+      return;
     }
 
-    return originalFetch(input, init);
-  };
+    const originalFetch = window.fetch.bind(window);
 
-  (window as any).__aura_fetch_interceptor_installed = true;
+    const interceptedFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const urlString = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
+      // Apenas intercepta requisições direcionadas para rotas da API interna
+      if (urlString.startsWith("/api/") || urlString.includes("/api/")) {
+        const currentInit = { ...(init || {}) };
+        const currentHeaders = TenantManager.injectTenantHeader(currentInit.headers);
+
+        const tenantId = currentHeaders["x-tenant-id"] || TenantManager.getCurrentTenantId();
+        const token = ApiClient.getToken();
+
+        if (token && !currentHeaders["Authorization"]) {
+          currentHeaders["Authorization"] = `Bearer ${token}`;
+        }
+
+        currentInit.headers = currentHeaders;
+
+        GlobalLoadingManager.startRequest();
+
+        try {
+          let resp: Response;
+          // Se o input era um objeto Request, cria uma nova chamada com os headers atualizados
+          if (typeof input !== "string" && !(input instanceof URL)) {
+            resp = await originalFetch(urlString, currentInit);
+          } else {
+            resp = await originalFetch(input, currentInit);
+          }
+
+          if (resp.status === 401 && !urlString.includes("/api/auth/login") && !urlString.includes("/api/products/public")) {
+            ApiClient.logout();
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("aura:auth:unauthorized", { detail: { url: urlString, status: 401 } }));
+            }
+          } else if (resp.status === 403 && !urlString.includes("/api/auth/login")) {
+            // Detecta se a causa do 403 foi expiração do período de teste / assinatura
+            try {
+              resp.clone().json().then((body) => {
+                if (body?.code === "SUBSCRIPTION_EXPIRED" && typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("aura:subscription:expired", { detail: body }));
+                }
+              }).catch(() => {});
+            } catch (e) {}
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("aura:auth:forbidden", { detail: { url: urlString, status: 403 } }));
+            }
+          }
+
+          return resp;
+        } finally {
+          GlobalLoadingManager.endRequest();
+        }
+      }
+
+      return originalFetch(input, init);
+    };
+
+    // Safely assign without crashing in getter-only environments
+    try {
+      window.fetch = interceptedFetch;
+      (window as any).__aura_fetch_interceptor_installed = true;
+    } catch {
+      try {
+        Object.defineProperty(window, "fetch", {
+          value: interceptedFetch,
+          writable: true,
+          configurable: true,
+        });
+        (window as any).__aura_fetch_interceptor_installed = true;
+      } catch {
+        // Ambiente com restrição estrita de getter/proxy em iframe — prossegue sem sobrescrita global
+      }
+    }
+  } catch (err) {
+    // Falha silenciosa para nunca quebrar a avaliação do módulo
+  }
 }
 
-// Inicializa o interceptor global no navegador
+// Inicializa o interceptor global no navegador de forma segura
 if (typeof window !== "undefined") {
-  installGlobalFetchInterceptor();
+  try {
+    installGlobalFetchInterceptor();
+  } catch {}
 }
 
 export class ApiClient {

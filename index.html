@@ -12,10 +12,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+      window.addEventListener('error', function(e) {
+        var root = document.getElementById('root');
+        if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+          root.innerHTML = '<div style="padding:24px;font-family:monospace;background:#0c0a09;color:#f87171;min-height:100vh;">' +
+            '<h2 style="color:#fbbf24;margin-top:0;">⚠️ Erro de Carregamento no Preview</h2>' +
+            '<p style="color:#ffffff;">' + (e.message || String(e)) + '</p>' +
+            '<pre style="color:#a8a29e;font-size:12px;overflow:auto;">' + (e.error ? e.error.stack : (e.filename + ':' + e.lineno + ':' + e.colno)) + '</pre>' +
+            '</div>';
+        }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('Unhandled Rejection:', e.reason);
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/main.tsx?v=aura_fix_fetch"></script>
   </body>
 </html>
 

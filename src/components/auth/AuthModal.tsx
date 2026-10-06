@@ -64,8 +64,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isStoreLoading, setIsStoreLoading] = useState<boolean>(false);
 
   // Platform Super Admin Login State
-  const [adminEmail, setAdminEmail] = useState<string>("");
-  const [adminPassword, setAdminPassword] = useState<string>("");
+  const [adminEmail, setAdminEmail] = useState<string>("willianCLima@gmail.com");
+  const [adminPassword, setAdminPassword] = useState<string>("admin123");
   const [isAdminLoading, setIsAdminLoading] = useState<boolean>(false);
 
   // New Trial Registration State
@@ -590,6 +590,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 </div>
               </form>
+
+              {/* Master Admin Shortcut */}
+              <div className="border-t border-stone-800 pt-4">
+                <p className="text-[11px] font-semibold text-stone-400 mb-2">
+                  Atalho de Acesso Master (Fundador & Administrador do Sistema):
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminEmail("willianCLima@gmail.com");
+                    setAdminPassword("admin123");
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-stone-950 border border-amber-500/30 hover:border-amber-400 text-left transition-colors text-xs cursor-pointer flex items-center justify-between"
+                >
+                  <div>
+                    <p className="font-bold text-amber-300">Willian C. Lima (CEO & SuperAdmin)</p>
+                    <p className="text-[10px] text-stone-500">willianCLima@gmail.com • Senha: admin123</p>
+                  </div>
+                  <span className="text-[11px] text-amber-400 font-semibold px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    Preencher Credenciais
+                  </span>
+                </button>
+              </div>
             </div>
           )}
 
