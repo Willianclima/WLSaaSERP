@@ -46,17 +46,22 @@ export interface PreviewDiagnosticProps {
   compact?: boolean;
   /** Callback to close diagnostic modal/screen if closable */
   onClose?: () => void;
+  /** Callback to trigger system initialization wizard */
+  onOpenSystemInit?: () => void;
 }
 
 export function PreviewDiagnostic({
   fullscreen = false,
   compact = false,
   onClose,
+  onOpenSystemInit,
 }: PreviewDiagnosticProps) {
   const [mountedAt] = useState<string>(() => new Date().toLocaleTimeString());
   const [renderCount, setRenderCount] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [healthData, setHealthData] = useState<BackendHealthResponse | null>(null);
+  const [initStatus, setInitStatus] = useState<{ needsFirstAdmin: boolean; totalUsers: number; hasSuperAdmin: boolean } | null>(null);
+  const [isResettingUsers, setIsResettingUsers] = useState<boolean>(false);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -116,6 +121,12 @@ export function PreviewDiagnostic({
       if (!res.ok) {
         setHealthError(data.error || `HTTP ${res.status}`);
       }
+
+      // Check system init status
+      try {
+        const init = await apiClient.checkSystemInitStatus();
+        setInitStatus(init);
+      } catch (e) {}
     } catch (err: any) {
       const latency = Math.round(performance.now() - start);
       setLatencyMs(latency);
@@ -128,6 +139,35 @@ export function PreviewDiagnostic({
       setRenderCount((prev) => prev + 1);
     }
   }, []);
+
+  const handleResetUsersForInitTest = async () => {
+    setIsResettingUsers(true);
+    try {
+      await apiClient.resetUsersForInitTest();
+      const init = await apiClient.checkSystemInitStatus();
+      setInitStatus(init);
+      if (onOpenSystemInit) {
+        onOpenSystemInit();
+      }
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsResettingUsers(false);
+    }
+  };
+
+  const handleRestoreSeedUsers = async () => {
+    setIsResettingUsers(true);
+    try {
+      await apiClient.restoreSeedUsers();
+      const init = await apiClient.checkSystemInitStatus();
+      setInitStatus(init);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsResettingUsers(false);
+    }
+  };
 
   useEffect(() => {
     checkStorage();
@@ -435,6 +475,67 @@ export function PreviewDiagnostic({
                 {window.innerWidth} x {window.innerHeight} px
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* System Initialization & Master Admin Status */}
+        <div className="bg-stone-950/70 border border-amber-500/30 rounded-2xl p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center font-serif font-black text-stone-950 text-xs shadow-sm">
+                A
+              </span>
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-2 font-mono">
+                  <span>Inicialização do Ecossistema AURA</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                    initStatus?.needsFirstAdmin
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                      : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                  }`}>
+                    {initStatus?.needsFirstAdmin ? "0 Usuários (Requer Inicialização)" : "Inicializado (Conta Mestre Ativa)"}
+                  </span>
+                </h4>
+              </div>
+            </div>
+
+            <div className="text-[11px] font-mono text-stone-400">
+              Total de Usuários no Banco: <strong className="text-white">{initStatus?.totalUsers ?? "—"}</strong>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-stone-400 leading-relaxed">
+            Ao detectar 0 usuários cadastrados no banco de dados, o sistema solicita automaticamente a criação do Primeiro Administrador do Ecossistema para servir como conta mestre de configuração.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {onOpenSystemInit && (
+              <button
+                type="button"
+                onClick={onOpenSystemInit}
+                className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs transition-all shadow-sm cursor-pointer"
+              >
+                Abrir Assistente de Inicialização
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleResetUsersForInitTest}
+              disabled={isResettingUsers}
+              className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-mono text-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isResettingUsers ? "Resetando..." : "🧪 Testar Fluxo (Resetar para 0 Usuários)"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRestoreSeedUsers}
+              disabled={isResettingUsers}
+              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 font-mono text-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              🔄 Restaurar Usuários Demo
+            </button>
           </div>
         </div>
 

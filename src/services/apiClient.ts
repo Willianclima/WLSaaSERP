@@ -1235,6 +1235,36 @@ export class ApiClient {
   }
 
   /**
+   * Reseta usuários do banco para teste do assistente de inicialização de sistema (apenas dev).
+   */
+  static async resetUsersForInitTest(): Promise<any> {
+    const res = await fetch("/api/auth/reset-users-for-init-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || "Falha ao resetar usuários para teste.");
+    }
+    return json;
+  }
+
+  /**
+   * Restaura usuários padrão de demonstração.
+   */
+  static async restoreSeedUsers(): Promise<any> {
+    const res = await fetch("/api/auth/restore-seed-users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error || "Falha ao restaurar usuários padrão.");
+    }
+    return json;
+  }
+
+  /**
    * Executa o Teste Definitivo do Piloto 01 (12 Etapas):
    * CRIAR CLIENTE -> TRIAL 30 DIAS -> ONBOARDING -> 10 PRODUTOS -> PUBLICAR CATÁLOGO ->
    * CLIENTE FINAL -> PEDIDO -> RESERVA -> PAGAMENTO -> VENDA -> ESTOQUE -> GARANTIA

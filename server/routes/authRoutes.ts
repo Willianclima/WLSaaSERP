@@ -2,6 +2,8 @@ import { Router } from "express";
 import { AuthService } from "../services/authService";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
 import { subRepo, userRepo } from "../repositories";
+import { query } from "../db/postgres";
+import { TenantContext } from "../db/tenantContext";
 
 const router = Router();
 
@@ -269,6 +271,95 @@ router.post("/update-password", authMiddleware, async (req: AuthenticatedRequest
     return res.json({
       success: true,
       message: "Senha atualizada com sucesso!",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/reset-users-for-init-test - Limpa usuários para teste do fluxo de inicialização mestre
+router.post("/reset-users-for-init-test", async (_req, res) => {
+  try {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ success: false, error: "Apenas disponível em ambiente de desenvolvimento." });
+    }
+    await TenantContext.run({ isSuperAdmin: true }, async () => {
+      await query("DELETE FROM organization_members");
+      await query("DELETE FROM users");
+    });
+    return res.json({
+      success: true,
+      message: "Tabela de usuários resetada. O sistema agora detecta 0 usuários e exige a criação do primeiro administrador.",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/restore-seed-users - Restaura usuários de demonstração padrão
+router.post("/restore-seed-users", async (_req, res) => {
+  try {
+    const adminPasswordHash = await AuthService.hashPassword("admin123");
+    const demoPasswordHash = await AuthService.hashPassword("123456");
+
+    await TenantContext.run({ tenantId: "org-lumina-01", isSuperAdmin: true }, async () => {
+      // 1. Ensure master org exists
+      const orgRes = await query("SELECT id FROM organizations WHERE id = $1", ["org-lumina-01"]);
+      if (orgRes.rows.length === 0) {
+        await query(
+          `INSERT INTO organizations (
+            id, name, slug, document, segment, city, state, contact_email, contact_whatsapp, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+          [
+            "org-lumina-01",
+            "Lumina Semijoias & Alta Joalheria",
+            "lumina",
+            "48.291.802/0001-94",
+            "SEMIJOIAS",
+            "Limeira",
+            "SP",
+            "contato@luminasemijoias.com.br",
+            "+55 (19) 98765-4321",
+            "ACTIVE",
+          ]
+        );
+      }
+
+      // 2. Insert Super Admin User
+      await query(
+        `INSERT INTO users (id, name, email, password_hash, phone, is_platform_super_admin, status, created_at, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+         ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash, is_platform_super_admin = true`,
+        ["usr-admin-01", "Willian C. Lima", "willianCLima@gmail.com", adminPasswordHash, "+55 (19) 99876-5432", true, "ACTIVE"]
+      );
+
+      // 3. Insert Member
+      await query(
+        `INSERT INTO organization_members (id, organization_id, user_id, role, custom_permissions, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        ["mem-01", "org-lumina-01", "usr-admin-01", "OWNER", JSON.stringify(["*"]), "ACTIVE"]
+      );
+
+      // 4. Store Owner User
+      await query(
+        `INSERT INTO users (id, name, email, password_hash, phone, is_platform_super_admin, status, created_at, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        ["usr-lumina-01", "Lumina Gestora", "contato@luminasemijoias.com.br", demoPasswordHash, "+55 (19) 98765-4321", false, "ACTIVE"]
+      );
+
+      await query(
+        `INSERT INTO organization_members (id, organization_id, user_id, role, custom_permissions, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        ["mem-02", "org-lumina-01", "usr-lumina-01", "OWNER", JSON.stringify(["*"]), "ACTIVE"]
+      );
+    });
+
+    return res.json({
+      success: true,
+      message: "Usuários padrão restaurados com sucesso.",
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });

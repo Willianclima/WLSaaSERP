@@ -22,6 +22,7 @@ import { GlobalLoadingOverlay } from "./components/GlobalLoadingOverlay";
 import { SubscriptionExpiredModal } from "./components/saas/SubscriptionExpiredModal";
 import { SaaSAuditModal } from "./components/saas/SaaSAuditModal";
 import { PreviewDiagnostic } from "./components/PreviewDiagnostic";
+import { SystemInitMasterAdminModal } from "./components/auth/SystemInitMasterAdminModal";
 import { apiClient, GlobalLoadingManager } from "./services/apiClient";
 import { safeStorage } from "./utils/safeStorage";
 
@@ -280,6 +281,8 @@ export default function App() {
   const [showAssistantHelpModal, setShowAssistantHelpModal] = useState<boolean>(false);
   const [showCriticalPathModal, setShowCriticalPathModal] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [showSystemInitModal, setShowSystemInitModal] = useState<boolean>(false);
+  const [systemNeedsFirstAdmin, setSystemNeedsFirstAdmin] = useState<boolean>(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState<boolean>(false);
   const [showSaaSAuditModal, setShowSaaSAuditModal] = useState<boolean>(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>("TRIALING");
@@ -451,6 +454,24 @@ export default function App() {
     };
 
     validateActiveSession();
+  }, []);
+
+  // Verificação de Inicialização do Sistema AURA:
+  // Ao detectar 0 usuários cadastrados no banco de dados, aciona imediatamente o assistente
+  // de criação do Primeiro Administrador do Ecossistema (Conta Mestre Raiz).
+  useEffect(() => {
+    const checkInitialization = async () => {
+      try {
+        const initStatus = await apiClient.checkSystemInitStatus();
+        if (initStatus.needsFirstAdmin) {
+          setSystemNeedsFirstAdmin(true);
+          setShowSystemInitModal(true);
+        }
+      } catch (err) {
+        console.warn("[App] Falha ao verificar inicialização do sistema:", err);
+      }
+    };
+    checkInitialization();
   }, []);
 
   // Escuta eventos globais de 401 (desautorizado), 403 (proibido) e expiração de assinatura
@@ -709,6 +730,20 @@ export default function App() {
     } catch (e) {}
     refreshBackendData();
     checkOnboardingStatus();
+  };
+
+  const handleSystemInitSuccess = (adminUser: RBACUser, tenant?: TenantStore) => {
+    setCurrentUser(adminUser);
+    setIsAuthenticated(true);
+    setSystemNeedsFirstAdmin(false);
+    setShowSystemInitModal(false);
+    if (tenant) {
+      setSelectedTenant(tenant);
+    }
+    setProductMode("PLATFORM_OWNER");
+    setActiveTab("ownerHome");
+    showToast("Ecossistema AURA inicializado com sucesso! Conta mestre ativa.");
+    refreshBackendData();
   };
 
   React.useEffect(() => {
@@ -1686,9 +1721,16 @@ export default function App() {
             tenants={tenants}
             initialTab={authModalTab}
             onLoginSuccess={handleAuthSuccess}
+            onOpenSystemInitModal={() => setShowSystemInitModal(true)}
           />
         )}
-        <PreviewDiagnostic />
+        <SystemInitMasterAdminModal
+          isOpen={showSystemInitModal}
+          onClose={() => setShowSystemInitModal(false)}
+          allowDismiss={!systemNeedsFirstAdmin}
+          onSuccess={handleSystemInitSuccess}
+        />
+        <PreviewDiagnostic onOpenSystemInit={() => setShowSystemInitModal(true)} />
       </>
     );
   }
@@ -1764,10 +1806,18 @@ export default function App() {
             tenants={tenants}
             initialTab={authModalTab}
             onLoginSuccess={handleAuthSuccess}
+            onOpenSystemInitModal={() => setShowSystemInitModal(true)}
           />
         )}
 
-        <PreviewDiagnostic />
+        <SystemInitMasterAdminModal
+          isOpen={showSystemInitModal}
+          onClose={() => setShowSystemInitModal(false)}
+          allowDismiss={!systemNeedsFirstAdmin}
+          onSuccess={handleSystemInitSuccess}
+        />
+
+        <PreviewDiagnostic onOpenSystemInit={() => setShowSystemInitModal(true)} />
       </>
     );
   }
@@ -2327,6 +2377,15 @@ export default function App() {
           refreshBackendData();
           checkOnboardingStatus();
         }}
+        onOpenSystemInitModal={() => setShowSystemInitModal(true)}
+      />
+
+      {/* System Initialization: First Master Admin Setup Modal */}
+      <SystemInitMasterAdminModal
+        isOpen={showSystemInitModal}
+        onClose={() => setShowSystemInitModal(false)}
+        allowDismiss={!systemNeedsFirstAdmin}
+        onSuccess={handleSystemInitSuccess}
       />
 
       {/* Global API Loading Overlay */}
@@ -2337,7 +2396,7 @@ export default function App() {
       />
 
       {/* Floating System Health & Preview Diagnostic */}
-      <PreviewDiagnostic />
+      <PreviewDiagnostic onOpenSystemInit={() => setShowSystemInitModal(true)} />
     </div>
   );
 }

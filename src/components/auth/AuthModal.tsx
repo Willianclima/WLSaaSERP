@@ -36,6 +36,7 @@ interface AuthModalProps {
     isNewRegistration?: boolean
   ) => void;
   initialTab?: "STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION";
+  onOpenSystemInitModal?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -46,6 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   tenants,
   onLoginSuccess,
   initialTab = "STORE_LOGIN",
+  onOpenSystemInitModal,
 }) => {
   const [activeTab, setActiveTab] = useState<"STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION">(
     initialTab
@@ -612,6 +614,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Preencher Credenciais
                   </span>
                 </button>
+
+                {onOpenSystemInitModal && (
+                  <div className="mt-3 p-2.5 rounded-xl bg-stone-950/60 border border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Inicialização do Ecossistema:</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenSystemInitModal();
+                      }}
+                      className="text-amber-400 hover:text-amber-300 font-semibold px-2 py-1 rounded-lg hover:bg-stone-800 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Configurar 1º Administrador Raiz</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
