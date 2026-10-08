@@ -120,11 +120,67 @@ export class BillingRepository {
     });
   }
 
-  // Idempotent webhook verification
+  // Idempotent webhook verification backed by PostgreSQL UNIQUE constraint on event_id
   async findWebhookEvent(eventId: string): Promise<any | null> {
     return TenantContext.run({ isSuperAdmin: true }, async () => {
       const res = await query("SELECT * FROM billing_webhook_events WHERE event_id = $1", [eventId]);
       return res.rows.length > 0 ? res.rows[0] : null;
+    });
+  }
+
+  /**
+   * Database-level atomic claim for webhook event idempotency.
+   * Leverages PostgreSQL's unique constraint on `billing_webhook_events(event_id)`.
+   * Returns { claimed: true } if this request was the first to insert into DB,
+   * or { claimed: false, existingEvent } if another request already registered it.
+   */
+  async claimWebhookEvent(data: {
+    eventId: string;
+    providerTxId?: string;
+    eventType: string;
+    invoiceId?: string;
+    organizationId?: string;
+    payload: any;
+  }): Promise<{ claimed: boolean; existingEvent?: any }> {
+    return TenantContext.run({ isSuperAdmin: true }, async () => {
+      const existing = await query("SELECT * FROM billing_webhook_events WHERE event_id = $1", [data.eventId]);
+      if (existing.rows.length > 0) {
+        return { claimed: false, existingEvent: existing.rows[0] };
+      }
+
+      const id = `wbk-evt-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      const res = await query(
+        `INSERT INTO billing_webhook_events (
+          id, event_id, provider_tx_id, event_type, invoice_id, organization_id, payload, status, processed_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PROCESSING', NOW())
+        ON CONFLICT (event_id) DO NOTHING
+        RETURNING id`,
+        [
+          id,
+          data.eventId,
+          data.providerTxId || null,
+          data.eventType,
+          data.invoiceId || null,
+          data.organizationId || null,
+          JSON.stringify(data.payload),
+        ]
+      );
+
+      if (res.rows.length === 0) {
+        const raceExisting = await query("SELECT * FROM billing_webhook_events WHERE event_id = $1", [data.eventId]);
+        return { claimed: false, existingEvent: raceExisting.rows[0] };
+      }
+
+      return { claimed: true };
+    });
+  }
+
+  async markWebhookEventCompleted(eventId: string, status: "PROCESSED" | "FAILED" = "PROCESSED"): Promise<void> {
+    return TenantContext.run({ isSuperAdmin: true }, async () => {
+      await query("UPDATE billing_webhook_events SET status = $1, processed_at = NOW() WHERE event_id = $2", [
+        status,
+        eventId,
+      ]);
     });
   }
 
@@ -142,7 +198,7 @@ export class BillingRepository {
         `INSERT INTO billing_webhook_events (
           id, event_id, provider_tx_id, event_type, invoice_id, organization_id, payload, status, processed_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PROCESSED', NOW())
-        ON CONFLICT (event_id) DO NOTHING`,
+        ON CONFLICT (event_id) DO UPDATE SET status = 'PROCESSED', processed_at = NOW()`,
         [
           id,
           data.eventId,

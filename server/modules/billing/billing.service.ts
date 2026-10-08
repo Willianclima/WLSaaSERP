@@ -176,42 +176,41 @@ export class BillingService {
       const sanitized = this.sanitizePayload(payload);
 
       // -------------------------------------------------------------------------
-      // 1. IDEMPOTENCY CHECK
-      // -------------------------------------------------------------------------
-      const existingEvent = await billingRepo.findWebhookEvent(eventId);
-      if (existingEvent) {
-        const invoice = await billingRepo.findById(invoiceId);
-        return {
-          received: true,
-          processed: false,
-          idempotent: true,
-          message: "Webhook já processado com sucesso anteriormente. Nenhuma ação duplicada executada (Garantia de Idempotência).",
-          invoiceId,
-          status: invoice?.status || "PAID",
-          subscriptionStatus: "ACTIVE",
-          planId: invoice?.planId,
-        };
-      }
-
-      // -------------------------------------------------------------------------
-      // 2. FETCH INVOICE
+      // 1. FETCH INVOICE
       // -------------------------------------------------------------------------
       const invoice = await billingRepo.findById(invoiceId);
       if (!invoice) {
         throw new Error(`Fatura '${invoiceId}' não foi encontrada para conciliação do webhook.`);
       }
 
+      // -------------------------------------------------------------------------
+      // 2. DATABASE-LEVEL IDEMPOTENCY LOCK (PostgreSQL UNIQUE CONSTRAINT)
+      // -------------------------------------------------------------------------
+      const claimResult = await billingRepo.claimWebhookEvent({
+        eventId,
+        providerTxId,
+        eventType,
+        invoiceId,
+        organizationId: invoice.organizationId,
+        payload: sanitized,
+      });
+
+      if (!claimResult.claimed) {
+        return {
+          received: true,
+          processed: false,
+          idempotent: true,
+          message: "Webhook já registrado no banco de dados. Nenhuma ação duplicada executada (Garantia de Idempotência no PostgreSQL).",
+          invoiceId,
+          status: invoice.status || "PAID",
+          subscriptionStatus: "ACTIVE",
+          planId: invoice.planId,
+        };
+      }
+
       // If invoice was already marked PAID previously by another event, ensure idempotent return
       if (invoice.status === "PAID" && eventType === "PAYMENT_APPROVED") {
-        await billingRepo.recordWebhookEvent({
-          eventId,
-          providerTxId,
-          eventType,
-          invoiceId,
-          organizationId: invoice.organizationId,
-          payload: sanitized,
-        });
-
+        await billingRepo.markWebhookEventCompleted(eventId, "PROCESSED");
         return {
           received: true,
           processed: false,
@@ -249,15 +248,8 @@ export class BillingService {
           paymentMethod: paymentMethod || invoice.paymentMethod,
         });
 
-        // Persist webhook event for idempotency
-        await billingRepo.recordWebhookEvent({
-          eventId,
-          providerTxId,
-          eventType,
-          invoiceId,
-          organizationId: invoice.organizationId,
-          payload: sanitized,
-        });
+        // Mark event as successfully processed in database
+        await billingRepo.markWebhookEventCompleted(eventId, "PROCESSED");
 
         return {
           received: true,
@@ -282,14 +274,7 @@ export class BillingService {
           console.warn("Notice transitioning to PAST_DUE:", err.message);
         }
 
-        await billingRepo.recordWebhookEvent({
-          eventId,
-          providerTxId,
-          eventType,
-          invoiceId,
-          organizationId: invoice.organizationId,
-          payload: sanitized,
-        });
+        await billingRepo.markWebhookEventCompleted(eventId, "PROCESSED");
 
         return {
           received: true,
@@ -313,14 +298,7 @@ export class BillingService {
           console.warn("Notice transitioning to CANCELED:", err.message);
         }
 
-        await billingRepo.recordWebhookEvent({
-          eventId,
-          providerTxId,
-          eventType,
-          invoiceId,
-          organizationId: invoice.organizationId,
-          payload: sanitized,
-        });
+        await billingRepo.markWebhookEventCompleted(eventId, "PROCESSED");
 
         return {
           received: true,

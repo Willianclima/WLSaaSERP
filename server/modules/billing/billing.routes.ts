@@ -28,30 +28,33 @@ function verifyWebhookSecret(received: string | undefined, expected: string | un
 router.post("/webhook", async (req: Request, res: Response) => {
   try {
     const isProduction = process.env.NODE_ENV === "production";
-    const expectedSecret = process.env.BILLING_WEBHOOK_SECRET;
+    const receivedToken =
+      (req.headers["x-webhook-token"] as string) ||
+      (req.headers["x-billing-secret"] as string) ||
+      (req.headers["x-aura-signature"] as string);
 
-    if (isProduction && !expectedSecret) {
-      console.error("[Billing Webhook] Security Alert: BILLING_WEBHOOK_SECRET não configurado em ambiente de produção.");
-      return res.status(500).json({
+    if (!receivedToken) {
+      return res.status(401).json({
         success: false,
-        error: "Configuração de autenticação de webhook pendente no servidor.",
+        error: "Acesso não autorizado: token/assinatura de webhook ausente nos cabeçalhos.",
       });
     }
 
-    if (expectedSecret) {
-      const receivedToken =
-        (req.headers["x-webhook-token"] as string) ||
-        (req.headers["x-billing-secret"] as string) ||
-        (req.headers["x-aura-signature"] as string);
+    const expectedSecret = process.env.BILLING_WEBHOOK_SECRET || (!isProduction ? "dev_billing_webhook_secret_local" : undefined);
 
-      if (!verifyWebhookSecret(receivedToken, expectedSecret)) {
-        return res.status(401).json({
-          success: false,
-          error: "Acesso não autorizado: token/assinatura de webhook inválido ou ausente.",
-        });
-      }
-    } else {
-      console.warn("[Billing Webhook] Aviso: Webhook processado sem verificação de secret em ambiente de desenvolvimento.");
+    if (!expectedSecret) {
+      console.error("[Billing Webhook] Security Alert: BILLING_WEBHOOK_SECRET não configurado no ambiente.");
+      return res.status(500).json({
+        success: false,
+        error: "Configuração de autenticação de webhook (BILLING_WEBHOOK_SECRET) pendente no servidor.",
+      });
+    }
+
+    if (!verifyWebhookSecret(receivedToken, expectedSecret)) {
+      return res.status(401).json({
+        success: false,
+        error: "Acesso não autorizado: token/assinatura de webhook inválido.",
+      });
     }
 
     const payload = req.body;
@@ -65,10 +68,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
     const result = await BillingService.processWebhook(payload);
     return res.status(200).json(result);
   } catch (error: any) {
-    console.error("[Billing Webhook Error]:", error);
+    console.error("[Billing Webhook Error]:", error?.message || "Internal error");
     return res.status(500).json({
       received: false,
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Erro ao processar webhook de faturamento." : error.message,
     });
   }
 });
@@ -80,26 +83,30 @@ router.post("/webhook", async (req: Request, res: Response) => {
 router.post("/webhook/asaas", async (req: Request, res: Response) => {
   try {
     const isProduction = process.env.NODE_ENV === "production";
-    const expectedAsaasToken = process.env.ASAAS_WEBHOOK_ACCESS_TOKEN;
+    const receivedToken = (req.headers["asaas-access-token"] as string) || (req.headers["x-asaas-access-token"] as string);
 
-    if (isProduction && !expectedAsaasToken) {
-      console.error("[Asaas Webhook] Security Alert: ASAAS_WEBHOOK_ACCESS_TOKEN não configurado em produção.");
+    if (!receivedToken) {
+      return res.status(401).json({
+        success: false,
+        error: "Acesso não autorizado: token de autenticação Asaas ausente no cabeçalho 'asaas-access-token'.",
+      });
+    }
+
+    const expectedAsaasToken = process.env.ASAAS_WEBHOOK_ACCESS_TOKEN || (!isProduction ? "dev_asaas_webhook_token_local" : undefined);
+
+    if (!expectedAsaasToken) {
+      console.error("[Asaas Webhook] Security Alert: ASAAS_WEBHOOK_ACCESS_TOKEN não configurado no ambiente.");
       return res.status(500).json({
         success: false,
         error: "Configuração de webhook Asaas (ASAAS_WEBHOOK_ACCESS_TOKEN) pendente no servidor.",
       });
     }
 
-    if (expectedAsaasToken) {
-      const receivedToken = (req.headers["asaas-access-token"] as string) || (req.headers["x-asaas-access-token"] as string);
-      if (!verifyWebhookSecret(receivedToken, expectedAsaasToken)) {
-        return res.status(401).json({
-          success: false,
-          error: "Acesso não autorizado: token de autenticação Asaas inválido ou ausente no cabeçalho 'asaas-access-token'.",
-        });
-      }
-    } else {
-      console.warn("[Asaas Webhook] Aviso: Webhook Asaas processado sem validação de token em ambiente de desenvolvimento.");
+    if (!verifyWebhookSecret(receivedToken, expectedAsaasToken)) {
+      return res.status(401).json({
+        success: false,
+        error: "Acesso não autorizado: token de autenticação Asaas inválido.",
+      });
     }
 
     const asaasBody = req.body;
@@ -110,7 +117,15 @@ router.post("/webhook/asaas", async (req: Request, res: Response) => {
       });
     }
 
-    const eventId = asaasBody.id || asaasBody.payment?.id || `asaas-evt-${Date.now()}`;
+    // Require trustworthy event identifier officially provided by Asaas. Never synthesize random IDs in production.
+    const eventId = asaasBody.id || (asaasBody.event && asaasBody.payment?.id ? `${asaasBody.event}_${asaasBody.payment.id}` : null);
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        error: "Payload de webhook Asaas inválido: identificador único de evento ('id' ou 'payment.id') ausente.",
+      });
+    }
+
     const invoiceId = asaasBody.payment?.externalReference || asaasBody.invoiceId || asaasBody.externalReference;
 
     if (!invoiceId) {
@@ -160,8 +175,11 @@ router.post("/webhook/asaas", async (req: Request, res: Response) => {
 
     return res.status(200).json({ success: true, provider: "ASAAS", result });
   } catch (error: any) {
-    console.error("[Asaas Webhook Error]:", error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error("[Asaas Webhook Error]:", error?.message || "Internal error");
+    return res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === "production" ? "Erro ao processar webhook do Asaas." : error.message,
+    });
   }
 });
 
@@ -247,6 +265,13 @@ router.post(
   requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(403).json({
+          success: false,
+          error: "Rota de simulação desativada em ambiente de produção.",
+        });
+      }
+
       const { invoiceId, eventType, customEventId } = req.body;
       if (!invoiceId) {
         return res.status(400).json({

@@ -15,6 +15,17 @@ import { auditService, withAuditedOperation, AuditedOperation } from "../service
 
 const router = Router();
 
+// Strict Production Block: Diagnostic routes must never be accessible in production
+router.use((_req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({
+      success: false,
+      error: "Rotas de teste e diagnóstico desativadas em ambiente de produção.",
+    });
+  }
+  next();
+});
+
 export interface StepCheckResult {
   step: number;
   title: string;

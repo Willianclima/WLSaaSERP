@@ -29,35 +29,16 @@ export class AuthService {
   private static isSettingUpFirstAdmin = false;
 
   /**
-   * Cryptographically hashes a plain-text password using bcrypt with generated salt.
+   * Cryptographically hashes a plain-text password using PasswordService.
    */
   static async hashPassword(password: string): Promise<string> {
-    if (!password || typeof password !== "string") {
-      throw new Error("A senha fornecida para hashing é inválida ou vazia.");
-    }
-    const salt = await bcrypt.genSalt(this.BCRYPT_SALT_ROUNDS);
-    return bcrypt.hash(password, salt);
+    return PasswordService.hash(password);
   }
 
   /**
-   * Secure async comparison function using bcryptjs to compare plain-text password with stored hash.
+   * Secure async comparison function delegating to PasswordService.
    */
   static async verifyPassword(plainPassword: string, storedHash?: string | null): Promise<boolean> {
-    if (!plainPassword || !storedHash || typeof plainPassword !== "string" || typeof storedHash !== "string") {
-      return false;
-    }
-
-    // Direct asynchronous bcrypt verification
-    try {
-      if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$") || storedHash.startsWith("$2y$")) {
-        return await bcrypt.compare(plainPassword, storedHash);
-      }
-    } catch (err) {
-      console.error("[AuthService] Error comparing password hash with bcrypt:", err);
-      return false;
-    }
-
-    // Fallback for transitional legacy seeds (automatic upgrade to bcrypt occurs on login)
     return PasswordService.verify(plainPassword, storedHash);
   }
   /**
@@ -437,94 +418,101 @@ export class AuthService {
         throw new Error(passwordValidation.error);
       }
 
-      // Re-check system init status under superadmin context
-      const status = await this.checkSystemInitStatus();
-      if (!status.needsFirstAdmin) {
-        throw new Error("O ecossistema AURA já possui usuários cadastrados. A inicialização da conta mestre já foi concluída e está permanentemente desativada.");
-      }
+      return await withTransaction(async (client) => {
+        // 1. Transactional advisory lock in PostgreSQL:
+        // Guarantees that only ONE transaction in the entire PostgreSQL cluster can execute bootstrap at a time.
+        await client.query("SELECT pg_advisory_xact_lock(987654321)");
 
-      // Secondary atomic check to ensure no super admin or user exists
-      const existingUsers = await TenantContext.run({ isSuperAdmin: true }, async () => {
-        return await userRepo.listAll();
-      });
-      if (existingUsers.length > 0) {
-        throw new Error("O ecossistema AURA já possui usuários registrados no banco de dados.");
-      }
-
-      const emailNormalized = data.email.trim().toLowerCase();
-      const passwordHash = await this.hashPassword(data.password);
-
-      // 1. Ensure master organization exists
-      let masterOrg = await TenantContext.run({ isSuperAdmin: true }, async () => {
-        const orgs = await orgRepo.listAll();
-        return orgs.find((o) => o.slug.includes("aura") || o.slug.includes("matriz") || o.id === "org-lumina-01") || orgs[0];
-      });
-
-      if (!masterOrg) {
-        masterOrg = await orgRepo.create({
-          id: `org-aura-${Date.now()}`,
-          name: data.ecosystemName?.trim() || "AURA Plataforma & Ecossistema",
-          slug: "aura-plataforma",
-          document: "00.000.000/0001-00",
-          segment: "SEMIJOIAS",
-          city: "Limeira",
-          state: "SP",
-          contactEmail: emailNormalized,
-          contactWhatsapp: data.phone || "",
-          status: "ACTIVE",
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-          updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        });
-      }
-
-      // 2. Create the first user as Platform Super Admin
-      const userId = `usr-master-${Date.now()}`;
-      const masterUser: UserEntity = {
-        id: userId,
-        name: data.name.trim(),
-        email: emailNormalized,
-        passwordHash,
-        phone: data.phone || "",
-        isPlatformSuperAdmin: true,
-        status: "ACTIVE",
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      };
-
-      await userRepo.create(masterUser);
-
-      // 3. Create root membership with OWNER role and full wildcard permissions
-      return await TenantContext.run({ tenantId: masterOrg.id, isSuperAdmin: true }, async () => {
-        const membership: OrganizationMemberEntity = {
-          id: `mem-master-${Date.now()}`,
-          organizationId: masterOrg.id,
-          userId: masterUser.id,
-          role: "OWNER",
-          customPermissions: ["*"],
-          status: "ACTIVE",
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        };
-        await memberRepo.create(membership);
-
-        let subscription = await subRepo.findByOrgId(masterOrg.id);
-        if (!subscription) {
-          const now = new Date();
-          const expirationDate = new Date(now.getTime() + 365 * 86400000);
-          subscription = {
-            id: `sub-master-${masterOrg.id}`,
-            organizationId: masterOrg.id,
-            planId: "ENTERPRISE",
-            status: "ACTIVE",
-            trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
-            trialEndsAt: expirationDate.toISOString().replace("T", " ").substring(0, 16),
-            currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-            currentPeriodEnd: expirationDate.toISOString().replace("T", " ").substring(0, 16),
-            autoRenew: true,
-            createdAt: now.toISOString().replace("T", " ").substring(0, 16),
-            updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
-          };
-          await subRepo.create(subscription);
+        // 2. Strict atomic check inside the lock
+        const countCheck = await client.query("SELECT count(*) as count FROM users");
+        const totalUsers = parseInt(countCheck.rows[0]?.count || "0", 10);
+        if (totalUsers > 0) {
+          throw new Error("O ecossistema AURA já possui usuários cadastrados. A inicialização da conta mestre já foi concluída e está permanentemente desativada.");
         }
+
+        const superCheck = await client.query("SELECT id FROM users WHERE is_platform_super_admin = true LIMIT 1");
+        if (superCheck.rows.length > 0) {
+          throw new Error("O ecossistema AURA já possui um Administrador Mestre ativo.");
+        }
+
+        const emailNormalized = data.email.trim().toLowerCase();
+        const passwordHash = await this.hashPassword(data.password);
+
+        // 3. Ensure master organization exists
+        const orgRes = await client.query("SELECT id, name, slug FROM organizations LIMIT 1");
+        let masterOrgId = orgRes.rows[0]?.id;
+        let masterOrgSlug = orgRes.rows[0]?.slug;
+        let masterOrgName = orgRes.rows[0]?.name;
+
+        if (!masterOrgId) {
+          masterOrgId = `org-aura-${Date.now()}`;
+          masterOrgSlug = "aura-plataforma";
+          masterOrgName = data.ecosystemName?.trim() || "AURA Plataforma & Ecossistema";
+          await client.query(
+            `INSERT INTO organizations (
+              id, name, slug, document, segment, city, state, contact_email, contact_whatsapp, status, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', NOW(), NOW())`,
+            [
+              masterOrgId,
+              masterOrgName,
+              masterOrgSlug,
+              "00.000.000/0001-00",
+              "SEMIJOIAS",
+              "Limeira",
+              "SP",
+              emailNormalized,
+              data.phone || "",
+            ]
+          );
+        }
+
+        // 4. Create the first user as Platform Super Admin
+        const userId = `usr-master-${Date.now()}`;
+        await client.query(
+          `INSERT INTO users (
+            id, name, email, password_hash, phone, is_platform_super_admin, status, created_at, last_login_at
+          ) VALUES ($1, $2, $3, $4, $5, true, 'ACTIVE', NOW(), NOW())`,
+          [
+            userId,
+            data.name.trim(),
+            emailNormalized,
+            passwordHash,
+            data.phone || "",
+          ]
+        );
+
+        // 5. Create root membership with OWNER role and full wildcard permissions
+        const memId = `mem-master-${Date.now()}`;
+        await client.query(
+          `INSERT INTO organization_members (
+            id, organization_id, user_id, role, custom_permissions, status, created_at
+          ) VALUES ($1, $2, $3, 'OWNER', $4, 'ACTIVE', NOW())`,
+          [
+            memId,
+            masterOrgId,
+            userId,
+            JSON.stringify(["*"]),
+          ]
+        );
+
+        // 6. Ensure master subscription
+        const subCheck = await client.query("SELECT id FROM subscriptions WHERE organization_id = $1", [masterOrgId]);
+        if (subCheck.rows.length === 0) {
+          await client.query(
+            `INSERT INTO subscriptions (
+              id, organization_id, plan_id, status, trial_started_at, trial_ends_at, current_period_start, current_period_end, auto_renew, created_at, updated_at
+            ) VALUES ($1, $2, 'ENTERPRISE', 'ACTIVE', NOW(), NOW() + INTERVAL '365 days', NOW(), NOW() + INTERVAL '365 days', true, NOW(), NOW())`,
+            [
+              `sub-master-${masterOrgId}`,
+              masterOrgId,
+            ]
+          );
+        }
+
+        const masterUser = (await userRepo.findById(userId))!;
+        const masterOrg = (await orgRepo.findById(masterOrgId))!;
+        const membership = (await memberRepo.findById(memId))!;
+        const subscription = (await subRepo.findByOrgId(masterOrgId))!;
 
         return this.buildAuthSession(masterUser, masterOrg, membership, subscription);
       });

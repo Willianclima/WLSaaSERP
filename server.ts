@@ -66,7 +66,7 @@ app.get("/api/health", async (_req, res) => {
       pool: "unhealthy",
       rls: "unknown",
       version: "1.2.0",
-      error: err.message,
+      error: process.env.NODE_ENV === "production" ? "Falha na verificação de conectividade com banco de dados." : err.message,
     });
   }
 });
@@ -93,6 +93,15 @@ async function start() {
     process.env.NODE_ENV === "production" ||
     process.argv.includes("--production") ||
     (typeof __filename !== "undefined" && __filename.endsWith("server.cjs"));
+
+  if (isProduction) {
+    const requiredEnv = ["SESSION_SECRET"];
+    const missing = requiredEnv.filter((k) => !process.env[k] || !process.env[k]?.trim());
+    if (missing.length > 0) {
+      console.error(`[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: ${missing.join(", ")}`);
+      process.exit(1);
+    }
+  }
 
   if (!isProduction) {
     const vite = await createViteServer({

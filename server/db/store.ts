@@ -284,12 +284,16 @@ class DatabaseStore {
     };
     this.organizations.set(orgLumina.id, orgLumina);
 
+    // In non-production development environments, use random or env-provided passwords if needed
+    const devAdminSeed = process.env.DEV_SEED_ADMIN_PASSWORD || "AuraAdmin2026!#DevSeed";
+    const devUserSeed = process.env.DEV_SEED_USER_PASSWORD || "AuraUser2026!#DevSeed";
+
     // 3. Super Admin & Owner User
     const userAdmin: UserEntity = {
       id: "usr-admin-01",
       name: "Willian C. Lima",
       email: "willianCLima@gmail.com",
-      passwordHash: PasswordService.hashSync("admin123"),
+      passwordHash: PasswordService.hashSync(devAdminSeed),
       phone: "+55 (19) 99876-5432",
       isPlatformSuperAdmin: true,
       status: "ACTIVE",
@@ -303,7 +307,7 @@ class DatabaseStore {
       id: "usr-lumina-01",
       name: "Dona Lumina",
       email: "contato@luminasemijoias.com.br",
-      passwordHash: PasswordService.hashSync("123456"),
+      passwordHash: PasswordService.hashSync(devUserSeed),
       phone: "+55 (19) 98765-4321",
       isPlatformSuperAdmin: false,
       status: "ACTIVE",
@@ -317,7 +321,7 @@ class DatabaseStore {
       id: "usr-maria-01",
       name: "Maria da Silva",
       email: "maria@elegance.com",
-      passwordHash: PasswordService.hashSync("123456"),
+      passwordHash: PasswordService.hashSync(devUserSeed),
       phone: "+55 (11) 98888-7777",
       isPlatformSuperAdmin: false,
       status: "ACTIVE",

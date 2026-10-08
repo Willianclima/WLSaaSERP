@@ -324,8 +324,11 @@ router.post("/restore-seed-users", async (_req, res) => {
       });
     }
 
-    const adminPasswordHash = await AuthService.hashPassword("admin123");
-    const demoPasswordHash = await AuthService.hashPassword("123456");
+    const devAdminPass = process.env.DEV_SEED_ADMIN_PASSWORD || "AuraAdmin2026!#DevSeed";
+    const devDemoPass = process.env.DEV_SEED_USER_PASSWORD || "AuraUser2026!#DevSeed";
+
+    const adminPasswordHash = await AuthService.hashPassword(devAdminPass);
+    const demoPasswordHash = await AuthService.hashPassword(devDemoPass);
 
     await TenantContext.run({ tenantId: "org-lumina-01", isSuperAdmin: true }, async () => {
       // 1. Ensure master org exists

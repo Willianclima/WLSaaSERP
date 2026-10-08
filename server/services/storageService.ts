@@ -68,7 +68,10 @@ export class StorageService {
    * Format: {organizationId}/products/{sku}/{timestamp}_{random}_{filename}
    */
   public generateStorageKey(options: UploadOptions, originalFilename: string): string {
-    const orgId = options.organizationId || "org-lumina-01";
+    if (!options.organizationId) {
+      throw new Error("Identificador da organização obrigatório para geração de chave de armazenamento.");
+    }
+    const orgId = options.organizationId;
     const skuSegment = (options.sku || options.productId || "general").toLowerCase().replace(/[^a-z0-9_-]/g, "_");
     const folder = options.folder || "products";
     const cleanName = path.basename(originalFilename).toLowerCase().replace(/[^a-z0-9_.-]/g, "_");

@@ -21,17 +21,10 @@ export class ProductController {
         (req.headers["x-tenant-id"] as string);
 
       if (!targetIdentifier) {
-        const allOrgs = await TenantContext.run({ isSuperAdmin: true }, async () => {
-          return await orgRepo.listAll();
+        return res.status(400).json({
+          success: false,
+          error: "Identificador da loja obrigatório (informe 'storeSlug', 'tenantId' ou o cabeçalho 'x-tenant-id').",
         });
-        const activeOrg = allOrgs.find((o) => o.status === "ACTIVE") || allOrgs[0];
-        if (!activeOrg) {
-          return res.status(404).json({
-            success: false,
-            error: "Nenhuma loja ativa encontrada para exibição do catálogo público.",
-          });
-        }
-        targetIdentifier = activeOrg.slug || activeOrg.id;
       }
 
       const filter: ProductFilterQuery = {
