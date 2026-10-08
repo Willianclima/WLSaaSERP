@@ -10,6 +10,7 @@ import {
 } from "../repositories";
 import { inventoryRepo } from "../modules/inventory/inventory.repository";
 import { TenantContext } from "../db/tenantContext";
+import { query, withTransaction } from "../db/postgres";
 import {
   UserEntity,
   OrganizationEntity,
@@ -24,7 +25,8 @@ import { PasswordService } from "./passwordService";
 import bcrypt from "bcryptjs";
 
 export class AuthService {
-  private static readonly BCRYPT_SALT_ROUNDS = 10;
+  private static readonly BCRYPT_SALT_ROUNDS = Math.max(10, Number(process.env.BCRYPT_ROUNDS || 12));
+  private static isSettingUpFirstAdmin = false;
 
   /**
    * Cryptographically hashes a plain-text password using bcrypt with generated salt.
@@ -217,6 +219,9 @@ export class AuthService {
     let user: UserEntity | null = await userRepo.findByEmail(emailNormalized);
 
     if (!user) {
+      // Timing attack mitigation: ensure execution time is constant whether user exists or not
+      const DUMMY_HASH = "$2a$12$e8r0E3HkC0pL.O2V1j4GTuQj4mS5v7N8x6W1y2Z3A4B5C6D7E8F9G";
+      await bcrypt.compare(password, DUMMY_HASH).catch(() => {});
       throw new Error("Credenciais inválidas: e-mail ou senha incorretos.");
     }
 
@@ -402,6 +407,7 @@ export class AuthService {
 
   /**
    * Provisions the first root Administrator of the AURA ecosystem when the database has 0 users.
+   * Concurrency-safe: utilizes memory mutex and atomic database verification to prevent race conditions.
    */
   static async setupFirstAdmin(data: {
     name: string;
@@ -410,93 +416,120 @@ export class AuthService {
     phone?: string;
     ecosystemName?: string;
   }): Promise<AuthSessionResponse> {
-    const status = await this.checkSystemInitStatus();
-    if (!status.needsFirstAdmin) {
-      throw new Error("O ecossistema AURA já possui usuários cadastrados. A inicialização da conta mestre já foi concluída.");
+    if (this.isSettingUpFirstAdmin) {
+      throw new Error("A inicialização do administrador mestre já está em andamento. Requisições simultâneas bloqueadas.");
     }
 
-    if (!data.name || !data.name.trim()) {
-      throw new Error("O nome completo do administrador mestre é obrigatório.");
-    }
-    if (!data.email || !data.email.trim()) {
-      throw new Error("O e-mail do administrador mestre é obrigatório.");
-    }
-    if (!data.password || data.password.length < 6) {
-      throw new Error("A senha mestre deve possuir no mínimo 6 caracteres.");
-    }
+    this.isSettingUpFirstAdmin = true;
 
-    const emailNormalized = data.email.trim().toLowerCase();
-    const passwordHash = await this.hashPassword(data.password);
-
-    // 1. Ensure master organization exists
-    let masterOrg = await TenantContext.run({ isSuperAdmin: true }, async () => {
-      const orgs = await orgRepo.listAll();
-      return orgs.find((o) => o.slug.includes("aura") || o.slug.includes("matriz") || o.id === "org-lumina-01") || orgs[0];
-    });
-
-    if (!masterOrg) {
-      masterOrg = await orgRepo.create({
-        id: `org-aura-${Date.now()}`,
-        name: data.ecosystemName?.trim() || "AURA Plataforma & Ecossistema",
-        slug: "aura-plataforma",
-        document: "00.000.000/0001-00",
-        segment: "SEMIJOIAS",
-        city: "Limeira",
-        state: "SP",
-        contactEmail: emailNormalized,
-        contactWhatsapp: data.phone || "",
-        status: "ACTIVE",
-      });
-    }
-
-    // 2. Create the first user as Platform Super Admin
-    const userId = `usr-master-${Date.now()}`;
-    const masterUser: UserEntity = {
-      id: userId,
-      name: data.name.trim(),
-      email: emailNormalized,
-      passwordHash,
-      phone: data.phone || "",
-      isPlatformSuperAdmin: true,
-      status: "ACTIVE",
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-    };
-
-    await userRepo.create(masterUser);
-
-    // 3. Create root membership with OWNER role and full wildcard permissions
-    return await TenantContext.run({ tenantId: masterOrg.id, isSuperAdmin: true }, async () => {
-      const membership: OrganizationMemberEntity = {
-        id: `mem-master-${Date.now()}`,
-        organizationId: masterOrg.id,
-        userId: masterUser.id,
-        role: "OWNER",
-        customPermissions: ["*"],
-        status: "ACTIVE",
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      };
-      await memberRepo.create(membership);
-
-      let subscription = await subRepo.findByOrgId(masterOrg.id);
-      if (!subscription) {
-        const now = new Date();
-        const expirationDate = new Date(now.getTime() + 365 * 86400000);
-        subscription = {
-          id: `sub-master-${masterOrg.id}`,
-          organizationId: masterOrg.id,
-          planId: "ENTERPRISE",
-          status: "ACTIVE",
-          currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-          currentPeriodEnd: expirationDate.toISOString().replace("T", " ").substring(0, 16),
-          autoRenew: true,
-          createdAt: now.toISOString().replace("T", " ").substring(0, 16),
-          updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
-        };
-        await subRepo.create(subscription);
+    try {
+      if (!data.name || !data.name.trim()) {
+        throw new Error("O nome completo do administrador mestre é obrigatório.");
+      }
+      if (!data.email || !data.email.trim() || !data.email.includes("@")) {
+        throw new Error("O e-mail do administrador mestre é obrigatório e deve ser válido.");
       }
 
-      return this.buildAuthSession(masterUser, masterOrg, membership, subscription);
-    });
+      // Strict password policy validation for Super Admin:
+      // Minimum 12 characters, uppercase, lowercase, numbers, and symbols
+      const passwordValidation = PasswordService.validatePasswordStrength(data.password, true);
+      if (!passwordValidation.valid) {
+        throw new Error(passwordValidation.error);
+      }
+
+      // Re-check system init status under superadmin context
+      const status = await this.checkSystemInitStatus();
+      if (!status.needsFirstAdmin) {
+        throw new Error("O ecossistema AURA já possui usuários cadastrados. A inicialização da conta mestre já foi concluída e está permanentemente desativada.");
+      }
+
+      // Secondary atomic check to ensure no super admin or user exists
+      const existingUsers = await TenantContext.run({ isSuperAdmin: true }, async () => {
+        return await userRepo.listAll();
+      });
+      if (existingUsers.length > 0) {
+        throw new Error("O ecossistema AURA já possui usuários registrados no banco de dados.");
+      }
+
+      const emailNormalized = data.email.trim().toLowerCase();
+      const passwordHash = await this.hashPassword(data.password);
+
+      // 1. Ensure master organization exists
+      let masterOrg = await TenantContext.run({ isSuperAdmin: true }, async () => {
+        const orgs = await orgRepo.listAll();
+        return orgs.find((o) => o.slug.includes("aura") || o.slug.includes("matriz") || o.id === "org-lumina-01") || orgs[0];
+      });
+
+      if (!masterOrg) {
+        masterOrg = await orgRepo.create({
+          id: `org-aura-${Date.now()}`,
+          name: data.ecosystemName?.trim() || "AURA Plataforma & Ecossistema",
+          slug: "aura-plataforma",
+          document: "00.000.000/0001-00",
+          segment: "SEMIJOIAS",
+          city: "Limeira",
+          state: "SP",
+          contactEmail: emailNormalized,
+          contactWhatsapp: data.phone || "",
+          status: "ACTIVE",
+          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+          updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        });
+      }
+
+      // 2. Create the first user as Platform Super Admin
+      const userId = `usr-master-${Date.now()}`;
+      const masterUser: UserEntity = {
+        id: userId,
+        name: data.name.trim(),
+        email: emailNormalized,
+        passwordHash,
+        phone: data.phone || "",
+        isPlatformSuperAdmin: true,
+        status: "ACTIVE",
+        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      };
+
+      await userRepo.create(masterUser);
+
+      // 3. Create root membership with OWNER role and full wildcard permissions
+      return await TenantContext.run({ tenantId: masterOrg.id, isSuperAdmin: true }, async () => {
+        const membership: OrganizationMemberEntity = {
+          id: `mem-master-${Date.now()}`,
+          organizationId: masterOrg.id,
+          userId: masterUser.id,
+          role: "OWNER",
+          customPermissions: ["*"],
+          status: "ACTIVE",
+          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        };
+        await memberRepo.create(membership);
+
+        let subscription = await subRepo.findByOrgId(masterOrg.id);
+        if (!subscription) {
+          const now = new Date();
+          const expirationDate = new Date(now.getTime() + 365 * 86400000);
+          subscription = {
+            id: `sub-master-${masterOrg.id}`,
+            organizationId: masterOrg.id,
+            planId: "ENTERPRISE",
+            status: "ACTIVE",
+            trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
+            trialEndsAt: expirationDate.toISOString().replace("T", " ").substring(0, 16),
+            currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
+            currentPeriodEnd: expirationDate.toISOString().replace("T", " ").substring(0, 16),
+            autoRenew: true,
+            createdAt: now.toISOString().replace("T", " ").substring(0, 16),
+            updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+          };
+          await subRepo.create(subscription);
+        }
+
+        return this.buildAuthSession(masterUser, masterOrg, membership, subscription);
+      });
+    } finally {
+      this.isSettingUpFirstAdmin = false;
+    }
   }
 }

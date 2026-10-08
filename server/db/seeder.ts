@@ -34,6 +34,12 @@ export async function seedPostgresIfNeeded(): Promise<void> {
       );
     }
 
+    // In production, only system plans are seeded. Never populate demo users, mock organizations or sample catalog.
+    if (process.env.NODE_ENV === "production") {
+      console.log("[PostgreSQL Seeder] Production mode detected: baseline plans verified; demo users and mock catalogs are omitted.");
+      return;
+    }
+
     // 2. Organizations
     for (const org of dbStore.organizations.values()) {
       await query(

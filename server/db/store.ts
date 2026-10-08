@@ -259,6 +259,11 @@ class DatabaseStore {
     // 1. Load Plans
     INITIAL_PLANS.forEach((plan) => this.plans.set(plan.id, plan));
 
+    if (process.env.NODE_ENV === "production") {
+      // In production, keep memory store clean so the system requires clean initial bootstrap
+      return;
+    }
+
     // 2. Organization: Lumina Semijoias
     const orgLumina: OrganizationEntity = {
       id: "org-lumina-01",

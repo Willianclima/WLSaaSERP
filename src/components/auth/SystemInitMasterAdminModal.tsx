@@ -39,8 +39,8 @@ export const SystemInitMasterAdminModal: React.FC<SystemInitMasterAdminModalProp
 }) => {
   const [name, setName] = useState<string>("Willian C. Lima");
   const [email, setEmail] = useState<string>("willianCLima@gmail.com");
-  const [password, setPassword] = useState<string>("admin123");
-  const [confirmPassword, setConfirmPassword] = useState<string>("admin123");
+  const [password, setPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
   const [phone, setPhone] = useState<string>("+55 (19) 99876-5432");
   const [ecosystemName, setEcosystemName] = useState<string>("AURA Plataforma & Ecossistema");
 
@@ -55,27 +55,41 @@ export const SystemInitMasterAdminModal: React.FC<SystemInitMasterAdminModalProp
   const calculatePasswordStrength = (pwd: string) => {
     if (!pwd) return { score: 0, label: "Vazia", color: "bg-stone-700" };
     let score = 0;
-    if (pwd.length >= 6) score += 1;
     if (pwd.length >= 8) score += 1;
+    if (pwd.length >= 12) score += 1;
     if (/[A-Z]/.test(pwd)) score += 1;
+    if (/[a-z]/.test(pwd)) score += 1;
     if (/[0-9]/.test(pwd)) score += 1;
     if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
 
-    if (score <= 1) return { score: 1, label: "Básica", color: "bg-rose-500" };
-    if (score <= 3) return { score: 2, label: "Média", color: "bg-amber-500" };
-    return { score: 3, label: "Forte", color: "bg-emerald-500" };
+    if (score <= 3 || pwd.length < 12) return { score: 1, label: "Fraca (< 12 carac.)", color: "bg-rose-500" };
+    if (score <= 5) return { score: 2, label: "Média", color: "bg-amber-500" };
+    return { score: 3, label: "Forte (Alta Segurança)", color: "bg-emerald-500" };
   };
 
   const strength = calculatePasswordStrength(password);
 
+  const handleGenerateSecurePassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*+";
+    let securePwd = "";
+    for (let i = 0; i < 16; i++) {
+      securePwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(securePwd);
+    setConfirmPassword(securePwd);
+    setShowPassword(true);
+    setErrorMessage(null);
+  };
+
   const handleFillDefaults = () => {
     setName("Willian C. Lima");
     setEmail("willianCLima@gmail.com");
-    setPassword("admin123");
-    setConfirmPassword("admin123");
     setPhone("+55 (19) 99876-5432");
     setEcosystemName("AURA Plataforma & Ecossistema");
     setErrorMessage(null);
+    if (!password) {
+      handleGenerateSecurePassword();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,8 +104,12 @@ export const SystemInitMasterAdminModal: React.FC<SystemInitMasterAdminModalProp
       setErrorMessage("Informe um endereço de e-mail corporativo válido.");
       return;
     }
-    if (!password || password.length < 6) {
-      setErrorMessage("A senha mestre deve conter no mínimo 6 caracteres.");
+    if (!password || password.length < 12) {
+      setErrorMessage("A senha do Administrador Mestre deve conter no mínimo 12 caracteres.");
+      return;
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      setErrorMessage("A senha deve conter uma combinação de letras maiúsculas, minúsculas, números e símbolos especiais.");
       return;
     }
     if (password !== confirmPassword) {
@@ -150,13 +168,29 @@ export const SystemInitMasterAdminModal: React.FC<SystemInitMasterAdminModalProp
         ? {
             id: s.organization.id,
             name: s.organization.name,
-            subdomain: s.organization.slug,
-            plan: "ENTERPRISE",
-            status: "ACTIVE",
-            createdAt: s.organization.createdAt,
-            logoUrl: s.organization.logoUrl,
-            segment: s.organization.segment || "SEMIJOIAS",
-            customDomain: s.organization.customDomain,
+            slug: s.organization.slug,
+            document: s.organization.document || "00.000.000/0001-00",
+            planTier: "PREMIUM",
+            logo: s.organization.logoUrl || "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=200&auto=format&fit=crop&q=80",
+            activeProductsCount: 0,
+            activeResellersCount: 0,
+            city: s.organization.city || "Limeira",
+            state: s.organization.state || "SP",
+            contactEmail: s.organization.contactEmail || s.user.email,
+            contactWhatsapp: s.organization.contactWhatsapp || "(19) 98765-4321",
+            customDomain: s.organization.customDomain || `${s.organization.slug}.aura.com`,
+            customDomainStatus: "ACTIVE",
+            features: {
+              unlimitedProducts: true,
+              consignments: true,
+              commissionEngine: true,
+              digitalWarranty: true,
+              customJewelry: true,
+              whatsappAutomations: true,
+              aiGatewayMCP: true,
+              marketplaces: true,
+              multiUserRBAC: true,
+            },
           }
         : undefined;
 
@@ -328,16 +362,27 @@ export const SystemInitMasterAdminModal: React.FC<SystemInitMasterAdminModalProp
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="Mínimo 12 caracteres (A-Z, a-z, 0-9, símbolos)"
                       className="w-full pl-3.5 pr-10 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-stone-100 text-xs sm:text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-colors font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-200 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-200 transition-colors cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] pt-0.5">
+                    <button
+                      type="button"
+                      onClick={handleGenerateSecurePassword}
+                      className="text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1 cursor-pointer font-medium"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Gerar Senha Forte Aleatória</span>
+                    </button>
+                    <span className="text-stone-500 text-[10px]">12+ carac. com maiúsc., mín., num. e símbolos</span>
                   </div>
                 </div>
 

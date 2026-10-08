@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { authMiddleware, AuthenticatedRequest } from "../../middlewares/authMiddleware";
 import { requireRole } from "../../middlewares/rbacMiddleware";
 import { BillingService } from "./billing.service";
@@ -8,12 +9,51 @@ import { SaaSPlanId } from "../../types/saas";
 
 const router = Router();
 
+/**
+ * Timing-safe cryptographic comparison to prevent timing attacks on webhook tokens/signatures.
+ * Hashes both strings with HMAC-SHA256 first so both buffers are guaranteed identical 32-byte length.
+ */
+function verifyWebhookSecret(received: string | undefined, expected: string | undefined): boolean {
+  if (!received || !expected) return false;
+  const key = "aura_webhook_constant_len_key";
+  const receivedHash = crypto.createHmac("sha256", key).update(received.trim()).digest();
+  const expectedHash = crypto.createHmac("sha256", key).update(expected.trim()).digest();
+  return crypto.timingSafeEqual(receivedHash, expectedHash);
+}
+
 // ============================================================================
-// 1. PUBLIC PAYMENT PROVIDER WEBHOOK (STRICT IDEMPOTENCY)
-// Provedor de Pagamentos -> POST /api/billing/webhook -> Idempotência -> Subscription ACTIVE
+// 1. PUBLIC PAYMENT PROVIDER WEBHOOK (STRICT IDEMPOTENCY & AUTHENTICITY)
+// Provedor de Pagamentos -> POST /api/billing/webhook -> Autenticação -> Idempotência -> Subscription ACTIVE
 // ============================================================================
 router.post("/webhook", async (req: Request, res: Response) => {
   try {
+    const isProduction = process.env.NODE_ENV === "production";
+    const expectedSecret = process.env.BILLING_WEBHOOK_SECRET;
+
+    if (isProduction && !expectedSecret) {
+      console.error("[Billing Webhook] Security Alert: BILLING_WEBHOOK_SECRET não configurado em ambiente de produção.");
+      return res.status(500).json({
+        success: false,
+        error: "Configuração de autenticação de webhook pendente no servidor.",
+      });
+    }
+
+    if (expectedSecret) {
+      const receivedToken =
+        (req.headers["x-webhook-token"] as string) ||
+        (req.headers["x-billing-secret"] as string) ||
+        (req.headers["x-aura-signature"] as string);
+
+      if (!verifyWebhookSecret(receivedToken, expectedSecret)) {
+        return res.status(401).json({
+          success: false,
+          error: "Acesso não autorizado: token/assinatura de webhook inválido ou ausente.",
+        });
+      }
+    } else {
+      console.warn("[Billing Webhook] Aviso: Webhook processado sem verificação de secret em ambiente de desenvolvimento.");
+    }
+
     const payload = req.body;
     if (!payload || !payload.eventId || !payload.invoiceId) {
       return res.status(400).json({
@@ -35,24 +75,76 @@ router.post("/webhook", async (req: Request, res: Response) => {
 
 // ============================================================================
 // 1.1 ASAAS PAYMENT PROVIDER ADAPTER (PILOTO 01 — ÚNICO PROVEDOR CONECTADO)
-// Asaas Webhook -> POST /api/billing/webhook/asaas -> Idempotência -> ACTIVE
+// Asaas Webhook -> POST /api/billing/webhook/asaas -> Validação Token -> Idempotência -> ACTIVE
 // ============================================================================
 router.post("/webhook/asaas", async (req: Request, res: Response) => {
   try {
+    const isProduction = process.env.NODE_ENV === "production";
+    const expectedAsaasToken = process.env.ASAAS_WEBHOOK_ACCESS_TOKEN;
+
+    if (isProduction && !expectedAsaasToken) {
+      console.error("[Asaas Webhook] Security Alert: ASAAS_WEBHOOK_ACCESS_TOKEN não configurado em produção.");
+      return res.status(500).json({
+        success: false,
+        error: "Configuração de webhook Asaas (ASAAS_WEBHOOK_ACCESS_TOKEN) pendente no servidor.",
+      });
+    }
+
+    if (expectedAsaasToken) {
+      const receivedToken = (req.headers["asaas-access-token"] as string) || (req.headers["x-asaas-access-token"] as string);
+      if (!verifyWebhookSecret(receivedToken, expectedAsaasToken)) {
+        return res.status(401).json({
+          success: false,
+          error: "Acesso não autorizado: token de autenticação Asaas inválido ou ausente no cabeçalho 'asaas-access-token'.",
+        });
+      }
+    } else {
+      console.warn("[Asaas Webhook] Aviso: Webhook Asaas processado sem validação de token em ambiente de desenvolvimento.");
+    }
+
     const asaasBody = req.body;
+    if (!asaasBody || typeof asaasBody !== "object") {
+      return res.status(400).json({
+        success: false,
+        error: "Payload de webhook Asaas inválido ou vazio.",
+      });
+    }
+
     const eventId = asaasBody.id || asaasBody.payment?.id || `asaas-evt-${Date.now()}`;
     const invoiceId = asaasBody.payment?.externalReference || asaasBody.invoiceId || asaasBody.externalReference;
 
     if (!invoiceId) {
       return res.status(400).json({
         success: false,
-        error: "Asaas webhook: externalReference (invoiceId) não informado.",
+        error: "Asaas webhook: externalReference (invoiceId) não informado no payload.",
       });
     }
 
-    let eventType: "PAYMENT_APPROVED" | "INVOICE_OVERDUE" = "PAYMENT_APPROVED";
-    if (asaasBody.event === "PAYMENT_OVERDUE") {
+    // Map Asaas events to internal domain status
+    let eventType: "PAYMENT_APPROVED" | "INVOICE_OVERDUE" | "SUBSCRIPTION_CANCELED" | "IGNORED" = "IGNORED";
+    if (
+      asaasBody.event === "PAYMENT_RECEIVED" ||
+      asaasBody.event === "PAYMENT_CONFIRMED" ||
+      asaasBody.event === "PAYMENT_APPROVED"
+    ) {
+      eventType = "PAYMENT_APPROVED";
+    } else if (asaasBody.event === "PAYMENT_OVERDUE") {
       eventType = "INVOICE_OVERDUE";
+    } else if (
+      asaasBody.event === "PAYMENT_DELETED" ||
+      asaasBody.event === "PAYMENT_REFUNDED" ||
+      asaasBody.event === "SUBSCRIPTION_CANCELED"
+    ) {
+      eventType = "SUBSCRIPTION_CANCELED";
+    }
+
+    if (eventType === "IGNORED") {
+      return res.status(200).json({
+        received: true,
+        ignored: true,
+        event: asaasBody.event,
+        message: `Evento Asaas '${asaasBody.event}' recebido e ignorado (não afeta faturas ativas).`,
+      });
     }
 
     const result = await BillingService.processWebhook({

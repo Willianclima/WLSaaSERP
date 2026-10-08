@@ -14,12 +14,25 @@ export class ProductController {
    */
   static async listPublic(req: Request, res: Response) {
     try {
-      const targetIdentifier =
+      let targetIdentifier =
         (req.query.storeSlug as string) ||
         (req.query.tenantId as string) ||
         (req.query.organizationId as string) ||
-        (req.headers["x-tenant-id"] as string) ||
-        "org-lumina-01";
+        (req.headers["x-tenant-id"] as string);
+
+      if (!targetIdentifier) {
+        const allOrgs = await TenantContext.run({ isSuperAdmin: true }, async () => {
+          return await orgRepo.listAll();
+        });
+        const activeOrg = allOrgs.find((o) => o.status === "ACTIVE") || allOrgs[0];
+        if (!activeOrg) {
+          return res.status(404).json({
+            success: false,
+            error: "Nenhuma loja ativa encontrada para exibição do catálogo público.",
+          });
+        }
+        targetIdentifier = activeOrg.slug || activeOrg.id;
+      }
 
       const filter: ProductFilterQuery = {
         category: req.query.category as string,

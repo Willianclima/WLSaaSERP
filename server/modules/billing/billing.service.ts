@@ -12,6 +12,35 @@ import {
 } from "./billing.types";
 
 export class BillingService {
+  private static readonly activeWebhookEvents = new Set<string>();
+
+  /**
+   * Sanitizes webhook payload to remove any sensitive keys (tokens, cards, credentials)
+   * before storing into audit/event database tables.
+   */
+  private static sanitizePayload(payload: any): any {
+    if (!payload || typeof payload !== "object") return payload;
+    try {
+      const sanitized = JSON.parse(JSON.stringify(payload));
+      const sensitiveKeys = ["token", "secret", "password", "hash", "cardnumber", "cvv", "securitycode", "access_token"];
+      const redact = (obj: any) => {
+        if (!obj || typeof obj !== "object") return;
+        for (const key of Object.keys(obj)) {
+          const lower = key.toLowerCase();
+          if (sensitiveKeys.some((s) => lower.includes(s))) {
+            obj[key] = "[REDACTED]";
+          } else if (typeof obj[key] === "object") {
+            redact(obj[key]);
+          }
+        }
+      };
+      redact(sanitized);
+      return sanitized;
+    } catch {
+      return { eventId: payload.eventId, invoiceId: payload.invoiceId };
+    }
+  }
+
   /**
    * Generates a Brazilian EMVCo-compliant simulated PIX Copia e Cola payload.
    */
@@ -130,173 +159,192 @@ export class BillingService {
       throw new Error("Webhook inválido: 'invoiceId' é obrigatório.");
     }
 
-    // -------------------------------------------------------------------------
-    // 1. IDEMPOTENCY CHECK
-    // -------------------------------------------------------------------------
-    const existingEvent = await billingRepo.findWebhookEvent(eventId);
-    if (existingEvent) {
+    if (this.activeWebhookEvents.has(eventId)) {
+      return {
+        received: true,
+        processed: false,
+        idempotent: true,
+        message: "Evento de webhook já está sendo processado concorrentemente. Bloqueio atômico de concorrência ativo.",
+        invoiceId,
+        status: "PENDING",
+      };
+    }
+
+    this.activeWebhookEvents.add(eventId);
+
+    try {
+      const sanitized = this.sanitizePayload(payload);
+
+      // -------------------------------------------------------------------------
+      // 1. IDEMPOTENCY CHECK
+      // -------------------------------------------------------------------------
+      const existingEvent = await billingRepo.findWebhookEvent(eventId);
+      if (existingEvent) {
+        const invoice = await billingRepo.findById(invoiceId);
+        return {
+          received: true,
+          processed: false,
+          idempotent: true,
+          message: "Webhook já processado com sucesso anteriormente. Nenhuma ação duplicada executada (Garantia de Idempotência).",
+          invoiceId,
+          status: invoice?.status || "PAID",
+          subscriptionStatus: "ACTIVE",
+          planId: invoice?.planId,
+        };
+      }
+
+      // -------------------------------------------------------------------------
+      // 2. FETCH INVOICE
+      // -------------------------------------------------------------------------
       const invoice = await billingRepo.findById(invoiceId);
+      if (!invoice) {
+        throw new Error(`Fatura '${invoiceId}' não foi encontrada para conciliação do webhook.`);
+      }
+
+      // If invoice was already marked PAID previously by another event, ensure idempotent return
+      if (invoice.status === "PAID" && eventType === "PAYMENT_APPROVED") {
+        await billingRepo.recordWebhookEvent({
+          eventId,
+          providerTxId,
+          eventType,
+          invoiceId,
+          organizationId: invoice.organizationId,
+          payload: sanitized,
+        });
+
+        return {
+          received: true,
+          processed: false,
+          idempotent: true,
+          message: "Fatura já liquidada anteriormente. Evento duplicado registrado como idempotente.",
+          invoiceId,
+          status: "PAID",
+          subscriptionStatus: "ACTIVE",
+          planId: invoice.planId,
+        };
+      }
+
+      // -------------------------------------------------------------------------
+      // 3. EXECUTE PAYMENT APPROVAL & SUBSCRIPTION ACTIVATION
+      // -------------------------------------------------------------------------
+      if (eventType === "PAYMENT_APPROVED") {
+        const now = new Date().toISOString();
+
+        // Mark invoice as PAID
+        await billingRepo.updateStatus(invoiceId, "PAID", {
+          paidAt: now,
+          providerTxId: providerTxId || invoice.providerTxId,
+          metadata: {
+            ...invoice.metadata,
+            approvedViaWebhook: true,
+            webhookEventId: eventId,
+          },
+        });
+
+        // Activate Subscription in Core SaaS Engine
+        await SubscriptionService.activateSubscriptionFromPayment({
+          organizationId: invoice.organizationId,
+          targetPlanId: invoice.planId,
+          invoiceId: invoice.id,
+          paymentMethod: paymentMethod || invoice.paymentMethod,
+        });
+
+        // Persist webhook event for idempotency
+        await billingRepo.recordWebhookEvent({
+          eventId,
+          providerTxId,
+          eventType,
+          invoiceId,
+          organizationId: invoice.organizationId,
+          payload: sanitized,
+        });
+
+        return {
+          received: true,
+          processed: true,
+          idempotent: false,
+          message: `Pagamento aprovado com sucesso! Plano ${invoice.planId} ativado para a organização.`,
+          invoiceId,
+          status: "PAID",
+          subscriptionStatus: "ACTIVE",
+          planId: invoice.planId,
+        };
+      } else if (eventType === "INVOICE_OVERDUE") {
+        // Transition invoice to EXPIRED and subscription to PAST_DUE
+        await billingRepo.updateStatus(invoiceId, "EXPIRED");
+        try {
+          await SubscriptionService.transitionStatus(
+            invoice.organizationId,
+            "PAST_DUE",
+            `Fatura ${invoiceId} vencida sem pagamento.`
+          );
+        } catch (err: any) {
+          console.warn("Notice transitioning to PAST_DUE:", err.message);
+        }
+
+        await billingRepo.recordWebhookEvent({
+          eventId,
+          providerTxId,
+          eventType,
+          invoiceId,
+          organizationId: invoice.organizationId,
+          payload: sanitized,
+        });
+
+        return {
+          received: true,
+          processed: true,
+          idempotent: false,
+          message: "Fatura expirada. Assinatura marcada como PAST_DUE.",
+          invoiceId,
+          status: "EXPIRED",
+          subscriptionStatus: "PAST_DUE",
+          planId: invoice.planId,
+        };
+      } else if (eventType === "SUBSCRIPTION_CANCELED") {
+        await billingRepo.updateStatus(invoiceId, "CANCELED");
+        try {
+          await SubscriptionService.transitionStatus(
+            invoice.organizationId,
+            "CANCELED",
+            `Cancelamento solicitado via provedor de cobrança.`
+          );
+        } catch (err: any) {
+          console.warn("Notice transitioning to CANCELED:", err.message);
+        }
+
+        await billingRepo.recordWebhookEvent({
+          eventId,
+          providerTxId,
+          eventType,
+          invoiceId,
+          organizationId: invoice.organizationId,
+          payload: sanitized,
+        });
+
+        return {
+          received: true,
+          processed: true,
+          idempotent: false,
+          message: "Assinatura cancelada via provedor.",
+          invoiceId,
+          status: "CANCELED",
+          subscriptionStatus: "CANCELED",
+          planId: invoice.planId,
+        };
+      }
+
       return {
         received: true,
         processed: false,
-        idempotent: true,
-        message: "Webhook já processado com sucesso anteriormente. Nenhuma ação duplicada executada (Garantia de Idempotência).",
-        invoiceId,
-        status: invoice?.status || "PAID",
-        subscriptionStatus: "ACTIVE",
-        planId: invoice?.planId,
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // 2. FETCH INVOICE
-    // -------------------------------------------------------------------------
-    const invoice = await billingRepo.findById(invoiceId);
-    if (!invoice) {
-      throw new Error(`Fatura '${invoiceId}' não foi encontrada para conciliação do webhook.`);
-    }
-
-    // If invoice was already marked PAID previously by another event, ensure idempotent return
-    if (invoice.status === "PAID" && eventType === "PAYMENT_APPROVED") {
-      await billingRepo.recordWebhookEvent({
-        eventId,
-        providerTxId,
-        eventType,
-        invoiceId,
-        organizationId: invoice.organizationId,
-        payload,
-      });
-
-      return {
-        received: true,
-        processed: false,
-        idempotent: true,
-        message: "Fatura já liquidada anteriormente. Evento duplicado registrado como idempotente.",
-        invoiceId,
-        status: "PAID",
-        subscriptionStatus: "ACTIVE",
-        planId: invoice.planId,
-      };
-    }
-
-    // -------------------------------------------------------------------------
-    // 3. EXECUTE PAYMENT APPROVAL & SUBSCRIPTION ACTIVATION
-    // -------------------------------------------------------------------------
-    if (eventType === "PAYMENT_APPROVED") {
-      const now = new Date().toISOString();
-
-      // Mark invoice as PAID
-      await billingRepo.updateStatus(invoiceId, "PAID", {
-        paidAt: now,
-        providerTxId: providerTxId || invoice.providerTxId,
-        metadata: {
-          ...invoice.metadata,
-          approvedViaWebhook: true,
-          webhookEventId: eventId,
-        },
-      });
-
-      // Activate Subscription in Core SaaS Engine
-      await SubscriptionService.activateSubscriptionFromPayment({
-        organizationId: invoice.organizationId,
-        targetPlanId: invoice.planId,
-        invoiceId: invoice.id,
-        paymentMethod: paymentMethod || invoice.paymentMethod,
-      });
-
-      // Persist webhook event for idempotency
-      await billingRepo.recordWebhookEvent({
-        eventId,
-        providerTxId,
-        eventType,
-        invoiceId,
-        organizationId: invoice.organizationId,
-        payload,
-      });
-
-      return {
-        received: true,
-        processed: true,
         idempotent: false,
-        message: `Pagamento aprovado com sucesso! Plano ${invoice.planId} ativado para a organização.`,
+        message: `Tipo de evento de webhook desconhecido ou não aplicável: ${eventType}`,
         invoiceId,
-        status: "PAID",
-        subscriptionStatus: "ACTIVE",
-        planId: invoice.planId,
+        status: invoice.status,
       };
-    } else if (eventType === "INVOICE_OVERDUE") {
-      // Transition invoice to EXPIRED and subscription to PAST_DUE
-      await billingRepo.updateStatus(invoiceId, "EXPIRED");
-      try {
-        await SubscriptionService.transitionStatus(
-          invoice.organizationId,
-          "PAST_DUE",
-          `Fatura ${invoiceId} vencida sem pagamento.`
-        );
-      } catch (err: any) {
-        console.warn("Notice transitioning to PAST_DUE:", err.message);
-      }
-
-      await billingRepo.recordWebhookEvent({
-        eventId,
-        providerTxId,
-        eventType,
-        invoiceId,
-        organizationId: invoice.organizationId,
-        payload,
-      });
-
-      return {
-        received: true,
-        processed: true,
-        idempotent: false,
-        message: "Fatura expirada. Assinatura marcada como PAST_DUE.",
-        invoiceId,
-        status: "EXPIRED",
-        subscriptionStatus: "PAST_DUE",
-        planId: invoice.planId,
-      };
-    } else if (eventType === "SUBSCRIPTION_CANCELED") {
-      await billingRepo.updateStatus(invoiceId, "CANCELED");
-      try {
-        await SubscriptionService.transitionStatus(
-          invoice.organizationId,
-          "CANCELED",
-          `Cancelamento solicitado via provedor de cobrança.`
-        );
-      } catch (err: any) {
-        console.warn("Notice transitioning to CANCELED:", err.message);
-      }
-
-      await billingRepo.recordWebhookEvent({
-        eventId,
-        providerTxId,
-        eventType,
-        invoiceId,
-        organizationId: invoice.organizationId,
-        payload,
-      });
-
-      return {
-        received: true,
-        processed: true,
-        idempotent: false,
-        message: "Assinatura cancelada via provedor.",
-        invoiceId,
-        status: "CANCELED",
-        subscriptionStatus: "CANCELED",
-        planId: invoice.planId,
-      };
+    } finally {
+      this.activeWebhookEvents.delete(eventId);
     }
-
-    return {
-      received: true,
-      processed: false,
-      idempotent: false,
-      message: `Tipo de evento de webhook desconhecido ou não aplicável: ${eventType}`,
-      invoiceId,
-      status: invoice.status,
-    };
   }
 
   /**

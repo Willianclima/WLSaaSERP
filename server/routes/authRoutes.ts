@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { AuthService } from "../services/authService";
+import { PasswordService } from "../services/passwordService";
 import { authMiddleware, AuthenticatedRequest } from "../middlewares/authMiddleware";
+import {
+  loginRateLimitMiddleware,
+  recordLoginFailure,
+  recordLoginSuccess,
+  getClientIp,
+} from "../middlewares/loginRateLimitMiddleware";
 import { subRepo, userRepo } from "../repositories";
 import { query } from "../db/postgres";
 import { TenantContext } from "../db/tenantContext";
@@ -84,11 +91,15 @@ router.post("/register", async (req, res) => {
 });
 
 // POST /api/auth/login - Log in and obtain session + tenant context
-router.post("/login", async (req, res) => {
+router.post("/login", loginRateLimitMiddleware, async (req, res) => {
+  const ip = getClientIp(req);
+  const rawEmail = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+
   try {
     const { email, password, organizationId } = req.body;
 
     if (!email || typeof email !== "string" || !email.trim()) {
+      recordLoginFailure(ip, rawEmail);
       return res.status(400).json({
         success: false,
         error: "O endereço de e-mail é obrigatório para autenticação.",
@@ -96,6 +107,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (!password || typeof password !== "string") {
+      recordLoginFailure(ip, rawEmail);
       return res.status(400).json({
         success: false,
         error: "A senha de acesso é obrigatória.",
@@ -108,12 +120,15 @@ router.post("/login", async (req, res) => {
       organizationId
     );
 
+    recordLoginSuccess(ip, rawEmail);
+
     return res.json({
       success: true,
       message: "Autenticação realizada com sucesso.",
       session,
     });
   } catch (error: any) {
+    recordLoginFailure(ip, rawEmail);
     return res.status(401).json({ success: false, error: error.message });
   }
 });
@@ -258,10 +273,13 @@ router.post("/update-password", authMiddleware, async (req: AuthenticatedRequest
   try {
     const user = req.user!;
     const { newPassword } = req.body;
-    if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+    const isSuperAdmin = Boolean(user.isPlatformSuperAdmin);
+
+    const validation = PasswordService.validatePasswordStrength(newPassword, isSuperAdmin);
+    if (!validation.valid) {
       return res.status(400).json({
         success: false,
-        error: "A nova senha é obrigatória e deve ter no mínimo 6 caracteres.",
+        error: validation.error,
       });
     }
 
@@ -296,9 +314,16 @@ router.post("/reset-users-for-init-test", async (_req, res) => {
   }
 });
 
-// POST /api/auth/restore-seed-users - Restaura usuários de demonstração padrão
+// POST /api/auth/restore-seed-users - Restaura usuários de demonstração padrão (APENAS EM DESENVOLVIMENTO)
 router.post("/restore-seed-users", async (_req, res) => {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({
+        success: false,
+        error: "Rota de demonstração e seed estritamente bloqueada em ambiente de produção.",
+      });
+    }
+
     const adminPasswordHash = await AuthService.hashPassword("admin123");
     const demoPasswordHash = await AuthService.hashPassword("123456");
 
