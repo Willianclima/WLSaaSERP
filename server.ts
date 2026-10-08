@@ -23,9 +23,46 @@ import { query } from "./server/db/postgres";
 import { dbRlsInterceptorMiddleware } from "./server/middlewares/dbRlsInterceptorMiddleware";
 
 const app = express();
+app.disable("x-powered-by");
 
 // Dynamic port configuration: uses process.env.APP_PORT || process.env.PORT || 3000
 const PORT = Number(process.env.APP_PORT || process.env.PORT || 3000);
+
+// Enterprise Security Headers & Controlled CORS Guard
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+
+  const origin = req.headers.origin;
+  const configuredOrigins = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+    : [];
+
+  if (origin) {
+    const isAllowed =
+      configuredOrigins.includes(origin) ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      origin.endsWith(".run.app") ||
+      origin.endsWith(".google.com");
+
+    if (isAllowed) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type,Authorization,x-tenant-id,x-support-reason,asaas-access-token,x-webhook-token,x-billing-secret,x-aura-signature"
+      );
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+});
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
