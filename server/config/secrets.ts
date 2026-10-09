@@ -55,7 +55,11 @@ export async function getRequiredSecret(key: string): Promise<string> {
   }
 
   // 3. Remote GCP Secret Manager query (if running in GCP or explicitly configured)
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT;
+  const projectId =
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.PROJECT_ID;
   const secretId = GCP_SECRET_MAP[key];
 
   if (projectId && secretId) {

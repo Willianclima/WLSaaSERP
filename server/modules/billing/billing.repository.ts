@@ -129,10 +129,15 @@ export class BillingRepository {
   }
 
   /**
-   * Database-level atomic claim for webhook event idempotency.
+   * Database-level atomic claim for webhook event idempotency and failure recovery.
    * Leverages PostgreSQL's unique constraint on `billing_webhook_events(event_id)`.
-   * Returns { claimed: true } if this request was the first to insert into DB,
-   * or { claimed: false, existingEvent } if another request already registered it.
+   * 
+   * Handles:
+   * 1. Initial claim: atomic INSERT ... ON CONFLICT (event_id) DO NOTHING
+   * 2. Already processed: returns claimed: false, reason: "ALREADY_PROCESSED"
+   * 3. Failed events: allows safe retry by atomically updating status = 'PROCESSING'
+   * 4. Abandoned processing events (> 2 min): allows atomic reclamation for retry
+   * 5. Active processing (< 2 min): rejects duplicate/concurrent requests safely
    */
   async claimWebhookEvent(data: {
     eventId: string;
@@ -141,18 +146,106 @@ export class BillingRepository {
     invoiceId?: string;
     organizationId?: string;
     payload: any;
-  }): Promise<{ claimed: boolean; existingEvent?: any }> {
+  }): Promise<{
+    claimed: boolean;
+    status: "PROCESSING" | "PROCESSED" | "FAILED";
+    isRetry?: boolean;
+    existingEvent?: any;
+    reason: "CLAIMED" | "RETRY_CLAIMED" | "ALREADY_PROCESSED" | "CONCURRENT_PROCESSING";
+  }> {
     return TenantContext.run({ isSuperAdmin: true }, async () => {
+      // 1. Check if event is already registered
       const existing = await query("SELECT * FROM billing_webhook_events WHERE event_id = $1", [data.eventId]);
+
       if (existing.rows.length > 0) {
-        return { claimed: false, existingEvent: existing.rows[0] };
+        const row = existing.rows[0];
+
+        // 1a. If already successfully PROCESSED, do not re-run (Strict Idempotency)
+        if (row.status === "PROCESSED") {
+          return {
+            claimed: false,
+            status: "PROCESSED",
+            existingEvent: row,
+            reason: "ALREADY_PROCESSED",
+          };
+        }
+
+        // 1b. If previous attempt FAILED, allow safe retry by atomically claiming the row
+        if (row.status === "FAILED") {
+          const retryRes = await query(
+            `UPDATE billing_webhook_events
+             SET status = 'PROCESSING',
+                 attempts = COALESCE(attempts, 1) + 1,
+                 last_attempt_at = NOW(),
+                 payload = $2
+             WHERE event_id = $1 AND status = 'FAILED'
+             RETURNING *`,
+            [data.eventId, JSON.stringify(data.payload)]
+          );
+
+          if (retryRes.rows.length > 0) {
+            return {
+              claimed: true,
+              status: "PROCESSING",
+              isRetry: true,
+              existingEvent: retryRes.rows[0],
+              reason: "RETRY_CLAIMED",
+            };
+          }
+
+          // Another concurrent request grabbed the retry
+          return {
+            claimed: false,
+            status: "PROCESSING",
+            existingEvent: row,
+            reason: "CONCURRENT_PROCESSING",
+          };
+        }
+
+        // 1c. If event is currently in PROCESSING, check if it was abandoned (> 2 minutes)
+        if (row.status === "PROCESSING") {
+          const abandonedRes = await query(
+            `UPDATE billing_webhook_events
+             SET status = 'PROCESSING',
+                 attempts = COALESCE(attempts, 1) + 1,
+                 last_attempt_at = NOW(),
+                 payload = $2
+             WHERE event_id = $1
+               AND status = 'PROCESSING'
+               AND (
+                 processed_at < NOW() - INTERVAL '2 minutes'
+                 OR last_attempt_at < NOW() - INTERVAL '2 minutes'
+               )
+             RETURNING *`,
+            [data.eventId, JSON.stringify(data.payload)]
+          );
+
+          if (abandonedRes.rows.length > 0) {
+            return {
+              claimed: true,
+              status: "PROCESSING",
+              isRetry: true,
+              existingEvent: abandonedRes.rows[0],
+              reason: "RETRY_CLAIMED",
+            };
+          }
+
+          // Fresh active execution in progress
+          return {
+            claimed: false,
+            status: "PROCESSING",
+            existingEvent: row,
+            reason: "CONCURRENT_PROCESSING",
+          };
+        }
       }
 
+      // 2. Initial insert with atomic UNIQUE constraint on event_id
       const id = `wbk-evt-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
       const res = await query(
         `INSERT INTO billing_webhook_events (
-          id, event_id, provider_tx_id, event_type, invoice_id, organization_id, payload, status, processed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PROCESSING', NOW())
+          id, event_id, provider_tx_id, event_type, invoice_id, organization_id, payload, status, processed_at, last_attempt_at, attempts
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PROCESSING', NOW(), NOW(), 1)
         ON CONFLICT (event_id) DO NOTHING
         RETURNING id`,
         [
@@ -167,20 +260,38 @@ export class BillingRepository {
       );
 
       if (res.rows.length === 0) {
+        // Race condition: another process inserted first. Re-fetch and evaluate state.
         const raceExisting = await query("SELECT * FROM billing_webhook_events WHERE event_id = $1", [data.eventId]);
-        return { claimed: false, existingEvent: raceExisting.rows[0] };
+        const raceRow = raceExisting.rows[0];
+        if (raceRow?.status === "PROCESSED") {
+          return { claimed: false, status: "PROCESSED", existingEvent: raceRow, reason: "ALREADY_PROCESSED" };
+        }
+        return {
+          claimed: false,
+          status: raceRow?.status || "PROCESSING",
+          existingEvent: raceRow,
+          reason: "CONCURRENT_PROCESSING",
+        };
       }
 
-      return { claimed: true };
+      return { claimed: true, status: "PROCESSING", reason: "CLAIMED" };
     });
   }
 
-  async markWebhookEventCompleted(eventId: string, status: "PROCESSED" | "FAILED" = "PROCESSED"): Promise<void> {
+  async markWebhookEventCompleted(
+    eventId: string,
+    status: "PROCESSED" | "FAILED" = "PROCESSED",
+    errorMessage?: string
+  ): Promise<void> {
     return TenantContext.run({ isSuperAdmin: true }, async () => {
-      await query("UPDATE billing_webhook_events SET status = $1, processed_at = NOW() WHERE event_id = $2", [
-        status,
-        eventId,
-      ]);
+      await query(
+        `UPDATE billing_webhook_events
+         SET status = $1,
+             error_message = $2,
+             processed_at = NOW()
+         WHERE event_id = $3`,
+        [status, errorMessage || null, eventId]
+      );
     });
   }
 

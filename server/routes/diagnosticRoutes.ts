@@ -12,12 +12,13 @@ import { storageService } from "../services/storageService";
 import { authMiddleware, AuthenticatedRequest, tenantRlsMiddleware, jwtTenantRlsMiddleware } from "../middlewares/authMiddleware";
 import { JwtService } from "../services/jwtService";
 import { auditService, withAuditedOperation, AuditedOperation } from "../services/auditService";
+import { isProduction } from "../config/environment";
 
 const router = Router();
 
 // Strict Production Block: Diagnostic routes must never be accessible in production
 router.use((_req, res, next) => {
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction()) {
     return res.status(403).json({
       success: false,
       error: "Rotas de teste e diagnóstico desativadas em ambiente de produção.",

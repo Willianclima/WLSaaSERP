@@ -22,6 +22,14 @@ import { reservationExpiryWorker } from "./server/modules/inventory/reservationE
 import { query } from "./server/db/postgres";
 import { dbRlsInterceptorMiddleware } from "./server/middlewares/dbRlsInterceptorMiddleware";
 
+import { isProduction } from "./server/config/environment";
+import { getRequiredSecret } from "./server/config/secrets";
+
+// Guarantee system-wide environment synchronization if production flag/mode detected
+if (isProduction()) {
+  process.env.NODE_ENV = "production";
+}
+
 const app = express();
 app.disable("x-powered-by");
 
@@ -103,7 +111,7 @@ app.get("/api/health", async (_req, res) => {
       pool: "unhealthy",
       rls: "unknown",
       version: "1.2.0",
-      error: process.env.NODE_ENV === "production" ? "Falha na verificação de conectividade com banco de dados." : err.message,
+      error: isProduction() ? "Falha na verificação de conectividade com banco de dados." : err.message,
     });
   }
 });
@@ -126,21 +134,24 @@ app.use("/api/diagnostics", diagnosticRoutes);
 
 // 3. Start Server and mount Vite middleware / static files
 async function start() {
-  const isProduction =
-    process.env.NODE_ENV === "production" ||
-    process.argv.includes("--production") ||
-    (typeof __filename !== "undefined" && __filename.endsWith("server.cjs"));
+  const isProd = isProduction();
 
-  if (isProduction) {
-    const requiredEnv = ["SESSION_SECRET"];
-    const missing = requiredEnv.filter((k) => !process.env[k] || !process.env[k]?.trim());
-    if (missing.length > 0) {
-      console.error(`[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: ${missing.join(", ")}`);
-      process.exit(1);
+  if (isProd) {
+    if (!process.env.SESSION_SECRET || !process.env.SESSION_SECRET.trim()) {
+      try {
+        const secret = await getRequiredSecret("SESSION_SECRET");
+        process.env.SESSION_SECRET = secret;
+      } catch (err: any) {
+        console.error(
+          `[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: SESSION_SECRET. ` +
+          `Configure a variável de ambiente SESSION_SECRET no Google Cloud Run ou provisione o segredo no Google Cloud Secret Manager ('aura-session-secret').`
+        );
+        process.exit(1);
+      }
     }
   }
 
-  if (!isProduction) {
+  if (!isProd) {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -157,7 +168,7 @@ async function start() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`✨ Aura Multi-Tenant SaaS & ERP Server running on http://0.0.0.0:${PORT} [mode: ${isProduction ? "production" : "development"}]`);
+    console.log(`✨ Aura Multi-Tenant SaaS & ERP Server running on http://0.0.0.0:${PORT} [mode: ${isProd ? "production" : "development"}]`);
     // Start background reservation expiry worker & stock reconciliation
     reservationExpiryWorker.start();
   });

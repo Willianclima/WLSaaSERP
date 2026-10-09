@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { isProduction } from "./environment";
 
 let ephemeralDevSecret: string | null = null;
 
@@ -13,7 +14,7 @@ export function getSessionSecret(): string {
   }
 
   // In production, strictly fail fast if secret is not provided via env or Secret Manager
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction()) {
     throw new Error(
       "[Security Violation] SESSION_SECRET obrigatório não configurado no ambiente de produção. " +
       "Configure a variável de ambiente via Google Cloud Secret Manager ('aura-session-secret')."

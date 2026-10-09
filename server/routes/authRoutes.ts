@@ -11,6 +11,7 @@ import {
 import { subRepo, userRepo } from "../repositories";
 import { query } from "../db/postgres";
 import { TenantContext } from "../db/tenantContext";
+import { isProduction } from "../config/environment";
 
 const router = Router();
 
@@ -238,7 +239,7 @@ router.post("/switch-tenant", authMiddleware, async (req: AuthenticatedRequest, 
 // POST /api/auth/generate-expired-token - Gera token JWT propositalmente expirado para validação do TESTE 5
 router.post("/generate-expired-token", async (_req, res) => {
   try {
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction()) {
       return res.status(403).json({
         success: false,
         error: "Rota de teste desativada em ambiente de produção.",
@@ -298,7 +299,7 @@ router.post("/update-password", authMiddleware, async (req: AuthenticatedRequest
 // POST /api/auth/reset-users-for-init-test - Limpa usuários para teste do fluxo de inicialização mestre
 router.post("/reset-users-for-init-test", async (_req, res) => {
   try {
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction()) {
       return res.status(403).json({ success: false, error: "Apenas disponível em ambiente de desenvolvimento." });
     }
     await TenantContext.run({ isSuperAdmin: true }, async () => {
@@ -317,7 +318,7 @@ router.post("/reset-users-for-init-test", async (_req, res) => {
 // POST /api/auth/restore-seed-users - Restaura usuários de demonstração padrão (APENAS EM DESENVOLVIMENTO)
 router.post("/restore-seed-users", async (_req, res) => {
   try {
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction()) {
       return res.status(403).json({
         success: false,
         error: "Rota de demonstração e seed estritamente bloqueada em ambiente de produção.",

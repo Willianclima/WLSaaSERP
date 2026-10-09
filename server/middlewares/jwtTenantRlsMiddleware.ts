@@ -9,6 +9,7 @@ import { TenantContext } from "../db/tenantContext";
 import { getPostgresPool, setLocalTenantId, applyRlsContext } from "../db/postgres";
 import { auditService } from "../services/auditService";
 import { UserEntity, OrganizationEntity, OrganizationRole } from "../types/saas";
+import { isProduction } from "../config/environment";
 
 /**
  * Middleware Express que:
@@ -24,7 +25,7 @@ export async function jwtTenantRlsMiddleware(
   next: NextFunction
 ) {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
 
     // -------------------------------------------------------------------------
     // 1. EXTRAÇÃO DO TOKEN (JWT ou Sessão Assinada)

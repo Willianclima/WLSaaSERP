@@ -9,6 +9,7 @@ import { TenantContext } from "../db/tenantContext";
 import { auditService } from "../services/auditService";
 import { getPostgresPool, setLocalTenantId, applyRlsContext } from "../db/postgres";
 import { JwtService } from "../services/jwtService";
+import { isProduction } from "../config/environment";
 
 export interface AuthenticatedRequest extends Request {
   user?: UserEntity;
@@ -38,7 +39,7 @@ export interface AuthenticatedRequest extends Request {
  */
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
 
     const authHeader = req.headers.authorization;
     const tenantHeader =

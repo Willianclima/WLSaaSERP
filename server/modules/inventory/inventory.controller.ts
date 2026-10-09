@@ -6,6 +6,7 @@ import { CreateMovementDTO } from "./inventory.types";
 import { auditService } from "../../services/auditService";
 import { InventoryHardeningTestSuite } from "./inventoryHardening.test";
 import { InventoryStressTester } from "./inventoryStressTest";
+import { isProduction } from "../../config/environment";
 
 export class InventoryController {
   /**
@@ -879,10 +880,10 @@ export class InventoryController {
    */
   static async runHardeningTests(req: AuthenticatedRequest, res: Response) {
     try {
-      const isProduction = process.env.NODE_ENV === "production";
+      const isProd = isProduction();
       const devAllowOverride = req.headers["x-dev-test-runner"] === "enabled" || process.env.ENABLE_DEV_TEST_RUNNER === "true";
 
-      if (isProduction && !devAllowOverride) {
+      if (isProd && !devAllowOverride) {
         return res.status(403).json({
           success: false,
           error: "A execução de testes automatizados de concorrência é restrita a ambientes de desenvolvimento/staging ou requer flag de autorização explícita (x-dev-test-runner: enabled).",
@@ -914,10 +915,10 @@ export class InventoryController {
    */
   static async runStressTest(req: AuthenticatedRequest, res: Response) {
     try {
-      const isProduction = process.env.NODE_ENV === "production";
+      const isProd = isProduction();
       const devAllowOverride = req.headers["x-dev-test-runner"] === "enabled" || process.env.ENABLE_DEV_TEST_RUNNER === "true";
 
-      if (isProduction && !devAllowOverride) {
+      if (isProd && !devAllowOverride) {
         return res.status(403).json({
           success: false,
           error: "A execução de testes de estresse é restrita a ambientes de desenvolvimento/staging ou requer flag de autorização explícita (x-dev-test-runner: enabled).",

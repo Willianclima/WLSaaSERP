@@ -4,6 +4,7 @@ import { requireRole } from "../middlewares/rbacMiddleware";
 import { SubscriptionService } from "../services/subscriptionService";
 import { planRepo } from "../repositories";
 import { SystemModuleKey } from "../types/saas";
+import { isProduction } from "../config/environment";
 
 const router = Router();
 
@@ -35,6 +36,14 @@ router.post(
   requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
   async (req: AuthenticatedRequest, res) => {
     try {
+      if (isProduction()) {
+        return res.status(403).json({
+          success: false,
+          error: "FORBIDDEN_IN_PRODUCTION",
+          message: "Simulação de pagamento desativada em ambiente de produção.",
+        });
+      }
+
       const orgId = req.organizationId!;
       const { targetPlanId, paymentMethod } = req.body;
 
@@ -87,6 +96,14 @@ router.post(
   requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
   async (req: AuthenticatedRequest, res) => {
     try {
+      if (isProduction()) {
+        return res.status(403).json({
+          success: false,
+          error: "FORBIDDEN_IN_PRODUCTION",
+          message: "Simulação de expiração desativada em ambiente de produção.",
+        });
+      }
+
       const orgId = req.organizationId!;
       const result = await SubscriptionService.simulateTrialExpiration(orgId);
       return res.json(result);

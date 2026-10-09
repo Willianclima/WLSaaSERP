@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { isProduction } from "../config/environment";
 
 /**
  * Enterprise Password Security Service
@@ -40,7 +41,7 @@ export class PasswordService {
       return false;
     }
 
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
 
     // 1. Standard Bcrypt Hash ($2a$, $2b$, $2y$)
     if (this.isBcryptHash(storedHash)) {

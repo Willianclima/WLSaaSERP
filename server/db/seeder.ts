@@ -1,6 +1,7 @@
 import { query } from "./postgres";
 import { dbStore, INITIAL_PLANS } from "./store";
 import { TenantContext } from "./tenantContext";
+import { isProduction } from "../config/environment";
 
 export async function seedPostgresIfNeeded(): Promise<void> {
   return TenantContext.run({ isSuperAdmin: true }, async () => {
@@ -35,7 +36,7 @@ export async function seedPostgresIfNeeded(): Promise<void> {
     }
 
     // In production, only system plans are seeded. Never populate demo users, mock organizations or sample catalog.
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction()) {
       console.log("[PostgreSQL Seeder] Production mode detected: baseline plans verified; demo users and mock catalogs are omitted.");
       return;
     }

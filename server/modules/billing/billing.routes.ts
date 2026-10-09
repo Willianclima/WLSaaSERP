@@ -6,6 +6,7 @@ import { BillingService } from "./billing.service";
 import { billingRepo } from "./billing.repository";
 import { BillingPaymentMethod } from "./billing.types";
 import { SaaSPlanId } from "../../types/saas";
+import { isProduction } from "../../config/environment";
 
 const router = Router();
 
@@ -27,7 +28,7 @@ function verifyWebhookSecret(received: string | undefined, expected: string | un
 // ============================================================================
 router.post("/webhook", async (req: Request, res: Response) => {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
     const receivedToken =
       (req.headers["x-webhook-token"] as string) ||
       (req.headers["x-billing-secret"] as string) ||
@@ -40,7 +41,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       });
     }
 
-    const expectedSecret = process.env.BILLING_WEBHOOK_SECRET || (!isProduction ? "dev_billing_webhook_secret_local" : undefined);
+    const expectedSecret = process.env.BILLING_WEBHOOK_SECRET || (!isProd ? "dev_billing_webhook_secret_local" : undefined);
 
     if (!expectedSecret) {
       console.error("[Billing Webhook] Security Alert: BILLING_WEBHOOK_SECRET não configurado no ambiente.");
@@ -71,7 +72,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
     console.error("[Billing Webhook Error]:", error?.message || "Internal error");
     return res.status(500).json({
       received: false,
-      error: process.env.NODE_ENV === "production" ? "Erro ao processar webhook de faturamento." : error.message,
+      error: isProduction() ? "Erro ao processar webhook de faturamento." : error.message,
     });
   }
 });
@@ -82,7 +83,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
 // ============================================================================
 router.post("/webhook/asaas", async (req: Request, res: Response) => {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
     const receivedToken = (req.headers["asaas-access-token"] as string) || (req.headers["x-asaas-access-token"] as string);
 
     if (!receivedToken) {
@@ -92,7 +93,7 @@ router.post("/webhook/asaas", async (req: Request, res: Response) => {
       });
     }
 
-    const expectedAsaasToken = process.env.ASAAS_WEBHOOK_ACCESS_TOKEN || (!isProduction ? "dev_asaas_webhook_token_local" : undefined);
+    const expectedAsaasToken = process.env.ASAAS_WEBHOOK_ACCESS_TOKEN || (!isProd ? "dev_asaas_webhook_token_local" : undefined);
 
     if (!expectedAsaasToken) {
       console.error("[Asaas Webhook] Security Alert: ASAAS_WEBHOOK_ACCESS_TOKEN não configurado no ambiente.");
@@ -178,7 +179,7 @@ router.post("/webhook/asaas", async (req: Request, res: Response) => {
     console.error("[Asaas Webhook Error]:", error?.message || "Internal error");
     return res.status(500).json({
       success: false,
-      error: process.env.NODE_ENV === "production" ? "Erro ao processar webhook do Asaas." : error.message,
+      error: isProduction() ? "Erro ao processar webhook do Asaas." : error.message,
     });
   }
 });
@@ -265,7 +266,7 @@ router.post(
   requireRole(["SUPER_ADMIN", "OWNER", "LOJA_ADMIN"]),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (process.env.NODE_ENV === "production") {
+      if (isProduction()) {
         return res.status(403).json({
           success: false,
           error: "Rota de simulação desativada em ambiente de produção.",

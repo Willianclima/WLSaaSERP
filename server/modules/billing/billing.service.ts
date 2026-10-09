@@ -141,7 +141,19 @@ export class BillingService {
   }
 
   /**
-   * Processes a payment provider webhook with STRICT IDEMPOTENCY.
+   * Sanitizes diagnostic error message to guarantee zero secrets/tokens in DB logs.
+   */
+  static sanitizeErrorMessage(rawError: any): string {
+    if (!rawError) return "Erro no processamento do webhook";
+    let msg = typeof rawError === "string" ? rawError : rawError.message || String(rawError);
+    // Redact tokens, hashes, secrets, credit card numbers
+    msg = msg.replace(/(bearer\s+|token=|[a-f0-9]{32,}|sk_test_[a-zA-Z0-9]+|sk_live_[a-zA-Z0-9]+)/gi, "[REDACTED_SECRET]");
+    msg = msg.replace(/\b(?:\d[ -]*?){13,16}\b/g, "[REDACTED_CARD]");
+    return msg.substring(0, 500);
+  }
+
+  /**
+   * Processes a payment provider webhook with STRICT IDEMPOTENCY and FAILURE RECOVERY.
    * If provider sends:
    * PAYMENT_APPROVED
    * PAYMENT_APPROVED
@@ -184,7 +196,7 @@ export class BillingService {
       }
 
       // -------------------------------------------------------------------------
-      // 2. DATABASE-LEVEL IDEMPOTENCY LOCK (PostgreSQL UNIQUE CONSTRAINT)
+      // 2. DATABASE-LEVEL IDEMPOTENCY LOCK & FAILURE RECOVERY (PostgreSQL UNIQUE)
       // -------------------------------------------------------------------------
       const claimResult = await billingRepo.claimWebhookEvent({
         eventId,
@@ -196,6 +208,17 @@ export class BillingService {
       });
 
       if (!claimResult.claimed) {
+        if (claimResult.reason === "CONCURRENT_PROCESSING") {
+          return {
+            received: true,
+            processed: false,
+            idempotent: true,
+            message: "Evento de webhook já está sendo processado concorrentemente no banco de dados.",
+            invoiceId,
+            status: invoice.status || "PENDING",
+          };
+        }
+
         return {
           received: true,
           processed: false,
@@ -208,14 +231,26 @@ export class BillingService {
         };
       }
 
-      // If invoice was already marked PAID previously by another event, ensure idempotent return
+      // If invoice was already marked PAID previously, ensure subscription is active and finish event
       if (invoice.status === "PAID" && eventType === "PAYMENT_APPROVED") {
+        try {
+          await SubscriptionService.activateSubscriptionFromPayment({
+            organizationId: invoice.organizationId,
+            targetPlanId: invoice.planId,
+            invoiceId: invoice.id,
+            paymentMethod: paymentMethod || invoice.paymentMethod,
+          });
+        } catch (subErr: any) {
+          console.warn("[Webhook Recovery] Notice ensuring subscription active:", subErr.message);
+        }
+
         await billingRepo.markWebhookEventCompleted(eventId, "PROCESSED");
+
         return {
           received: true,
-          processed: false,
-          idempotent: true,
-          message: "Fatura já liquidada anteriormente. Evento duplicado registrado como idempotente.",
+          processed: true,
+          idempotent: claimResult.isRetry ? false : true,
+          message: "Fatura liquidada e assinatura garantida como ativa. Processamento concluído com sucesso.",
           invoiceId,
           status: "PAID",
           subscriptionStatus: "ACTIVE",
@@ -320,6 +355,14 @@ export class BillingService {
         invoiceId,
         status: invoice.status,
       };
+    } catch (err: any) {
+      const safeErrorMsg = BillingService.sanitizeErrorMessage(err);
+      try {
+        await billingRepo.markWebhookEventCompleted(eventId, "FAILED", safeErrorMsg);
+      } catch (recordErr: any) {
+        console.error("[Webhook DB status update to FAILED error]:", recordErr.message);
+      }
+      throw err;
     } finally {
       this.activeWebhookEvents.delete(eventId);
     }

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PasswordService } from "../services/passwordService";
+import { isProduction } from "../config/environment";
 import {
   OrganizationEntity,
   UserEntity,
@@ -259,7 +260,7 @@ class DatabaseStore {
     // 1. Load Plans
     INITIAL_PLANS.forEach((plan) => this.plans.set(plan.id, plan));
 
-    if (process.env.NODE_ENV === "production") {
+    if (isProduction()) {
       // In production, keep memory store clean so the system requires clean initial bootstrap
       return;
     }
