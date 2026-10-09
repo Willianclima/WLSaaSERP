@@ -72,6 +72,18 @@ const SENSITIVE_SECRETS: SecretMapping[] = [
     description: "Cloudflare R2 Object Storage Secret Access Key",
     isSensitive: true,
   },
+  {
+    envKey: "BILLING_WEBHOOK_SECRET",
+    secretId: "aura-billing-webhook-secret",
+    description: "Platform billing & gateway webhook HMAC verification secret",
+    isSensitive: true,
+  },
+  {
+    envKey: "ASAAS_WEBHOOK_ACCESS_TOKEN",
+    secretId: "aura-asaas-webhook-access-token",
+    description: "Asaas payment gateway webhook access token",
+    isSensitive: true,
+  },
 ];
 
 async function parseEnvFile(filePath: string): Promise<Record<string, string>> {

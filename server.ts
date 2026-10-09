@@ -137,17 +137,32 @@ async function start() {
   const isProd = isProduction();
 
   if (isProd) {
-    if (!process.env.SESSION_SECRET || !process.env.SESSION_SECRET.trim()) {
-      try {
-        const secret = await getRequiredSecret("SESSION_SECRET");
-        process.env.SESSION_SECRET = secret;
-      } catch (err: any) {
-        console.error(
-          `[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: SESSION_SECRET. ` +
-          `Configure a variável de ambiente SESSION_SECRET no Google Cloud Run ou provisione o segredo no Google Cloud Secret Manager ('aura-session-secret').`
-        );
-        process.exit(1);
+    // Attempt hydration from GCP Secret Manager for critical keys if not directly passed in environment
+    const criticalKeys = [
+      "SESSION_SECRET",
+      "DATABASE_URL",
+      "BILLING_WEBHOOK_SECRET",
+      "ASAAS_WEBHOOK_ACCESS_TOKEN",
+      "GEMINI_API_KEY",
+    ];
+
+    for (const key of criticalKeys) {
+      if (!process.env[key] || !process.env[key]!.trim()) {
+        try {
+          const secret = await getRequiredSecret(key);
+          process.env[key] = secret;
+        } catch {
+          // Handled per-service; SESSION_SECRET failure is fatal below
+        }
       }
+    }
+
+    if (!process.env.SESSION_SECRET || !process.env.SESSION_SECRET.trim()) {
+      console.error(
+        `[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: SESSION_SECRET. ` +
+        `Configure a injeção via Google Cloud Secret Manager ('aura-session-secret') nas configurações do Google Cloud Run.`
+      );
+      process.exit(1);
     }
   }
 

@@ -32,6 +32,8 @@ export const GCP_SECRET_MAP: Record<string, string> = {
   AWS_SECRET_ACCESS_KEY: "aura-aws-secret-access-key",
   R2_ACCESS_KEY_ID: "aura-r2-access-key-id",
   R2_SECRET_ACCESS_KEY: "aura-r2-secret-access-key",
+  BILLING_WEBHOOK_SECRET: "aura-billing-webhook-secret",
+  ASAAS_WEBHOOK_ACCESS_TOKEN: "aura-asaas-webhook-access-token",
 };
 
 /**
