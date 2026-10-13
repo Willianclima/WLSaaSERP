@@ -43,6 +43,16 @@ export class BillingRepository {
     });
   }
 
+  async findByIdempotencyKey(orgId: string, idempotencyKey: string): Promise<BillingInvoiceEntity | null> {
+    return TenantContext.run({ tenantId: orgId, isSuperAdmin: true }, async () => {
+      const res = await query(
+        "SELECT * FROM billing_invoices WHERE organization_id = $1 AND idempotency_key = $2",
+        [orgId, idempotencyKey]
+      );
+      return res.rows.length > 0 ? mapRowToInvoice(res.rows[0]) : null;
+    });
+  }
+
   async listByOrgId(orgId: string): Promise<BillingInvoiceEntity[]> {
     return TenantContext.run({ tenantId: orgId }, async () => {
       const res = await query(

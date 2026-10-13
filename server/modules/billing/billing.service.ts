@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { planRepo, subRepo, orgRepo } from "../../repositories";
+import { isProduction } from "../../config/environment";
 import { SaaSPlanId } from "../../types/saas";
 import { SubscriptionService } from "../../services/subscriptionService";
 import { auditService } from "../../services/auditService";
@@ -75,6 +76,7 @@ export class BillingService {
     paymentMethod: BillingPaymentMethod;
     invoiceId: string;
     dueDateFormatted: string;
+    idempotencyKey?: string;
   }): Promise<{
     providerTxId: string;
     pixQrCode?: string;
@@ -84,7 +86,7 @@ export class BillingService {
     boletoUrl?: string;
     rawResponse?: any;
   }> {
-    const isProd = process.env.NODE_ENV === "production";
+    const isProd = isProduction();
     const baseUrl =
       process.env.ASAAS_API_URL ||
       (isProd ? "https://api.asaas.com/v3" : "https://sandbox.asaas.com/v3");
@@ -93,6 +95,9 @@ export class BillingService {
       "Content-Type": "application/json",
       access_token: params.apiKey,
     };
+    if (params.idempotencyKey) {
+      headers["Idempotency-Key"] = params.idempotencyKey;
+    }
 
     // 1. Create or Find Customer in Asaas
     let customerId = "";
@@ -175,7 +180,7 @@ export class BillingService {
     let boletoBarcode: string | undefined;
     let boletoUrl: string | undefined = payment.bankSlipUrl;
 
-    // 3. For PIX, query QR Code from Asaas
+    // 3. For PIX, query QR Code from Asaas & validate essential payload
     if (params.paymentMethod === "PIX") {
       try {
         const qrRes = await fetch(`${baseUrl}/payments/${providerTxId}/pixQrCode`, { headers });
@@ -189,9 +194,15 @@ export class BillingService {
       } catch (qrErr) {
         console.warn("[Asaas] Erro ao obter QR Code PIX:", qrErr);
       }
+
+      if (!pixCopyPaste && !pixQrCode) {
+        throw new Error(
+          `[Asaas] Falha ao obter dados essenciais de pagamento: Provedor Asaas não retornou QR Code nem payload 'Copia e Cola' PIX para a cobrança gerada (${providerTxId}).`
+        );
+      }
     }
 
-    // 4. For BOLETO, query identificationField / Barcode
+    // 4. For BOLETO, query identificationField / Barcode & validate essential payload
     if (params.paymentMethod === "BOLETO") {
       try {
         const barRes = await fetch(`${baseUrl}/payments/${providerTxId}/identificationField`, {
@@ -203,6 +214,12 @@ export class BillingService {
         }
       } catch (barErr) {
         console.warn("[Asaas] Erro ao obter código de barras do Boleto:", barErr);
+      }
+
+      if (!boletoBarcode && !boletoUrl) {
+        throw new Error(
+          `[Asaas] Falha ao obter dados essenciais do Boleto: Provedor Asaas não retornou linha digitável nem link de visualização para a cobrança gerada (${providerTxId}).`
+        );
       }
     }
 
@@ -229,6 +246,24 @@ export class BillingService {
   }): Promise<BillingInvoiceEntity> {
     const { organizationId, targetPlanId, paymentMethod, idempotencyKey } = data;
 
+    // Risco 3: Idempotência garantida na camada de persistência e requisição
+    if (idempotencyKey) {
+      const existing = await billingRepo.findByIdempotencyKey(organizationId, idempotencyKey);
+      if (existing) {
+        console.log(
+          `[BillingService] Reutilizando fatura existente para idempotencyKey '${idempotencyKey}' [id: ${existing.id}]`
+        );
+        return existing;
+      }
+    }
+
+    // Risco 2: Bloqueio seguro de Cartão de Crédito incompleto sem tokenização prévia
+    if (paymentMethod === "CREDIT_CARD") {
+      throw new Error(
+        "O pagamento via Cartão de Crédito requer tokenização prévia do cartão no cliente (checkout transparente). Por favor, selecione PIX (ativação instantânea) ou Boleto Bancário."
+      );
+    }
+
     const plan = await planRepo.findById(targetPlanId);
     if (!plan) {
       throw new Error(`Plano '${targetPlanId}' não encontrado.`);
@@ -242,6 +277,17 @@ export class BillingService {
     const dueDate = new Date(now.getTime() + 3 * 86400000); // 3 days for PIX/Boleto
 
     const apiKey = (process.env.ASAAS_API_KEY || process.env.ASAAS_ACCESS_TOKEN || "").trim();
+    const isProd = isProduction();
+
+    // Risco 1: Emulação estritamente bloqueada em produção (Fail Closed)
+    if (isProd) {
+      if (!apiKey || apiKey === "replace_with_asaas_api_key_in_production") {
+        throw new Error(
+          "[BillingService] Falha de segurança crítica: Cobranças em ambiente de produção exigem ASAAS_API_KEY válida configurada. A emulação de pagamentos é estritamente bloqueada em produção."
+        );
+      }
+    }
+
     let providerTxId = txId;
     let pixCopyPasteVal: string | undefined;
     let pixQrCodeVal: string | undefined;
@@ -258,6 +304,7 @@ export class BillingService {
         paymentMethod,
         invoiceId,
         dueDateFormatted,
+        idempotencyKey,
       });
 
       providerTxId = asaasResult.providerTxId;
@@ -268,7 +315,7 @@ export class BillingService {
       boletoUrlVal = asaasResult.boletoUrl;
     } else {
       console.warn(
-        `[BillingService] ASAAS_API_KEY ausente ou emulação ativa. Gerando cobrança simulada para desenvolvimento/homologação.`
+        `[BillingService] ASAAS_API_KEY ausente em ambiente de desenvolvimento/homologação local. Gerando cobrança simulada.`
       );
       const { copyPaste, qrCode } = this.generatePixPayload(
         txId,
@@ -297,7 +344,7 @@ export class BillingService {
       pixTxid: paymentMethod === "PIX" ? pixTxidVal : undefined,
       boletoBarcode: paymentMethod === "BOLETO" ? boletoBarcodeVal : undefined,
       boletoUrl: paymentMethod === "BOLETO" ? boletoUrlVal : undefined,
-      creditCardLast4: paymentMethod === "CREDIT_CARD" ? "4242" : undefined,
+      creditCardLast4: undefined,
       dueDate: dueDate.toISOString(),
       providerTxId,
       idempotencyKey,
