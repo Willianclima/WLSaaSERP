@@ -15,37 +15,38 @@ export interface StoreBrandingConfig {
   secondaryColor?: string; // e.g. #1C1917 or #451A03
   accentColor: string; // e.g. #FEF3C7
   fontPairing: "CLASSIC_SERIF" | "ROMAN_IMPERIAL" | "MODERN_MINIMAL" | "EDITORIAL_VOGUE";
-  heroPillBadge: string;
-  heroHeadline: string;
-  heroSubtitle: string;
-  announcementBarText: string;
-  ctaPrimaryText: string;
-  ctaSecondaryText: string;
-  footerSlogan: string;
+  heroPillBadge?: string;
+  heroHeadline?: string;
+  heroSubtitle?: string;
+  announcementBarText?: string;
+  ctaPrimaryText?: string;
+  ctaSecondaryText?: string;
+  footerSlogan?: string;
+  tagline?: string;
   // Poster Expo Collage fields
-  posterTitle: string;
-  posterBadgeDate: string;
-  posterLocation: string;
-  posterDescription: string;
-  posterPromoCode: string;
-  posterPromoDiscount: string;
+  posterTitle?: string;
+  posterBadgeDate?: string;
+  posterLocation?: string;
+  posterDescription?: string;
+  posterPromoCode?: string;
+  posterPromoDiscount?: string;
   // Social Media Handles & URLs
-  instagramHandle: string;
-  instagramUrl: string;
-  contactWhatsapp: string;
-  whatsappPrefilledMessage: string;
-  contactEmail: string;
-  facebookHandle: string;
-  tiktokHandle: string;
-  pinterestHandle: string;
-  pinterestBoardUrl: string;
-  websiteUrl: string;
+  instagramHandle?: string;
+  instagramUrl?: string;
+  contactWhatsapp?: string;
+  whatsappPrefilledMessage?: string;
+  contactEmail?: string;
+  facebookHandle?: string;
+  tiktokHandle?: string;
+  pinterestHandle?: string;
+  pinterestBoardUrl?: string;
+  websiteUrl?: string;
   // QR Code & Editorial Collage settings
-  qrCodeColor: string;
-  qrCodeTarget: "WHATSAPP" | "INSTAGRAM" | "PINTEREST" | "STOREFRONT" | "POSTER";
-  activeCollageFormat: "STORY" | "TOTEM_COUNTER" | "PINTEREST_PIN" | "FLYER_PROMO";
-  showConsultantBadge: boolean;
-  showPillarsOfTrust: boolean;
+  qrCodeColor?: string;
+  qrCodeTarget?: "WHATSAPP" | "INSTAGRAM" | "PINTEREST" | "STOREFRONT" | "POSTER";
+  activeCollageFormat?: "STORY" | "TOTEM_COUNTER" | "PINTEREST_PIN" | "FLYER_PROMO";
+  showConsultantBadge?: boolean;
+  showPillarsOfTrust?: boolean;
   // Background Wallpapers & Photography
   customBackgroundUrl?: string;
   backgroundPresetId?: string;
@@ -94,6 +95,7 @@ export interface TenantStore {
   state: string;
   contactEmail: string;
   contactWhatsapp: string;
+  whatsapp?: string;
   activeProductsCount: number;
   activeResellersCount: number;
   customDomain?: string;
@@ -131,9 +133,9 @@ export interface ProductVariant {
 
 export interface ProductMedia {
   id: string;
-  organization_id: string;
+  organization_id?: string;
   product_id: string;
-  storage_key: string; // Caminho/Key único no Object Storage (S3, GCS, Cloudflare R2, Supabase Storage)
+  storage_key?: string; // Caminho/Key único no Object Storage (S3, GCS, Cloudflare R2, Supabase Storage)
   url: string; // URL pública/CDN para entrega de alta performance
   type: "IMAGE" | "VIDEO";
   is_primary: boolean;
@@ -176,6 +178,9 @@ export interface ProductItem {
   stockReserved?: number; // Reservado em pedidos abertos / pagamentos pendentes
   stockConsigned: number; // Em maletas com revendedoras
   stockAvailable: number; // Disponível para venda direta (Físico - Reservado)
+  availableStock?: number; // Alias para stockAvailable
+  currentStock?: number; // Alias para stockPhysical
+  locationId?: string; // Localização de estoque
   stockLocation?: string; // Localização (ex: Gaveteiro A3, Prateleira 2)
   minStockAlert?: number; // Alerta de estoque mínimo
 
@@ -306,6 +311,7 @@ export interface CommissionSettlement {
 export interface DigitalWarranty {
   id: string;
   code: string; // ex: GRT-8F2A9D
+  orderId?: string;
   customerName: string;
   customerDocument: string; // CPF
   customerPhone: string;
@@ -335,7 +341,7 @@ export interface CustomJewelryOrderSpec {
   bathFinish: JewelryBath;
   chainLengthCm: 40 | 45 | 50 | 60;
   giftBox: boolean;
-  specialNotes: string;
+  specialNotes?: string;
 }
 
 // ============================================================================

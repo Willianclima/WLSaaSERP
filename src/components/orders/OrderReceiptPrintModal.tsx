@@ -5,6 +5,7 @@ import { Order } from "../../types/order";
 interface OrderReceiptPrintModalProps {
   order: Order;
   onClose: () => void;
+  isOpen?: boolean;
 }
 
 export const OrderReceiptPrintModal: React.FC<OrderReceiptPrintModalProps> = ({

@@ -27,13 +27,15 @@ interface QuickNewSaleModalProps {
   onCompleteSale: (saleData: {
     customerName: string;
     customerPhone: string;
-    deliveryMethod: string;
-    deliveryAddress: string;
+    deliveryMethod?: string;
+    deliveryAddress?: string;
     items: { productId: string; name: string; quantity: number; unitPrice: number }[];
     totalAmount: number;
+    subtotalAmount?: number;
+    shippingAmount?: number;
     paymentMethod: "PIX" | "CREDIT_CARD" | "DEBIT_CARD" | "CASH";
     notes?: string;
-  }) => Promise<void>;
+  }) => Promise<any> | void;
 }
 
 export const QuickNewSaleModal: React.FC<QuickNewSaleModalProps> = ({

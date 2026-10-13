@@ -68,9 +68,10 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
   const paidOrders = orders.filter(
     (o) =>
       o.status === "PAID" ||
-      o.status === "COMPLETED" ||
+      (o.status as any) === "COMPLETED" ||
+      o.status === "FULFILLED" ||
       o.paymentStatus === "PAID" ||
-      o.paymentStatus === "CONFIRMADO"
+      (o.paymentStatus as any) === "CONFIRMADO"
   );
 
   const totalSalesRevenue = paidOrders.reduce(
@@ -92,11 +93,11 @@ export const OwnerStoreHome: React.FC<OwnerStoreHomeProps> = ({
   // Pedidos aguardando pagamento
   const pendingPaymentOrders = orders.filter(
     (o) =>
-      o.status === "PENDING" ||
+      (o.status as any) === "PENDING" ||
       o.status === "AWAITING_PAYMENT" ||
       o.status === "INVENTORY_RESERVED" ||
       o.paymentStatus === "PENDING" ||
-      o.paymentStatus === "AGUARDANDO_PAGAMENTO"
+      (o.paymentStatus as any) === "AGUARDANDO_PAGAMENTO"
   );
 
   // Produtos com estoque baixo (limiar padrão <= 3 unidades)

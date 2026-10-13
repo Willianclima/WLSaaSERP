@@ -66,6 +66,7 @@ export interface Customer {
   email?: string; // Normalized primary email
   phone?: string; // Normalized primary phone
   address?: Address; // Primary / Default address convenience object
+  primaryAddress?: Address; // Alias for primary default address
 
   // --- Pessoa Física (PF) ---
   fullName: string;

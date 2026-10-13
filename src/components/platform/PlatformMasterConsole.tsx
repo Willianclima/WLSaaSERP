@@ -62,7 +62,7 @@ export type PlatformTab =
   | "settings"
   | "usage";
 
-export type CompanySubFilter = "TODAS" | "ATIVAS" | "TRIAL" | "INADIMPLENTES" | "SUSPENSAS";
+export type CompanySubFilter = "TODAS" | "ATIVAS" | "TRIAL" | "INADIMPLENTES" | "SUSPENSAS" | "SUSPENDED";
 
 interface PlatformMasterConsoleProps {
   currentUser: RBACUser;
@@ -914,7 +914,7 @@ export const PlatformMasterConsole: React.FC<PlatformMasterConsoleProps> = ({
           planTier: "PREMIUM" as const,
           tier: "PREMIUM",
         };
-        onImpersonateTenant(found);
+        onImpersonateTenant(found as any);
       }
     } catch (err: any) {
       setSupportError(err.message || "Erro ao iniciar sessão de suporte.");

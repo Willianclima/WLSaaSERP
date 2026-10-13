@@ -29,11 +29,11 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0].trim();
+  // If trust proxy is configured in Express (Cloud Run / reverse proxy), req.ip contains the verified client IP
+  if (req.ip) {
+    return req.ip;
   }
-  return req.ip || req.socket.remoteAddress || "127.0.0.1";
+  return req.socket.remoteAddress || "127.0.0.1";
 }
 
 /**

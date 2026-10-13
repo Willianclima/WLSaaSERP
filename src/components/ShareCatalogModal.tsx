@@ -22,7 +22,8 @@ interface ShareCatalogModalProps {
   onClose: () => void;
   tenant: TenantStore;
   branding?: StoreBrandingConfig;
-  onOpenStorefront: () => void;
+  onOpenStorefront?: () => void;
+  totalProducts?: number;
 }
 
 export const ShareCatalogModal: React.FC<ShareCatalogModalProps> = ({

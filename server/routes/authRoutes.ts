@@ -87,6 +87,13 @@ router.post("/register", async (req, res) => {
       session,
     });
   } catch (error: any) {
+    if (error.statusCode === 409 || error.code === "EMAIL_ALREADY_REGISTERED") {
+      return res.status(409).json({
+        success: false,
+        code: "EMAIL_ALREADY_REGISTERED",
+        error: error.message || "Este e-mail já possui cadastro no sistema. Faça login para gerenciar sua organização.",
+      });
+    }
     return res.status(500).json({ success: false, error: error.message });
   }
 });

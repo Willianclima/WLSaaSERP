@@ -19,9 +19,9 @@ export interface AuthenticatedRequest extends Request {
   jwtPayload?: any;
   withTenantDb?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
   executeWithRls?: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
-  scopedQuery?: <T = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
+  scopedQuery?: <T extends pg.QueryResultRow = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
   db?: {
-    query: <T = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
+    query: <T extends pg.QueryResultRow = any>(sql: string, params?: any[]) => Promise<pg.QueryResult<T>>;
     withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => Promise<T>;
   };
 }
@@ -261,7 +261,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     };
     req.executeWithRls = req.withTenantDb;
 
-    req.scopedQuery = async <T = any>(
+    req.scopedQuery = async <T extends pg.QueryResultRow = any>(
       text: string,
       params?: any[]
     ): Promise<pg.QueryResult<T>> => {
@@ -280,7 +280,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     };
 
     req.db = {
-      query: <T = any>(sql: string, params?: any[]) => req.scopedQuery!<T>(sql, params),
+      query: <T extends pg.QueryResultRow = any>(sql: string, params?: any[]) => req.scopedQuery!<T>(sql, params),
       withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => req.withTenantDb!<T>(callback),
     };
 

@@ -66,7 +66,7 @@ export const OrderDetailDrawer: React.FC<OrderDetailDrawerProps> = ({
 
   const isPaid =
     order.status === "PAID" ||
-    order.status === "COMPLETED" ||
+    (order.status as any) === "COMPLETED" ||
     order.status === "FULFILLED" ||
     order.status === "FULFILLMENT_PENDING" ||
     order.paymentStatus === "PAID" ||

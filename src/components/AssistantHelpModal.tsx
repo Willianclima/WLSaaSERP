@@ -131,6 +131,7 @@ interface AssistantHelpModalProps {
   onOpenNewSale?: () => void;
   onOpenNewProduct?: () => void;
   onOpenShareModal?: () => void;
+  onOpenShareCatalog?: () => void;
 }
 
 export const AssistantHelpModal: React.FC<AssistantHelpModalProps> = ({

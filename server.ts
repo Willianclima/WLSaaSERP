@@ -32,6 +32,8 @@ if (isProduction()) {
 
 const app = express();
 app.disable("x-powered-by");
+// Trust proxy 1 hop (Google Cloud Run / Load Balancer) for safe req.ip parsing
+app.set("trust proxy", 1);
 
 // Dynamic port configuration: uses process.env.APP_PORT || process.env.PORT || 3000
 const PORT = Number(process.env.APP_PORT || process.env.PORT || 3000);
@@ -43,17 +45,28 @@ app.use((req, res, next) => {
   res.setHeader("X-XSS-Protection", "1; mode=block");
 
   const origin = req.headers.origin;
-  const configuredOrigins = process.env.CORS_ALLOWED_ORIGINS
-    ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-    : [];
+  const isProd = isProduction();
+  const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   if (origin) {
-    const isAllowed =
-      configuredOrigins.includes(origin) ||
-      origin.includes("localhost") ||
-      origin.includes("127.0.0.1") ||
-      origin.endsWith(".run.app") ||
-      origin.endsWith(".google.com");
+    let isAllowed = configuredOrigins.includes(origin);
+
+    if (!isProd) {
+      if (
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:") ||
+        origin.endsWith(".run.app")
+      ) {
+        isAllowed = true;
+      }
+    } else {
+      if (process.env.APP_URL && origin === process.env.APP_URL.trim()) {
+        isAllowed = true;
+      }
+    }
 
     if (isAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);

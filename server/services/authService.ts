@@ -83,25 +83,30 @@ export class AuthService {
   }): Promise<AuthSessionResponse> {
     const emailNormalized = data.email.trim().toLowerCase();
 
-    // 1. Check if user exists
-    let existingUser = await userRepo.findByEmail(emailNormalized);
-    const userId = existingUser ? existingUser.id : `usr-${Date.now()}`;
+    // 1. Strict identity check: prevent account takeover / identity reuse
+    const existingUser = await userRepo.findByEmail(emailNormalized);
+    if (existingUser) {
+      const err: any = new Error(
+        "Este endereço de e-mail já está associado a uma conta existente no sistema. Faça login para acessar ou solicitar acesso."
+      );
+      err.statusCode = 409;
+      err.code = "EMAIL_ALREADY_REGISTERED";
+      throw err;
+    }
+
+    const userId = `usr-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const passwordHash = await this.hashPassword(data.password);
-    const user: UserEntity = existingUser || {
+    const user: UserEntity = {
       id: userId,
       name: data.userName.trim(),
       email: emailNormalized,
       passwordHash,
-      phone: data.whatsapp || "",
+      phone: data.whatsapp?.trim() || "",
       isPlatformSuperAdmin: false,
       status: "ACTIVE",
       createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
       lastLoginAt: new Date().toISOString().replace("T", " ").substring(0, 16),
     };
-
-    if (!existingUser) {
-      await userRepo.create(user);
-    }
 
     // 2. Generate Organization Slug
     const baseSlug = data.organizationName
@@ -112,76 +117,144 @@ export class AuthService {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "") || "empresa";
 
-    const orgId = `org-${Date.now()}`;
+    const orgId = `org-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
     const organization: OrganizationEntity = {
       id: orgId,
       name: data.organizationName.trim(),
       slug: `${baseSlug}-${Math.floor(100 + Math.random() * 900)}`,
-      document: data.document || "00.000.000/0001-00",
+      document: data.document?.trim() || "",
       segment: data.segment || "SEMIJOIAS",
-      city: data.city || "Limeira",
-      state: data.state || "SP",
+      city: data.city?.trim() || "",
+      state: data.state?.trim() || "",
       contactEmail: emailNormalized,
-      contactWhatsapp: data.whatsapp || "+55 (19) 99999-9999",
-      customDomain: `${baseSlug}.aura.com`,
-      customDomainStatus: "ACTIVE",
+      contactWhatsapp: data.whatsapp?.trim() || "",
+      customDomain: null as any,
+      customDomainStatus: "NOT_CONFIGURED",
       status: "ACTIVE",
       createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
       updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
     };
-    await orgRepo.create(organization);
 
-    // 3, 4 & 5. Create Owner Membership, Trial Subscription, and Activate Modules within tenant RLS context
-    return await TenantContext.run({ tenantId: organization.id, isSuperAdmin: true }, async () => {
-      const membership: OrganizationMemberEntity = {
-        id: `mem-${Date.now()}`,
-        organizationId: organization.id,
-        userId: user.id,
-        role: "OWNER",
-        customPermissions: ["*"],
-        status: "ACTIVE",
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      };
-      await memberRepo.create(membership);
+    const now = new Date();
+    const trialEnd = new Date(now.getTime() + 30 * 86400000);
+    const membership: OrganizationMemberEntity = {
+      id: `mem-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      organizationId: organization.id,
+      userId: user.id,
+      role: "OWNER",
+      customPermissions: ["*"],
+      status: "ACTIVE",
+      createdAt: now.toISOString().replace("T", " ").substring(0, 16),
+    };
 
-      const now = new Date();
-      const trialEnd = new Date(now.getTime() + 30 * 86400000);
-      const subscription: SubscriptionEntity = {
-        id: `sub-${Date.now()}`,
-        organizationId: organization.id,
-        planId: "TRIAL_30D",
-        status: "TRIALING",
-        trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
-        trialEndsAt: trialEnd.toISOString().replace("T", " ").substring(0, 16),
-        currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
-        currentPeriodEnd: trialEnd.toISOString().replace("T", " ").substring(0, 16),
-        paymentMethod: "MANUAL_TRIAL",
-        autoRenew: true,
-        createdAt: now.toISOString().replace("T", " ").substring(0, 16),
-        updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
-      };
-      await subRepo.create(subscription);
+    const subscription: SubscriptionEntity = {
+      id: `sub-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      organizationId: organization.id,
+      planId: "TRIAL_30D",
+      status: "TRIALING",
+      trialStartedAt: now.toISOString().replace("T", " ").substring(0, 16),
+      trialEndsAt: trialEnd.toISOString().replace("T", " ").substring(0, 16),
+      currentPeriodStart: now.toISOString().replace("T", " ").substring(0, 16),
+      currentPeriodEnd: trialEnd.toISOString().replace("T", " ").substring(0, 16),
+      paymentMethod: "MANUAL_TRIAL",
+      autoRenew: true,
+      createdAt: now.toISOString().replace("T", " ").substring(0, 16),
+      updatedAt: now.toISOString().replace("T", " ").substring(0, 16),
+    };
 
-      const plan = (await planRepo.findById("TRIAL_30D"))!;
-      await moduleRepo.bulkInitialize(organization.id, plan.allowedModules);
+    // 3. Atomic Transactional Persistence: User + Org + Member + Subscription + Modules + Location
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO users (id, name, email, password_hash, avatar_url, phone, is_platform_super_admin, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [user.id, user.name, user.email, user.passwordHash, null, user.phone, false, user.status]
+      );
 
-      try {
-        await inventoryRepo.createLocation({
-          id: `loc-hq-${organization.id}`,
-          organizationId: organization.id,
-          name: "Matriz / Showroom Central",
-          type: "HEADQUARTERS",
-          code: "MATRIZ",
-          description: "Estoque principal da matriz",
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        });
-      } catch (lErr) {
-        console.warn("Location init during registration:", lErr);
+      await client.query(
+        `INSERT INTO organizations (id, name, slug, document, segment, logo_url, city, state, contact_email, contact_whatsapp, custom_domain, custom_domain_status, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`,
+        [
+          organization.id,
+          organization.name,
+          organization.slug,
+          organization.document,
+          organization.segment,
+          null,
+          organization.city,
+          organization.state,
+          organization.contactEmail,
+          organization.contactWhatsapp,
+          null,
+          organization.customDomainStatus,
+          organization.status,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO organization_members (id, organization_id, user_id, role, custom_permissions, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          membership.id,
+          membership.organizationId,
+          membership.userId,
+          membership.role,
+          JSON.stringify(membership.customPermissions),
+          membership.status,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO subscriptions (id, organization_id, plan_id, status, trial_started_at, trial_ends_at, current_period_start, current_period_end, payment_method, auto_renew, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+        [
+          subscription.id,
+          subscription.organizationId,
+          subscription.planId,
+          subscription.status,
+          subscription.trialStartedAt,
+          subscription.trialEndsAt,
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+          subscription.paymentMethod,
+          subscription.autoRenew,
+        ]
+      );
+
+      const plan = await planRepo.findById("TRIAL_30D");
+      const allowedModules = plan?.allowedModules || [
+        "CATALOG",
+        "INVENTORY",
+        "ORDERS",
+        "CUSTOMERS",
+        "FINANCIAL",
+        "INTEGRATIONS",
+      ];
+      for (const modKey of allowedModules) {
+        await client.query(
+          `INSERT INTO organization_modules (id, organization_id, module_key, is_enabled, created_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (organization_id, module_key) DO UPDATE SET is_enabled = EXCLUDED.is_enabled`,
+          [`mod-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`, organization.id, modKey, true]
+        );
       }
 
-      return this.buildAuthSession(user, organization, membership, subscription);
+      await client.query(
+        `INSERT INTO inventory_locations (id, organization_id, name, type, code, description, is_active, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          `loc-hq-${organization.id}`,
+          organization.id,
+          "Matriz / Showroom Central",
+          "HEADQUARTERS",
+          "MATRIZ",
+          "Estoque principal da matriz",
+          true,
+        ]
+      );
     });
+
+    return this.buildAuthSession(user, organization, membership, subscription);
   }
 
   /**

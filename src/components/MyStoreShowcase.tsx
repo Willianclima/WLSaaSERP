@@ -62,9 +62,10 @@ export const MyStoreShowcase: React.FC<MyStoreShowcaseProps> = ({
   const paidOrders = orders.filter(
     (o) =>
       o.status === "PAID" ||
-      o.status === "COMPLETED" ||
+      (o.status as any) === "COMPLETED" ||
+      o.status === "FULFILLED" ||
       o.paymentStatus === "PAID" ||
-      o.paymentStatus === "CONFIRMADO"
+      (o.paymentStatus as any) === "CONFIRMADO"
   );
 
   const totalSalesRevenue = paidOrders.reduce(

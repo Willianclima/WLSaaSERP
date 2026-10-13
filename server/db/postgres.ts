@@ -89,7 +89,7 @@ export function interceptClientWithRls(client: pg.PoolClient): pg.PoolClient {
   if (!client || typeof client.query !== "function") {
     return client;
   }
-  const originalQuery = client.query.bind(client);
+  const originalQuery: any = client.query.bind(client);
   let contextApplied = false;
 
   (client as any).query = async function (this: any, ...args: any[]) {
@@ -114,18 +114,18 @@ export function interceptClientWithRls(client: pg.PoolClient): pg.PoolClient {
       contextApplied = true;
     }
 
-    return (originalQuery as any).apply(this, args);
+    return originalQuery.apply(this, args);
   };
 
   const originalRelease = client.release.bind(client);
   client.release = function (destroy?: boolean | Error) {
     // Reset session configuration on client release to prevent pool cross-contamination
-    originalQuery
-      .call(
+    Promise.resolve(
+      originalQuery.call(
         this,
         "SELECT set_config('app.current_tenant_id', '', false), set_config('app.is_super_admin', 'false', false)"
       )
-      .catch(() => {});
+    ).catch(() => {});
     contextApplied = false;
     return originalRelease(destroy as any);
   };
@@ -231,7 +231,7 @@ export async function executeWithTenantRlsContext<T>(
   }
 }
 
-export async function query<T = any>(text: string, params?: any[]): Promise<pg.QueryResult<T>> {
+export async function query<T extends pg.QueryResultRow = any>(text: string, params?: any[]): Promise<pg.QueryResult<T>> {
   const context = TenantContext.get();
   // If a tenant context is active, acquire a dedicated client from pool to set session config safely
   if (context?.tenantId || context?.isSuperAdmin) {

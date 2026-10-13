@@ -12,14 +12,7 @@ interface State {
   errorInfo: React.ErrorInfo | null;
 }
 
-export class ErrorBoundary extends (React.Component as unknown as {
-  new (props: Props): {
-    props: Props;
-    state: State;
-    setState(state: Partial<State> | ((prevState: State) => Partial<State>)): void;
-    render(): React.ReactNode;
-  };
-}) {
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,

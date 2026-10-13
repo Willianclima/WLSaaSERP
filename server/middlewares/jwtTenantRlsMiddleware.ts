@@ -235,7 +235,7 @@ export async function jwtTenantRlsMiddleware(
     }
 
     const organization = await orgRepo.findById(validatedTenantId);
-    if (!organization || (isProduction && organization.status !== "ACTIVE")) {
+    if (!organization || (isProd && organization.status !== "ACTIVE")) {
       return res.status(403).json({
         success: false,
         code: "ORGANIZATION_INACTIVE",
@@ -287,7 +287,7 @@ export async function jwtTenantRlsMiddleware(
     };
     req.executeWithRls = req.withTenantDb;
 
-    req.scopedQuery = async <T = any>(
+    req.scopedQuery = async <T extends pg.QueryResultRow = any>(
       text: string,
       params?: any[]
     ): Promise<pg.QueryResult<T>> => {
@@ -313,7 +313,7 @@ export async function jwtTenantRlsMiddleware(
     };
 
     req.db = {
-      query: <T = any>(sql: string, params?: any[]) => req.scopedQuery!<T>(sql, params),
+      query: <T extends pg.QueryResultRow = any>(sql: string, params?: any[]) => req.scopedQuery!<T>(sql, params),
       withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => req.withTenantDb!<T>(callback),
     };
 

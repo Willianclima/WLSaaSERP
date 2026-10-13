@@ -503,7 +503,7 @@ export const CatalogInventoryLedger: React.FC<CatalogInventoryLedgerProps> = ({
 
         for (const mov of [...productMovements].reverse()) {
           const qty = mov.qtyChange;
-          if (mov.type === "ENTRADA_FORNECEDOR" || mov.type === "AJUSTE_BALANCO") {
+          if (mov.type === "ENTRADA_FORNECEDOR" || mov.type === "AJUSTE_INVENTARIO" || (mov.type as any) === "AJUSTE_BALANCO") {
             calculatedPhysical += qty;
           } else if (mov.type === "VENDA_DIRETA") {
             calculatedPhysical += qty;

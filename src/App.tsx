@@ -1278,7 +1278,7 @@ export default function App() {
       userName: currentUser.name,
       userEmail: currentUser.email,
       actor: currentUser.name,
-      userRole: currentUser.role,
+      userRole: currentUser.role as any,
       status: "CONFIRMADO_HUMANO",
       ipAddress: "189.44.120.18",
       userAgent: "Aura-HumanInTheLoop/2.5",
@@ -1312,7 +1312,7 @@ export default function App() {
       userName: currentUser.name,
       userEmail: currentUser.email,
       actor: currentUser.name,
-      userRole: currentUser.role,
+      userRole: currentUser.role as any,
       status: "NEGADO_RBAC",
       ipAddress: "189.44.120.18",
       userAgent: "Aura-HumanInTheLoop/2.5",
@@ -1961,7 +1961,7 @@ export default function App() {
                 }}
                 onOpenShareModal={() => setShowShareModal(true)}
                 onOpenPlatformConsole={() => setProductMode("PLATFORM_OWNER")}
-                pendingOrdersCount={orders.filter((o) => o.status === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
+                pendingOrdersCount={orders.filter((o) => (o.status as any) === "PENDING" || o.status === "INVENTORY_RESERVED" || o.paymentStatus === "PENDING").length}
                 onLogout={handleLogout}
                 onOpenAuthModal={() => openAuthModal("STORE_LOGIN")}
               />
@@ -2286,7 +2286,7 @@ export default function App() {
       <AssistantHelpModal
         isOpen={showAssistantHelpModal}
         onClose={() => setShowAssistantHelpModal(false)}
-        onNavigateToTab={(tab) => {
+        onNavigateTab={(tab) => {
           setActiveTab(tab);
           setShowAssistantHelpModal(false);
         }}

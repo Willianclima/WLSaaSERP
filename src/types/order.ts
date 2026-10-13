@@ -34,6 +34,7 @@ export type OrderEvent =
   | "START_FULFILLMENT"
   | "COMPLETE_FULFILLMENT"
   | "CANCEL_ORDER"
+  | "CANCEL"
   | "EXPIRE_ORDER"
   | "REFUND_ORDER"
   | "REOPEN_DRAFT";
@@ -103,6 +104,8 @@ export interface OrderItem {
   costPriceSnapshot: number;
   discountAmount: number;
   totalAmount: number;
+  name?: string; // Convenience getter / alias for productSnapshot.name
+  price?: number; // Convenience getter / alias for unitPrice
   customizationSpec?: CustomJewelryOrderSpec;
   createdAt: string;
 }
@@ -193,8 +196,9 @@ export interface Order {
   ipAddress?: string;
   userAgent?: string;
   notes?: string;
+  paymentMethod?: PaymentMethod | string;
   paymentStatus?: PaymentStatus;
-  fulfillmentStatus?: "UNFULFILLED" | "PARTIALLY_FULFILLED" | "FULFILLED" | "DELIVERED";
+  fulfillmentStatus?: "UNFULFILLED" | "PARTIALLY_FULFILLED" | "FULFILLED" | "DELIVERED" | "SHIPPED";
   items?: OrderItem[];
   payments?: OrderPayment[];
   transitions?: OrderStateTransition[];

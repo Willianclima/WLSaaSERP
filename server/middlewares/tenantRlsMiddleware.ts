@@ -166,7 +166,7 @@ export async function tenantRlsMiddleware(
     (req as any).executeWithRls = req.withTenantDb;
 
     // Consulta com injeção automática e segura de SET LOCAL
-    (req as any).scopedQuery = async <T = any>(
+    (req as any).scopedQuery = async <T extends pg.QueryResultRow = any>(
       text: string,
       params?: any[]
     ): Promise<pg.QueryResult<T>> => {
@@ -185,7 +185,7 @@ export async function tenantRlsMiddleware(
     };
 
     req.db = {
-      query: <T = any>(sql: string, params?: any[]) => (req as any).scopedQuery(sql, params),
+      query: <T extends pg.QueryResultRow = any>(sql: string, params?: any[]) => (req as any).scopedQuery(sql, params),
       withTransaction: <T>(callback: (client: pg.PoolClient) => Promise<T>) => req.withTenantDb!(callback),
     };
 

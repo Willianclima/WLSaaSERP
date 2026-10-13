@@ -56,7 +56,7 @@ export const CommercialNetworkModule: React.FC<CommercialNetworkModuleProps> = (
   // High-level summary metrics
   const totalResellers = resellers.length;
   const activeLeaders = resellers.filter((r) => r.isLeader).length;
-  const activeMaletas = consignments.filter((c) => c.status === "EM_ABERTO" || c.status === "PARCIAL").length;
+  const activeMaletas = consignments.filter((c) => c.status === "EM_ABERTO" || c.status === "PARCIALMENTE_ACERTADA" || (c.status as any) === "PARCIAL").length;
   const totalInConsignment = consignments.reduce((acc, c) => acc + (c.totalValue || 0), 0);
 
   return (
