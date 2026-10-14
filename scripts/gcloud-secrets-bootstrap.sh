@@ -13,7 +13,7 @@ set -euo pipefail
 
 PROJECT_ID="${1:-${PROJECT_ID:-snappy-champion-zsx2c}}"
 REGION="${2:-${REGION:-us-west2}}"
-SERVICE_NAME="${3:-${SERVICE_NAME:-aura-erp}}"
+SERVICE_NAME="${3:-${SERVICE_NAME:-aura-semijoias-saas-erp}}"
 
 echo "================================================================================"
 echo " 🔒 INICIALIZANDO GOOGLE CLOUD SECRET MANAGER"

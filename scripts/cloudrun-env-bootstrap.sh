@@ -15,7 +15,7 @@ set -euo pipefail
 #   ./scripts/cloudrun-env-bootstrap.sh aura-erp us-west2 snappy-champion-zsx2c
 # ==============================================================================
 
-SERVICE_NAME="${1:-${SERVICE_NAME:-aura-erp}}"
+SERVICE_NAME="${1:-${SERVICE_NAME:-aura-semijoias-saas-erp}}"
 REGION="${2:-${REGION:-us-west2}}"
 PROJECT_ID="${3:-${PROJECT_ID:-snappy-champion-zsx2c}}"
 
