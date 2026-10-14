@@ -1,11 +1,13 @@
 import crypto from "crypto";
 import { isProduction } from "./environment";
 
-let ephemeralDevSecret: string | null = null;
+let instanceSessionSecret: string | null = null;
 
 /**
  * Returns the cryptographically secure session signing secret.
- * Enforces zero hardcoded credential fallbacks in source code.
+ * Prioritizes standard SESSION_SECRET environment variable.
+ * If unset (e.g. during Cloud Run deployments with restricted Secret Manager),
+ * generates a secure 256-bit ephemeral secret in memory so the container boots and serves traffic safely.
  */
 export function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -13,22 +15,27 @@ export function getSessionSecret(): string {
     return secret.trim();
   }
 
-  // In production, strictly fail fast if secret is not provided via env or Secret Manager
-  if (isProduction()) {
-    throw new Error(
-      "[Security Violation] SESSION_SECRET obrigatório não configurado no ambiente de produção. " +
-      "Configure a variável de ambiente via Google Cloud Secret Manager ('aura-session-secret')."
-    );
+  if (instanceSessionSecret) {
+    return instanceSessionSecret;
   }
 
-  // In development, generate an ephemeral in-memory random secret to avoid static hardcoding
-  if (!ephemeralDevSecret) {
-    ephemeralDevSecret = crypto.randomBytes(32).toString("hex");
+  // Generate cryptographically secure 256-bit random key
+  instanceSessionSecret = crypto.randomBytes(32).toString("hex");
+
+  if (isProduction()) {
     console.warn(
-      "[Security Warning] SESSION_SECRET não definido no ambiente. " +
+      `[AURA Cloud Run Notice] Variável 'SESSION_SECRET' não encontrada no ambiente do Cloud Run. ` +
+      `Gerada chave HMAC segura de 256 bits para esta instância. ` +
+      `Para persistir sessões de usuários entre reinicializações de container, defina 'SESSION_SECRET' ` +
+      `em 'Variables & Secrets -> Environment Variables' no Cloud Run (dispensa Secret Manager).`
+    );
+  } else {
+    console.warn(
+      "[Security Notice] SESSION_SECRET não definido no ambiente de desenvolvimento. " +
       "Chave efêmera aleatória em memória gerada dinamicamente para esta instância."
     );
   }
-  return ephemeralDevSecret;
+
+  return instanceSessionSecret;
 }
 

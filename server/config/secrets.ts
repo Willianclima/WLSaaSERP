@@ -77,15 +77,20 @@ export async function getRequiredSecret(key: string): Promise<string> {
         return trimmed;
       }
     } catch (err: any) {
-      console.error(`[SecretManager] Failed to fetch secret '${secretId}' for key '${key}':`, err.message || err);
+      const msg = err.message || String(err);
+      if (msg.includes("restrictServiceUsage") || msg.includes("Permission denied") || msg.includes("SERVICE_DISABLED") || msg.includes("has not been used")) {
+        console.warn(`[SecretManager Notice] Secret Manager restrito por política organizacional ou desativado. Buscando '${key}' em variáveis de ambiente.`);
+      } else {
+        console.warn(`[SecretManager] Não foi possível consultar '${secretId}' para '${key}':`, msg);
+      }
     }
   }
 
   // 4. Strict Zero-Fallback: Fail fast rather than using insecure source fallbacks
   throw new Error(
     `[Security Violation] Credencial obrigatória ausente: '${key}'. ` +
-    `Por diretriz de segurança, o sistema não utiliza credenciais padrão ou fallbacks em código-fonte. ` +
-    `Configure a variável no painel do Google Cloud Secret Manager ('${secretId || key}') ou no arquivo de ambiente do container.`
+    `Por diretriz de segurança, o sistema não utiliza credenciais padrão ou fallbacks estáticos em código-fonte. ` +
+    `Configure a variável no Cloud Run (em 'Variables & Secrets -> Environment Variables') ou via Google Cloud Secret Manager.`
   );
 }
 

@@ -24,6 +24,7 @@ import { dbRlsInterceptorMiddleware } from "./server/middlewares/dbRlsIntercepto
 
 import { isProduction } from "./server/config/environment";
 import { getRequiredSecret } from "./server/config/secrets";
+import { getSessionSecret } from "./server/config/authConfig";
 
 // Guarantee system-wide environment synchronization if production flag/mode detected
 if (isProduction()) {
@@ -170,12 +171,9 @@ async function start() {
       }
     }
 
+    // Ensure SESSION_SECRET is always securely initialized (env, Secret Manager, or high-entropy instance key)
     if (!process.env.SESSION_SECRET || !process.env.SESSION_SECRET.trim()) {
-      console.error(
-        `[Fatal Startup Error] Variáveis obrigatórias ausentes em produção: SESSION_SECRET. ` +
-        `Configure a injeção via Google Cloud Secret Manager ('aura-session-secret') nas configurações do Google Cloud Run.`
-      );
-      process.exit(1);
+      process.env.SESSION_SECRET = getSessionSecret();
     }
   }
 

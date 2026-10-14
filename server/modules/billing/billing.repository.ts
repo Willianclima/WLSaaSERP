@@ -65,36 +65,46 @@ export class BillingRepository {
 
   async create(invoice: BillingInvoiceEntity): Promise<BillingInvoiceEntity> {
     return TenantContext.run({ tenantId: invoice.organizationId, isSuperAdmin: true }, async () => {
-      const res = await query(
-        `INSERT INTO billing_invoices (
-          id, organization_id, subscription_id, plan_id, amount, currency,
-          payment_method, status, pix_qr_code, pix_copy_paste, pix_txid,
-          boleto_barcode, boleto_url, credit_card_last4, due_date,
-          provider_tx_id, idempotency_key, metadata, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
-        RETURNING *`,
-        [
-          invoice.id,
-          invoice.organizationId,
-          invoice.subscriptionId || null,
-          invoice.planId,
-          invoice.amount,
-          invoice.currency || "BRL",
-          invoice.paymentMethod,
-          invoice.status,
-          invoice.pixQrCode || null,
-          invoice.pixCopyPaste || null,
-          invoice.pixTxid || null,
-          invoice.boletoBarcode || null,
-          invoice.boletoUrl || null,
-          invoice.creditCardLast4 || null,
-          invoice.dueDate,
-          invoice.providerTxId || null,
-          invoice.idempotencyKey || null,
-          JSON.stringify(invoice.metadata || {}),
-        ]
-      );
-      return mapRowToInvoice(res.rows[0]);
+      try {
+        const res = await query(
+          `INSERT INTO billing_invoices (
+            id, organization_id, subscription_id, plan_id, amount, currency,
+            payment_method, status, pix_qr_code, pix_copy_paste, pix_txid,
+            boleto_barcode, boleto_url, credit_card_last4, due_date,
+            provider_tx_id, idempotency_key, metadata, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW())
+          RETURNING *`,
+          [
+            invoice.id,
+            invoice.organizationId,
+            invoice.subscriptionId || null,
+            invoice.planId,
+            invoice.amount,
+            invoice.currency || "BRL",
+            invoice.paymentMethod,
+            invoice.status,
+            invoice.pixQrCode || null,
+            invoice.pixCopyPaste || null,
+            invoice.pixTxid || null,
+            invoice.boletoBarcode || null,
+            invoice.boletoUrl || null,
+            invoice.creditCardLast4 || null,
+            invoice.dueDate,
+            invoice.providerTxId || null,
+            invoice.idempotencyKey || null,
+            JSON.stringify(invoice.metadata || {}),
+          ]
+        );
+        return mapRowToInvoice(res.rows[0]);
+      } catch (err: any) {
+        if (err.code === "23505" && invoice.idempotencyKey) {
+          const existing = await this.findByIdempotencyKey(invoice.organizationId, invoice.idempotencyKey);
+          if (existing) {
+            return existing;
+          }
+        }
+        throw err;
+      }
     });
   }
 
