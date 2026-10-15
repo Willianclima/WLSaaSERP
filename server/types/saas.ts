@@ -111,6 +111,7 @@ export interface OrganizationModuleEntity {
 export interface AuthSessionResponse {
   token: string;
   jwt?: string;
+  role?: OrganizationRole;
   user: {
     id: string;
     name: string;

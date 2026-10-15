@@ -1830,7 +1830,7 @@ export default function App() {
     }`}>
       {/* Toast Notification */}
       {toastMessage && (
-        <div className={`fixed bottom-6 right-6 z-50 ${toastMessage.startsWith("❌") ? "bg-rose-950 border-rose-800 text-rose-100" : "bg-stone-900 border-stone-800 text-white"} border px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-medium animate-bounce`}>
+        <div className={`fixed bottom-6 right-6 z-[99999] ${toastMessage.startsWith("❌") ? "bg-rose-950 border-rose-800 text-rose-100" : "bg-stone-900 border-stone-800 text-white"} border px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-medium animate-bounce`}>
           <span className={`w-2 h-2 rounded-full ${toastMessage.startsWith("❌") ? "bg-rose-400" : "bg-emerald-400"}`} />
           <span>{toastMessage}</span>
         </div>
@@ -2358,25 +2358,7 @@ export default function App() {
         currentTenant={selectedTenant}
         tenants={tenants}
         initialTab={authModalTab}
-        onLoginSuccess={(user, tenant, targetMode, isNewRegistration) => {
-          setCurrentUser(user);
-          setSelectedTenant(tenant);
-          setIsAuthenticated(true);
-          setProductMode(targetMode);
-          if (targetMode === "PLATFORM_OWNER") {
-            setActiveTab("ownerHome");
-          } else {
-            setActiveTab("ownerHome");
-            if (isNewRegistration) {
-              setShowOnboardingModal(true);
-            }
-          }
-          try {
-            safeStorage.setItem("aura_user_profile", JSON.stringify(user));
-          } catch (e) {}
-          refreshBackendData();
-          checkOnboardingStatus();
-        }}
+        onLoginSuccess={handleAuthSuccess}
         onOpenSystemInitModal={() => setShowSystemInitModal(true)}
       />
 

@@ -17,6 +17,7 @@ import {
   LogOut,
   ShoppingBag,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { RBACUser, TenantStore } from "../../types";
@@ -52,11 +53,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [activeTab, setActiveTab] = useState<"STORE_LOGIN" | "ADMIN_LOGIN" | "REGISTER_TRIAL" | "EXPLANATION">(
     initialTab
   );
+  const [formError, setFormError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (initialTab && isOpen) {
       setActiveTab(initialTab);
     }
+    setFormError(null);
   }, [initialTab, isOpen]);
 
   // Store Login State
@@ -84,6 +87,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleStoreLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsStoreLoading(true);
+    setFormError(null);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -154,6 +158,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess(mappedUser, matchedTenant, "TENANT_STORE");
       onClose();
     } catch (err: any) {
+      setFormError(err.message || "Erro ao conectar com a loja.");
       toast.error(err.message || "Erro ao conectar com a loja.");
     } finally {
       setIsStoreLoading(false);
@@ -164,6 +169,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleAdminLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsAdminLoading(true);
+    setFormError(null);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -202,6 +208,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess(superUser, currentTenant, "PLATFORM_OWNER");
       onClose();
     } catch (err: any) {
+      setFormError(err.message || "Falha ao autenticar administrador.");
       toast.error(err.message || "Falha ao autenticar administrador.");
     } finally {
       setIsAdminLoading(false);
@@ -301,6 +308,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess(newUser, newTenant, "TENANT_STORE", true);
       onClose();
     } catch (err: any) {
+      setFormError(err.message || "Erro ao cadastrar loja.");
       toast.error(err.message || "Erro ao cadastrar loja.");
     } finally {
       setIsRegLoading(false);
@@ -452,6 +460,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
+                {formError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed font-medium">{formError}</span>
+                  </div>
+                )}
+
                 <div className="pt-2 flex items-center justify-between">
                   <div className="text-[11px] text-stone-500 flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
@@ -570,6 +585,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Nenhuma lojista ou cliente externo tem permissão para acessar este painel.
                   </p>
                 </div>
+
+                {formError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed font-medium">{formError}</span>
+                  </div>
+                )}
 
                 <div className="pt-2 flex items-center justify-between">
                   <div className="text-[11px] text-stone-500 flex items-center gap-1.5">
@@ -743,6 +765,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Essa senha será exigida sempre que a lojista fizer login em outros dispositivos ou após logout.
                   </p>
                 </div>
+
+                {formError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed font-medium">{formError}</span>
+                  </div>
+                )}
 
                 <div className="pt-2 flex items-center justify-between">
                   <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
