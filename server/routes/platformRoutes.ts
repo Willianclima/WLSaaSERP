@@ -2135,4 +2135,105 @@ router.post(
   }
 );
 
+/**
+ * POST /api/platform/reset-all-transactions
+ * Limpeza administrativa das tabelas transacionais de todas as organizações.
+ * Preserva organizações, membros, usuários, planos, módulos e locais de estoque.
+ */
+router.post(
+  "/reset-all-transactions",
+  authMiddleware,
+  requireSuperAdmin(),
+  async (_req: AuthenticatedRequest, res) => {
+    try {
+      await TenantContext.run({ isSuperAdmin: true }, async () => {
+        await query(`DELETE FROM order_payments`);
+        await query(`DELETE FROM order_items`);
+        await query(`DELETE FROM order_state_transitions`);
+        await query(`DELETE FROM orders`);
+        try { await query(`DELETE FROM consignments`); } catch {}
+        await query(`DELETE FROM inventory_movements`);
+        await query(`DELETE FROM inventory_reservations`);
+        await query(`DELETE FROM inventory_balances`);
+        await query(`DELETE FROM customer_contacts`);
+        await query(`DELETE FROM customer_addresses`);
+        await query(`DELETE FROM customers`);
+        await query(`DELETE FROM product_media`);
+        await query(`DELETE FROM products`);
+        try { await query(`DELETE FROM categories`); } catch {}
+        try { await query(`DELETE FROM billing_webhook_events`); } catch {}
+        try { await query(`DELETE FROM billing_invoices`); } catch {}
+        try { await query(`DELETE FROM idempotency_keys`); } catch {}
+        try { await query(`DELETE FROM audit_logs`); } catch {}
+      });
+
+      const [orgsCount, usersCount, plansCount] = await Promise.all([
+        query("SELECT COUNT(*) FROM organizations"),
+        query("SELECT COUNT(*) FROM users"),
+        query("SELECT COUNT(*) FROM plans"),
+      ]);
+
+      return res.json({
+        success: true,
+        message: "Tabelas transacionais limpas com sucesso. Organizações, usuários e planos preservados.",
+        preserved: {
+          organizations: parseInt(orgsCount.rows[0].count, 10),
+          users: parseInt(usersCount.rows[0].count, 10),
+          plans: parseInt(plansCount.rows[0].count, 10),
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * POST /api/platform/tenants/:id/reset-transactions
+ * Limpeza administrativa das tabelas transacionais de uma organização específica.
+ */
+router.post(
+  "/tenants/:id/reset-transactions",
+  authMiddleware,
+  requireSuperAdmin(),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const orgId = req.params.id;
+      const org = await orgRepo.findById(orgId);
+      if (!org) {
+        return res.status(404).json({ success: false, error: "Organização não encontrada." });
+      }
+
+      await TenantContext.run({ isSuperAdmin: true }, async () => {
+        await query(`DELETE FROM order_payments WHERE order_id IN (SELECT id FROM orders WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM order_state_transitions WHERE order_id IN (SELECT id FROM orders WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM orders WHERE organization_id = $1`, [orgId]);
+        try { await query(`DELETE FROM consignments WHERE organization_id = $1`, [orgId]); } catch {}
+        await query(`DELETE FROM inventory_movements WHERE organization_id = $1`, [orgId]);
+        await query(`DELETE FROM inventory_reservations WHERE organization_id = $1`, [orgId]);
+        await query(`DELETE FROM inventory_balances WHERE organization_id = $1`, [orgId]);
+        await query(`DELETE FROM customer_contacts WHERE customer_id IN (SELECT id FROM customers WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM customer_addresses WHERE customer_id IN (SELECT id FROM customers WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM customers WHERE organization_id = $1`, [orgId]);
+        await query(`DELETE FROM product_media WHERE product_id IN (SELECT id FROM products WHERE organization_id = $1)`, [orgId]);
+        await query(`DELETE FROM products WHERE organization_id = $1`, [orgId]);
+        try { await query(`DELETE FROM categories WHERE organization_id = $1`, [orgId]); } catch {}
+        try { await query(`DELETE FROM billing_webhook_events WHERE organization_id = $1`, [orgId]); } catch {}
+        try { await query(`DELETE FROM billing_invoices WHERE organization_id = $1`, [orgId]); } catch {}
+        try { await query(`DELETE FROM idempotency_keys WHERE organization_id = $1`, [orgId]); } catch {}
+        try { await query(`DELETE FROM audit_logs WHERE organization_id = $1`, [orgId]); } catch {}
+      });
+
+      return res.json({
+        success: true,
+        message: `Dados transacionais da organização '${org.name}' limpos com sucesso.`,
+        organization: org,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 export default router;
